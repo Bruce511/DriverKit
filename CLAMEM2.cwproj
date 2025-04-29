@@ -1,0 +1,54 @@
+﻿<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{CAC39FC4-4E77-467B-A7E2-B22419AA6A4E}</ProjectGuid>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">Win32</Platform>
+    <OutputType>Library</OutputType>
+    <RootNamespace>CLAMEM2</RootNamespace>
+    <AssemblyName>CLAMEM2</AssemblyName>
+    <OutputName>CLAMEM2</OutputName>
+    <Model>Dll</Model>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+    <DefineConstants>DRVLM=&gt;0%3bDRVDM=&gt;1%3bDRVLITE2LM=&gt;0%3bDRVLITE2DM=&gt;1%3bDRVMEM2LM=&gt;1%3bDRVMEM2DM=&gt;0%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;1%3bMD5=&gt;1</DefineConstants>
+    <stack_size>16384</stack_size>
+    <CopyCore>True</CopyCore>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>True</DebugSymbols>
+    <DebugType>Full</DebugType>
+    <vid>full</vid>
+    <check_stack>True</check_stack>
+    <check_index>True</check_index>
+    <warnings>on</warnings>
+    <GenerateMap>True</GenerateMap>
+    <line_numbers>False</line_numbers>
+    <dynamic_base>True</dynamic_base>
+    <dep>True</dep>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>False</DebugSymbols>
+    <DebugType>None</DebugType>
+    <vid>off</vid>
+    <check_stack>False</check_stack>
+    <check_index>False</check_index>
+    <warnings>on</warnings>
+    <GenerateMap>True</GenerateMap>
+    <line_numbers>False</line_numbers>
+    <dynamic_base>True</dynamic_base>
+    <dep>True</dep>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Library Include="CLALIT2.LIB" />
+    <Library Include="CLAOBD.LIB" />
+    <Library Include="CLASTR.lib" />
+    <Library Include="SQLite3.Lib" />
+    <Compile Include="InMemory2Driver.clw" />
+  </ItemGroup>
+  <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>"$(MSBuildProjectDirectory)\PatchMemory2.Bat"</PostBuildEvent>
+    <PreBuildEvent>"$(MSBuildProjectDirectory)\ExportMemory2.Bat"</PreBuildEvent>
+  </PropertyGroup>
+</Project>

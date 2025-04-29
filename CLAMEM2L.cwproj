@@ -1,0 +1,40 @@
+﻿<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{1B67C099-9E5F-4472-97FE-BFCC7194C5CE}</ProjectGuid>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">Win32</Platform>
+    <OutputType>Module</OutputType>
+    <RootNamespace>CLAMEM2L</RootNamespace>
+    <AssemblyName>CLAMEM2L</AssemblyName>
+    <OutputName>CLAMEM2L</OutputName>
+    <DefineConstants>DRVLM=&gt;0%3bDRVDM=&gt;0%3bDRVLITE2LM=&gt;0%3bDRVLITE2DM=&gt;0%3bDRVMEM2LM=&gt;1%3bDRVMEM2DM=&gt;0%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;0%3bMD5=&gt;1%3bmaincode=&gt;on</DefineConstants>
+    <stack_size>16384</stack_size>
+    <CopyCore>True</CopyCore>
+    <Model>Dll</Model>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>True</DebugSymbols>
+    <DebugType>Full</DebugType>
+    <vid>full</vid>
+    <check_stack>True</check_stack>
+    <check_index>True</check_index>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>False</DebugSymbols>
+    <DebugType>None</DebugType>
+    <vid>off</vid>
+    <check_stack>False</check_stack>
+    <check_index>False</check_index>
+    <warnings>on</warnings>
+    <GenerateMap>True</GenerateMap>
+    <line_numbers>False</line_numbers>
+    <dynamic_base>True</dynamic_base>
+    <dep>True</dep>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="InMemory2Driver.clw" />
+  </ItemGroup>
+  <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />
+</Project>

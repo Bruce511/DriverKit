@@ -1,0 +1,18 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+# Clarion 2.1.0.2447
+Project("{12B76EC0-1D7B-4FA7-A7D0-C524288B48A1}") = "ObdPatch", "ObdPatch.cwproj", "{78E7D93D-CE95-4CAE-99BE-D4F019664445}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{78E7D93D-CE95-4CAE-99BE-D4F019664445}.Debug|Win32.Build.0 = Debug|Win32
+		{78E7D93D-CE95-4CAE-99BE-D4F019664445}.Debug|Win32.ActiveCfg = Debug|Win32
+		{78E7D93D-CE95-4CAE-99BE-D4F019664445}.Release|Win32.Build.0 = Release|Win32
+		{78E7D93D-CE95-4CAE-99BE-D4F019664445}.Release|Win32.ActiveCfg = Release|Win32
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,53 @@
+﻿<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{79E2D81E-4E80-4F1F-8F60-895A130D27B5}</ProjectGuid>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">Win32</Platform>
+    <OutputType>Library</OutputType>
+    <RootNamespace>CLADOS2</RootNamespace>
+    <AssemblyName>CLADOS2</AssemblyName>
+    <OutputName>CLADOS2</OutputName>
+    <DefineConstants>DRVDOS2LM=&gt;1%3bDRVDOS2DM=&gt;0%3bDRVLM=&gt;0%3bDRVDM=&gt;1%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;1%3bMD5=&gt;1</DefineConstants>
+    <stack_size>16384</stack_size>
+    <CopyCore>True</CopyCore>
+    <Model>Dll</Model>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>True</DebugSymbols>
+    <DebugType>Full</DebugType>
+    <vid>full</vid>
+    <check_stack>True</check_stack>
+    <check_index>True</check_index>
+    <warnings>on</warnings>
+    <GenerateMap>True</GenerateMap>
+    <line_numbers>False</line_numbers>
+    <dynamic_base>True</dynamic_base>
+    <dep>True</dep>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>False</DebugSymbols>
+    <DebugType>None</DebugType>
+    <vid>off</vid>
+    <check_stack>False</check_stack>
+    <check_index>False</check_index>
+    <warnings>on</warnings>
+    <GenerateMap>True</GenerateMap>
+    <line_numbers>False</line_numbers>
+    <dynamic_base>True</dynamic_base>
+    <dep>True</dep>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Dos2Driver.clw" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="CLAOBD.LIB" />
+  </ItemGroup>
+  <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>$(MSBuildProjectDirectory)\ExportDos2.Bat</PreBuildEvent>
+    <PostBuildEvent>"$(MSBuildProjectDirectory)\PatchDOS2.Bat"</PostBuildEvent>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,137 @@
+!------------------------------------------------------------------------------------------------
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
+!   Released under MIT License
+!------------------------------------------------------------------------------------------------
+BIGINT                  Equate(REAL)    
+
+!==================================================================================================
+! Declares the interface for Custom Driver Fields.
+! Create your own class that implements this interface, and "attach" it to the File structure.
+iDriverField        INTERFACE
+ToRecordField         Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pSrcType, Long pSrcAddr, Long pSrcSize),LONG ,PROC,VIRTUAL
+FromRecordField       Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize),LONG ,PROC,VIRTUAL
+ClearRecordField      Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,String pValue),LONG,PROC,VIRTUAL  
+GetSourceSize         Procedure(),LONG,VIRTUAL   ! source size is the "disk" record size. Not the Clarion Record size. Multiplied if array.
+GetFieldType          Procedure(),STRING,VIRTUAL ! return a unique text identifier for the field type 
+GetSQLType            Procedure(),STRING,VIRTUAL ! SQL Data type to use in CREATE statements
+                    End
+!==================================================================================================
+! Declares the interface for Result Sets. Used by SQL drivers to store the results of SQL statements
+! before they are fed to the program via NEXT and PREVIOUS
+! Columns and Rows are 1 based.
+iResultSet          INTERFACE
+SetColumnName         Procedure(Long pColumn,String pName),Virtual
+SetColumnIndex        Procedure(Long pColumn,Long pIndex),Virtual
+GetColumnIndex        Procedure(Long pColumn),Long,Virtual
+GetColumnName         Procedure(Long pColumn),String,Virtual
+GetColumnNamed        Procedure(String pName),Long,Virtual
+
+SetRowPosition        Procedure(Long pRow, *String pPosition),Virtual
+GetRowWithPosition    Procedure(*String pPosition),Long,Virtual
+
+SetCell               Procedure(Long pRow, Long pColumn, Long pType, *BigInt rAddress, *BigInt rLength),Virtual
+
+GetCell               Procedure(Long pRow, Long pColumn),String,Virtual
+GetCell               Procedure(Long pRow, Long pColumn, *Byte rNull),String,Virtual
+GetCell               Procedure(Long pRow, Long pColumn, *Long rType, *BigInt rAddress, *BigInt rLength),Virtual
+
+SetColumns            Procedure(Long pColumns),Virtual
+Columns               Procedure(),Long,Virtual           ! the current number of columns in the result set
+Rows                  Procedure(),Long,Virtual           ! the current number of rows in the result set
+IncrementRowNumber    Procedure(),Long,Virtual
+
+NewResultSet          Procedure(Long pOptions),Virtual
+Free                  Procedure(),Virtual
+GetState              Procedure(Long pStateId),Virtual
+RestoreState          Procedure(Long pStateId),Virtual
+FreeState             Procedure(Long pStateId),Virtual
+                    End
+!==================================================================================================
+COUNT_T         EQUATE(UNSIGNED)
+AINDEX_T        EQUATE(UNSIGNED)
+SIZE_T          EQUATE(UNSIGNED)
+CBOOL           EQUATE(SIGNED)
+CENUM           EQUATE(UNSIGNED)
+
+IInterface      INTERFACE,COM
+Link              PROCEDURE(),COUNT_T,PROC
+Release           PROCEDURE(),COUNT_T,PROC
+GetUsage          PROCEDURE(),COUNT_T
+                END
+
+
+IBaseIterator    INTERFACE(IInterface),COM
+First             PROCEDURE(),CBOOL,PROC
+Next              PROCEDURE(),CBOOL,PROC
+IsValid           PROCEDURE(),CBOOL
+                END
+
+IBaseBidirectionalIterator INTERFACE(),COM                                       ! supports iteration backwards through a list of objects
+Last                     PROCEDURE(),CBOOL,PROC
+Previous                 PROCEDURE(),CBOOL,PROC
+                       END
+
+IIterator       INTERFACE(IBaseIterator),COM                                 ! supports iteration through a list of interfaces
+GetCurrent        PROCEDURE(),*IInterface
+QueryCurrent      PROCEDURE(),*IInterface
+                END
+
+IInterfaceEx    INTERFACE(IInterface),COM
+GetInterface      PROCEDURE(STRING name, <STRING opt>),*IInterface          ! obtains a named interface and links it before return
+QueryInterface    PROCEDURE(STRING name, <STRING opt>),*IInterface          ! obtains a named interface without linking
+                END
+
+
+! bj commented this out for now.  IStringVal is not declared...
+
+!IInterfaceCommandLineElement INTERFACE(IInterface),COM
+!GetValue                       PROCEDURE(),*IStringVal
+!QueryValue                     PROCEDURE(),*IStringVal
+!GetCommand                     PROCEDURE(),*IStringVal
+!QueryCommand                   PROCEDURE(),*IStringVal
+!                             END
+!
+!IInterfaceCommandLine INTERFACE(IIterator),COM
+!QueryCommand            PROCEDURE(CONST *CSTRING command), *IInterfaceCommandLineElement
+!GetCommand              PROCEDURE(CONST *CSTRING command), *IInterfaceCommandLineElement
+!QueryCommand            PROCEDURE(STRING command), *IInterfaceCommandLineElement
+!GetCommand              PROCEDURE(STRING command), *IInterfaceCommandLineElement
+!QueryCommandLine        PROCEDURE(),CSTRING
+!                      END 
+
+! Equates used in IDrvMetaData.HasOperation
+META_IMPORT            EQUATE(1)
+META_BUILDDRIVERSTRING EQUATE(2)
+
+! Common data passed to the driver string builder
+MetaDataInfo    CLASS,TYPE
+FontFace          CSTRING(32)
+FontSize          LONG
+FontColor         LONG
+FontStyle         LONG
+FontCharSet       LONG
+SetFontData       BOOL
+                END
+
+! This interface is used to get meta data information from the file drivers
+IDrvMetaData    INTERFACE(IInterface)
+HasOperation      PROCEDURE(SIGNED opCode),BYTE
+Import            PROCEDURE(FILE f)
+BuildDriverString PROCEDURE(*CSTRING inStr, LONG info = 0),BYTE,PROC !Returns FALSE if the user cancels
+Extensions        PROCEDURE(),*CSTRING
+ExtensionName     PROCEDURE(),*CSTRING
+                END
+
+! This interface is implemented by the file drivers
+IDrvMetaWindow  INTERFACE(IInterface)
+HasOperation      PROCEDURE(SIGNED opCode),BYTE
+BuildDriverString PROCEDURE(*CSTRING inStr, LONG info = 0),BYTE,PROC !Returns FALSE if the user cancels
+Extensions        PROCEDURE(),*CSTRING
+ExtensionName     PROCEDURE(),*CSTRING
+                END
+
+
+!==================================================================================================
+
+ 

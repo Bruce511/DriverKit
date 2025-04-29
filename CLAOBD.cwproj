@@ -1,0 +1,49 @@
+﻿<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{643B3249-59DF-46D6-9E51-B9A13DDDA02B}</ProjectGuid>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">Win32</Platform>
+    <OutputType>Library</OutputType>
+    <RootNamespace>CLAOBD</RootNamespace>
+    <AssemblyName>CLAOBD</AssemblyName>
+    <OutputName>CLAOBD</OutputName>
+    <DefineConstants>StringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;1%3bMD5=&gt;1%3bDRVLM=&gt;1%3bDRVDM=&gt;0</DefineConstants>
+    <stack_size>16384</stack_size>
+    <CopyCore>True</CopyCore>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+    <Model>Dll</Model>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>True</DebugSymbols>
+    <DebugType>Full</DebugType>
+    <vid>full</vid>
+    <check_stack>True</check_stack>
+    <check_index>True</check_index>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>False</DebugSymbols>
+    <DebugType>None</DebugType>
+    <vid>off</vid>
+    <check_stack>False</check_stack>
+    <check_index>False</check_index>
+    <warnings>on</warnings>
+    <GenerateMap>True</GenerateMap>
+    <line_numbers>False</line_numbers>
+    <dynamic_base>True</dynamic_base>
+    <dep>True</dep>
+    <OutputPath>.\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="CLAOBD.clw" />
+    <None Include="CLAOBD.exp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="CLASTR.lib" />
+  </ItemGroup>
+  <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>"$(MSBuildProjectDirectory)\ExportObd.Bat"</PreBuildEvent>
+    <PostBuildEvent>"$(MSBuildProjectDirectory)\CopyObd.Bat"</PostBuildEvent>
+  </PropertyGroup>
+</Project>

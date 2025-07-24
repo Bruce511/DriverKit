@@ -1,0 +1,31 @@
+LANGUAGE 0x0409
+
+1 VERSIONINFO
+ FILEVERSION 1,01,0,0
+ PRODUCTVERSION 1,01,0,0
+ FILEFLAGSMASK 0x3FL
+ FILEFLAGS 0
+ FILEOS VOS__WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+      BEGIN
+        VALUE "CompanyName", "CapeSoft\0"
+        VALUE "FileDescription", "File Driver Base Classes\0"
+        VALUE "FileVersion", "1.01.0.0\0"
+        VALUE "InternalName", "File Driver Base Classes\0"
+        VALUE "LegalCopyright", "Copyright (c) 2025 by CapeSoft\0"
+        VALUE "OriginalFilename", "CLAOBD.DLL\0"
+        VALUE "ProductName", "File Driver Base Classes\0"
+        VALUE "ProductVersion", "1.01.0.0\0"
+        VALUE "HomePage", "capesoft.com\0"
+      END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1252
+    END
+END

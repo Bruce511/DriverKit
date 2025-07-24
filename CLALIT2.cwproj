@@ -43,6 +43,7 @@
     <Compile Include="SQLite2Driver.clw" />
   </ItemGroup>
   <ItemGroup>
+    <Library Include="CLALIT2.Version" />
     <Library Include="CLAOBD.LIB" />
     <Library Include="CLASTR.lib" />
     <Library Include="SQLite3.Lib" />

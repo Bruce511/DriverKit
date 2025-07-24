@@ -11,7 +11,7 @@
 !EndRegion: Includes
 
 ! Properties and Errors are in cwDriver.Inc
-! ---------------------------------------------------------------------------------------------- 
+! ----------------------------------------------------------------------------------------------
 !Region ----------  Equates ----------
 Driver:ok               Equate(0)
 Driver:notok            Equate(1)
@@ -41,10 +41,10 @@ driver:root             Equate(3)   ! used for the root table in the view. Basic
 
 driver:default:none     Equate(0)
 driver:default:number   Equate(1)
-driver:default:string   Equate(2)                      
+driver:default:string   Equate(2)
 
-driver:DontFreeRam      Equate(0)                     
-driver:FreeRam          Equate(1)  
+driver:DontFreeRam      Equate(0)
+driver:FreeRam          Equate(1)
 
 Driver:Blobs            Equate(1)
 Driver:NoBlobs          Equate(0)
@@ -61,12 +61,7 @@ driver:bindfield        Equate(4)    ! label is bound using BINDFIELD method
 driver:high             Equate(1)
 driver:low              Equate(2)
 
-driver:append           Equate(128)
-driver:header           Equate(1)
-driver:upsert           Equate(2)
-driver:add              Equate(4)
-
-driver:IsNull           Equate(1)                     
+driver:IsNull           Equate(1)
 
 driver:FromBuffer             Equate(1)
 driver:FromShadow             Equate(2)
@@ -82,15 +77,21 @@ driver:sqlfilter        Equate(2)
 driver:order            Equate(3)
 driver:sqlorder         Equate(4)
 driver:groupby          Equate(5)
-driver:having           Equate(6)  
+driver:having           Equate(6)
 driver:project          Equate(7)
 driver:parameter        Equate(8)
 driver:join             Equate(9)
 driver:expression       Equate(10)
+driver:searchfilter     Equate(13)
+
+! driver:sqltable is 10
+! driver:dosfile is 11
+! driver:append is 128
 
 driver:SqlTable         Equate(10)
 driver:SqlColumn        Equate(12)
 driver:DosFile          Equate(11)
+driver:SqlSavepoint     Equate(13)
 
 driver:withdot          Equate(1)
 driver:nodot            Equate(0)
@@ -111,31 +112,31 @@ driver:InnerJoin        Equate(1)   ! this is the Clarion ,INNER property
 driver:RightJoin        Equate(2)
 driver:FullJoin         Equate(3)
 driver:CrossJoin        Equate(4)
-driver:SelfJoin         Equate(5) 
+driver:SelfJoin         Equate(5)
 
-driver:ProjectNone      Equate(0)    
-driver:ProjectFields    Equate(1)    
-driver:ProjectBlobs     Equate(2)    
-driver:ProjectAll       Equate(3)     
+driver:ProjectNone      Equate(0)
+driver:ProjectFields    Equate(1)
+driver:ProjectBlobs     Equate(2)
+driver:ProjectAll       Equate(3)
 
 driver:ProjectAllKeys     Equate(0)
 driver:ProjectNoKeys      Equate(1)
 driver:ProjectPrimaryKeys Equate(2)
 
 driver:ResetToBufferRow   Equate(1)
-driver:ShadowBufferPrimed Equate(2)  
-driver:BufferPrimed       Equate(3)  
+driver:ShadowBufferPrimed Equate(2)
+driver:BufferPrimed       Equate(3)
 
 driver:all                Equate('*')
-                               
+
 Watch:off               Equate(0)
 Watch:on                Equate(1)
-Watch:loaded            Equate(2)       
-Watch:disabled          Equate(3)       
-Watch:put               Equate(4)       
-Watch:canput            Equate(5)       
-Watch:armed             Equate(6)       
-                                             
+Watch:loaded            Equate(2)
+Watch:disabled          Equate(3)
+Watch:put               Equate(4)
+Watch:canput            Equate(5)
+Watch:armed             Equate(6)
+
 token:expression    equate('E')
 token:condition     equate('C')
 token:label         equate('L')
@@ -152,8 +153,8 @@ token:comma         equate(token:operator & '0006 ')
 token:power         equate(token:operator & '0007 ')
 token:concat        equate(token:operator & '0008 ')
 token:asc           equate(token:operator & '0009 ')
-token:desc          equate(token:operator & '0010 ')                                             
-token:as            equate(token:operator & '0011 ')                                             
+token:desc          equate(token:operator & '0010 ')
+token:as            equate(token:operator & '0011 ')
 
 
 
@@ -161,12 +162,12 @@ token:as            equate(token:operator & '0011 ')
 
 !Region ----------  OpCodes ----------
 !==================================================================================================
-! Opcodes. Calls into the driver are made into the Pipe function. 
+! Opcodes. Calls into the driver are made into the Pipe function.
 ! Which has a prototype of DRV(Long iOpCode,Cla_FCBBLK *pFCB, VALIST vArgs)
-! the first parameter is the opcode. These are those codes. 
+! the first parameter is the opcode. These are those codes.
 ! The comment for each code indicates the parameters expected.
 
-Opcode:NONE                    equate(0)    
+Opcode:NONE                    equate(0)
 Opcode:ADD                     equate(1)   !     DRV(code,fcb);
 Opcode:ADDfilelen              equate(51)  !     DRV(code,fcb,unsigned len);
 Opcode:APPEND                  equate(4)   !     DRV(code,fcb);
@@ -288,28 +289,28 @@ Opcode:SET_DOTNET_KEY_PROPERTY equate(111)  !    Used by the .NET to Win32 commu
 Opcode:GET_DOTNET_KEY_PROPERTY equate(112)  !    Used by the .NET to Win32 communicationlayer
 
 ! The following define is used to set up utility internal tables regarding driver functionality within clarion (accounting for expansion)
-Opcode:TOTFOPCODES             equate(113)      
+Opcode:TOTFOPCODES             equate(113)
 
 !------------------------------------------------------------------------------------------------
 ! New OpCodes
 OpCode:Exists                  equate(150)
 OpCode:Merge                   equate(151)
 OpCode:Reopen                  equate(152)
-OpCode:Upsert                  equate(153)                         
-OpCode:Bytes64                 equate(154)                         
-OpCode:Pointer64               equate(155)                         
-OpCode:Records64               equate(156)                         
-OpCode:Set64                   equate(157)                         
-OpCode:SetCustomType           equate(158)                         
-!OpCode:Connect                 equate(159)                         
-OpCode:Disconnect              equate(160)                         
-OpCode:BindField               equate(161)  
-OpCode:ProjectField            equate(162)  
-Opcode:JoinTable               equate(163)          
-Opcode:CreateDb                equate(164)          
-Opcode:Status                  equate(165)          
-Opcode:RecordsFilter           equate(166)          
-Opcode:GetRandom               equate(167)          
+OpCode:Upsert                  equate(153)
+OpCode:Bytes64                 equate(154)
+OpCode:Pointer64               equate(155)
+OpCode:Records64               equate(156)
+OpCode:Set64                   equate(157)
+OpCode:SetCustomType           equate(158)
+!OpCode:Connect                 equate(159)
+OpCode:Disconnect              equate(160)
+OpCode:BindField               equate(161)
+OpCode:ProjectField            equate(162)
+Opcode:JoinTable               equate(163)
+Opcode:CreateDb                equate(164)
+Opcode:Status                  equate(165)
+Opcode:RecordsFilter           equate(166)
+Opcode:GetRandom               equate(167)
 Opcode:Search                  equate(168)
 Opcode:FromQueue               equate(169)
 Opcode:ToQueue                 equate(170)
@@ -324,44 +325,45 @@ Opcode:Update                  equate(177)
 !EndRegion: Opcodes
 
 !Region ----------  Data Types ----------
-! ---------------------------------------------------------------------------------------------- 
+! ----------------------------------------------------------------------------------------------
 ! Data Types. These are equates for all the data types. At the driver level support for these types can be turned on and off.
 !
 ClaRAW           Equate(0)
 ClaNULL          Equate(0)
 ClaBYTE          Equate(1) !                      /* 0x01 Signed 1 Byte Binary      */  x
 ClaSHORT         Equate(2) !                      /* 0x02 Signed 2 Byte Binary      */  x
-ClaUSHORT        Equate(3) !                      /* 0x03 Unsigned 2 Byte Binary    */  
-ClaDATE          Equate(4) !                      /* 0x04 4 Byte Binary YYMD        */  
-ClaTIME          Equate(5) !                      /* 0x05 4 Byte Binary HMSH        */  
+ClaUSHORT        Equate(3) !                      /* 0x03 Unsigned 2 Byte Binary    */
+ClaDATE          Equate(4) !                      /* 0x04 4 Byte Binary YYMD        */
+ClaTIME          Equate(5) !                      /* 0x05 4 Byte Binary HMSH        */
 ClaLONG          Equate(6) !                      /* 0x06 Signed 4 Byte Binary      */  x
-ClaULONG         Equate(7) !                      /* 0x07 Unsigned 4 Byte Binary    */  
-ClaSREAL         Equate(8) !                      /* 0x08 Signed 4 Byte Float       */      
-ClaREAL          Equate(9) !                      /* 0x09 Signed 8 Byte Float       */ x 
-ClaDECIMAL       Equate(00Ah) !                   /* 0x0A Clarion Packed Decimal    */ x 
-ClaPDECIMAL      Equate(00Bh) !                   /* 0x0B IBM Packed Decimal        */       
-ClaSBYTE         Equate(00Ch) !     
-ClaBFLOAT4       Equate(00Dh) !                   /* 0x0D Basic FLOAT 4 bytes       */   
+ClaULONG         Equate(7) !                      /* 0x07 Unsigned 4 Byte Binary    */
+ClaSREAL         Equate(8) !                      /* 0x08 Signed 4 Byte Float       */
+ClaREAL          Equate(9) !                      /* 0x09 Signed 8 Byte Float       */ x
+ClaDECIMAL       Equate(00Ah) !                   /* 0x0A Clarion Packed Decimal    */ x
+ClaPDECIMAL      Equate(00Bh) !                   /* 0x0B IBM Packed Decimal        */
+ClaSBYTE         Equate(00Ch) !
+ClaBFLOAT4       Equate(00Dh) !                   /* 0x0D Basic FLOAT 4 bytes       */
 ClaBFLOAT8       Equate(00Eh) !                   /* 0x0E Basic FLOAT 8 bytes       */   &= 1F
 ClaANY           Equate(00Fh)
 ClaSIGNED        Equate(010h)
 ClaUNSIGNED      Equate(011h)
-ClaSTRING        Equate(012h) ! 18                /* 0x12 ASCII character sequence  */  x 
-ClaCSTRING       Equate(013h) ! 19                 /* 0x13 C string (trailing null)  */   
-ClaPSTRING       Equate(014h) !                   /* 0x14 Pascal string (len byte)  */   
+ClaSTRING        Equate(012h) ! 18                /* 0x12 ASCII character sequence  */  x
+ClaCSTRING       Equate(013h) ! 19                 /* 0x13 C string (trailing null)  */
+ClaPSTRING       Equate(014h) !                   /* 0x14 Pascal string (len byte)  */
 ClaMEMO          Equate(015h) ! 21                /* 0x15 Memo                      */  x      ?
 ClaGROUP         Equate(016h) !                   /* 0x16 Clarion Group structure   */  x
-ClaCLASS         Equate(017h) !                   /* 0x17 Class type descriptor     */  
+ClaCLASS         Equate(017h) !                   /* 0x17 Class type descriptor     */
 ClaNOTHING       Equate(018h) !                   Nothing                               x
                  Equate(019h) !                   Not valid
 ClaQUEUE         Equate(01Ah) !                   /* 0x1A Queue          */        ?
 ClaBLOB          Equate(01Bh) ! 27                /* 0x1B Blob and TempStr          */        ?
 ClaREFERENCE     Equate(01Fh)
 ClaTYPE          Equate(08Eh)
+ClaInt64         Equate(064h)   ! Placeholder for now - bj
 !EndRegion: Data Types
 
 !Region ----------  Field Attributes ----------
-! ---------------------------------------------------------------------------------------------- 
+! ----------------------------------------------------------------------------------------------
 ! Field Attributes
 ClaAttrName         Equate(1)
 ClaAttrLabel        Equate(2)
@@ -369,7 +371,7 @@ ClaAttrPic          Equate(4)
 ClaAttrOver         Equate(8)
 ClaAttrDim          Equate(10h)
 
-! ---------------------------------------------------------------------------------------------- 
+! ----------------------------------------------------------------------------------------------
 ! Sharing mode and Access mode defines for OPEN and SHARE---------------------
 Access:ReadOnly     Equate(0)       !     Access Mode read only
 Access:WriteOnly    Equate(1)       !     Access Mode write only
@@ -383,12 +385,12 @@ Access:DENY_NONE    Equate(40h)      !   Sharing mode deny none
 !EndRegion: Field Attributes
 
 !Region ----------  Compiler Data Structures ----------
-! ---------------------------------------------------------------------------------------------- 
-! for a driver to be registered in the IDE, a group of this type is populated with fixed 
+! ----------------------------------------------------------------------------------------------
+! for a driver to be registered in the IDE, a group of this type is populated with fixed
 ! values and exported. It's important that the group is populated with fixed values, as it's
-! read directly out the DLL file on disk. The DLL is not loaded, and hence can't set these 
+! read directly out the DLL file on disk. The DLL is not loaded, and hence can't set these
 ! values at runtime.
-! ---------------------------------------------------------------------------------------------- 
+! ----------------------------------------------------------------------------------------------
 DrvRegType            Group,Type
 raw_name                cstring(21)
 dll_name                cstring(13)
@@ -414,27 +416,27 @@ fldsize                 ulong        ! size of the Drv_FLD structure
 kcbsize                 ulong        ! size of the Drv_KCB structure
 mcbsize                 ulong        ! size of the Drv_MCB structure
 fcbsize                 ulong        ! size of the Drv_FCB structure
-reserved1               byte,dim(12) ! reserved allowing for sizes     
-tdesc                   long ! *char ! pointer to type descriptor for functions and data types supported 
+reserved1               byte,dim(12) ! reserved allowing for sizes
+tdesc                   long ! *char ! pointer to type descriptor for functions and data types supported
 dsi_name                cstring(13)  ! dsi dll name    ! Data Ststem Import (DSI). ie Data Syncroniser / Data Import in Dict
 driverMeta              long         ! DRV_META_FUNC   ! This is the window called when the user clicks on the ... button next to driver string in the dict.
                       End
 
 ! ------------------------------------------------------------------------------
-! File Control Block (aka FILE aka rBlock)                                 
-Drv_FCB               Group,Type          
-filename                long  ! *char ! FILE's name, 
+! File Control Block (aka FILE aka rBlock)
+Drv_FCB               Group,Type
+filename                long  ! *char ! FILE's name,
 labname                 long  ! *char ! FILE's label
-fileOwner               long  ! *char ! The string specified in the OWNER attribute of the FILE.  
-fileStr                 long  ! *char ! The string specified as the second string in DRIVER attribute.  
+fileOwner               long  ! *char ! The string specified in the OWNER attribute of the FILE.
+fileStr                 long  ! *char ! The string specified as the second string in DRIVER attribute.
 fileAttr                long  ! could be byte. ! encrypt, create, reclaim, thread, oem  TODO - check byte or long
 recbuf                  long  ! *void ! FILE's RECORD buffer, this points to a buffer allocated by the Clarion run-time.  Data may be copied to it but it may not be reallocated or freed by the File Driver.
 reclen                  ulong
-memoArr                 long  ! *Drv_MCB. Array of MEMO field descriptors.  There is one entry per MEMO field. 
+memoArr                 long  ! *Drv_MCB. Array of MEMO field descriptors.  There is one entry per MEMO field.
 memoCnt                 ulong ! Number of elements in memoArr
-keyArr                  long  ! *Drv_KCB. Array of KEY and INDEX descriptors.  There is one entry for each KEY and INDEX declaration in the FILE structure.  
+keyArr                  long  ! *Drv_KCB. Array of KEY and INDEX descriptors.  There is one entry for each KEY and INDEX declaration in the FILE structure.
 keyCnt                  ulong ! Number of elements in memoArr
-fldArr                  long  ! *Drv_FLD  Array of field descriptors.  There is one entry for each field declared in the FILE's RECORD structure.  
+fldArr                  long  ! *Drv_FLD  Array of field descriptors.  There is one entry for each field declared in the FILE's RECORD structure.
 fldCnt                  ulong ! Number of elements in fldArr
 iMode                   long  ! Open mode of file.  This is the mode parameter passed to the OPEN() or SHARE() statements.
 seqOp                   ulong ! Last sequential operation.  This will contain one of the following values to identify the previous sequential operation: Opcode:NEXT,Opcode:PREV, Opcode:RESETfile, Opcode:RESETkey,Opcode:SETfile, Opcode:SETfilekey, Opcode:SETfileptr,Opcode:SETkey, Opcode:SETkeykeyptr, Opcode:SETkeykey,Opcode:SETkeyptr
@@ -470,20 +472,20 @@ partInit                byte
 duplicatekey            &Drv_KCB
 dateTimefields          Long
 dateTimeCount           Long
-                        ! Custom fields required by the specific driver can be included here.              
+                        ! Custom fields required by the specific driver can be included here.
                       End
 
 ! ------------------------------------------------------------------------------
-! The Key Component Descriptor Structure 
+! The Key Component Descriptor Structure
 ! A pointer to the array is passed in the fldArr element of the Drv_KCB.
-Drv_CMP               Group,Type  
+Drv_CMP               Group,Type
 fldHnd                  long ! *Drv_Fld ! Component field, this is a pointer to the appropriate element of the fldArr element in the Drv_FCB structure
-fldOrd                  long ! Component fields sort order, TRUE - Component is descending 
+fldOrd                  long ! Component fields sort order, TRUE - Component is descending
                       End
-         
+
 ! ------------------------------------------------------------------------------
 !The KEY and INDEX Control Block Structure: Drv_KCB
-!A pointer to this array is passed as the keyArr of the Drv_FCB structure. 
+!A pointer to this array is passed as the keyArr of the Drv_FCB structure.
 
 KeyAttr:Dup           Equate(01)
 KeyAttr:Opt           Equate(02)
@@ -505,24 +507,24 @@ labName                 long     ! *Char    ! KEY or INDEX label name.  The buff
 fldArr                  long     ! *Drv_CMP  ! Array of fields comprising the keys components. So called 'dynamic' INDEXes are declared without components, the fldArr must be built at runtime by a call to drv_BuildDynKey()
 fldCnt                  long     !          ! Number of elements in fldArr
 sState                  byte     ! or MAYBE a Long. TODO. KeyAttr for the key. Dup, Opt, Nocase, AutoInc, Primary, ndx, dyn
-ulState                 ulong    ! Current state of Key  
-keyNum                  ulong    ! 0 based identifier 
+ulState                 ulong    ! Current state of Key
+keyNum                  ulong    ! 0 based identifier
 kcbHnd                  long     ! * Cla_KEYDESC   ! Pointer to the Clarion run-time key descriptor. The information in the Drv_KCB is generated by parsing this structure.  Access to this structure is not usually necessary.
-                        ! Custom fields required by the specific driver can be included here.              
+                        ! Custom fields required by the specific driver can be included here.
                       End
-                      
-! ------------------------------------------------------------------------------        
+
+! ------------------------------------------------------------------------------
 !The MEMO Control Block Structure: Drv_MCB
-!  A pointer to this array is passed as the memoArr of the Drv_FCB structure. 
+!  A pointer to this array is passed as the memoArr of the Drv_FCB structure.
 Drv_MCB               Group,Type
-memoName                long ! *Char  Contents of the MEMOs NAME() attribute, or NULL if there is no NAME() attribute.  
-labName                 long ! *Char  MEMO label name.  
+memoName                long ! *Char  Contents of the MEMOs NAME() attribute, or NULL if there is no NAME() attribute.
+labName                 long ! *Char  MEMO label name.
 memoBuf                 long ! *Void Memo buffer
 memoLen                 ulong ! Size of memo buffer
 memoAttr                ulong ! Attributes. One of Memo, Image, Blob
 memoFCB                 &Drv_FCB !  Memos's parent file.
 memoHnd                 long ! *Cla_MEMODESC ! Pointer to the Clarion run-time memo descriptor. The information in the Drv_MCB is generated by parsing this structure.  Access to this structure is not usually necessary.
-                        ! Custom fields required by the specific driver can be included here.              
+                        ! Custom fields required by the specific driver can be included here.
                       End
 
 ! ------------------------------------------------------------------------------
@@ -530,17 +532,17 @@ memoHnd                 long ! *Cla_MEMODESC ! Pointer to the Clarion run-time m
 ! ------------------------------------------------------------------------------
 !Region ----------  Compiler ----------
 ! ---------------------------------------------------------------------------------------
-! Compiler data structures            
+! Compiler data structures
 ! If structures in clacomp.hpp should change, then change here to match.
 ! (At time of writing these structures are compatible from Clarion 8 to Clarion 11.1)
 ! ---------------------------------------------------------------------------------------
-!* This part of the  file defines several data structures and classes such as StrDesc, Cla_KEYCOMP, 
-! * Cla_KEYDESC, Cla_MEMODESC, Cla_FileCB, Cla_VCBBLK, Cla_NetVCBBLK, and Cla_FCBBLK. These are 
-! * used to represent various components of the Clarion runtime library, including strings, 
+!* This part of the  file defines several data structures and classes such as StrDesc, Cla_KEYCOMP,
+! * Cla_KEYDESC, Cla_MEMODESC, Cla_FileCB, Cla_VCBBLK, Cla_NetVCBBLK, and Cla_FCBBLK. These are
+! * used to represent various components of the Clarion runtime library, including strings,
 ! * keys, memos, and files.
 !
 ! ------------------------------
-Drv_Transaction       Group,TYPE   
+Drv_Transaction       Group,TYPE
 Outer                   &Drv_Transaction
 Thread                  Long
 Driver                  Long                ! Address of driver pipe function
@@ -548,7 +550,7 @@ Files                   Long
 !OtherFileLogs           Group(Drv_LOGRECORD),Dim(100)    ! up to 100 files are allowed in the LOGOUT statement, so this is 100* size(Drv_LOGRECORD)
 !                        End
                       End
-                      
+
 Drv_LOGRECORD         Group,TYPE            ! aka Drv_FBlock
 trn                     &Drv_Transaction
 fcb                     &Drv_FCB            ! long
@@ -577,7 +579,7 @@ len                  long
 Cla_KEYCOMP        Group,Type            !   // Key Component Structure
 fld_num              Long                !   // field number in record structure (-ve = descending)
                    End
-                   
+
 Cla_KEYDESC        Group,Type
 pname                like(Cla_StrDesc)   ! // physical key name
 lname                like(Cla_StrDesc)   ! // label name for key
@@ -585,12 +587,12 @@ rt_kdesc             long                ! void * ! // additional runtime key in
 key_attr             long                ! // attribute of key
 num_comps            byte                ! // number of components for key
 comps                long                !&Cla_KEYCOMP    ! // pointer to components
-parent               long                !&Cla_FCBBLK     ! // pointer to owning file     
+parent               long                !&Cla_FCBBLK     ! // pointer to owning file
 padding1             byte
 padding2             byte
 padding3             byte
-                   End    
-                   
+                   End
+
 ! // key_attr flags
 Cla_DUP      Equate(01h)    !// key allows duplicates
 Cla_OPT      Equate(02h)    !// suppress creation of keys with null value
@@ -602,7 +604,7 @@ Cla_PRIMARY  Equate(10h)    !// primary key
 Cla_Key        Equate(0000h)  !// key is a key
 Cla_Index       Equate(4000h)  !// key is a external index
 Cla_DynIndex    Equate(8000h)  !// key is a dynamic external index
-                   
+
 !------------------------------------------------------------------
 ! Memos
 !------------------------------------------------------------------
@@ -614,7 +616,7 @@ memo_data            long !void *   ! // pointer to memo data area
 rt_mdesc             long !void *   ! // additional runtime memo info
 memo_num             byte           ! // runtime memo number
 memo_attr            byte           ! // indicates memo or image
-memo_size            ulong          ! // total size of memo  
+memo_size            ulong          ! // total size of memo
 padding1             byte
 padding2             byte
                    End
@@ -622,9 +624,9 @@ padding2             byte
 ! memo_attr values
 
 Cla_Memo    equate(01)
-Cla_Blob    equate(05)                   
-Cla_Binary  equate(02)  
-                   
+Cla_Blob    equate(05)
+Cla_Binary  equate(02)
+
 
 !------------------------------------------------------------------
 ! Files
@@ -634,18 +636,18 @@ Cla_FileCB         Group,Type
 cbSize               long                   ! // (compiler) Size of control block structure
 pipe                 long  ! Cla_PIPE_FUNC  ! // (compiler) pointer to pipe function
 patcher              long  ! PatchProc *    ! // (compiler) pointer to CB patch procedure
-rblock               long  ! void *         ! // (runtime)  FILE/VIEW drivers runtime block . Object pointer goes in here. for traditional driver this is a &Drv_FCB 
+rblock               long  ! void *         ! // (runtime)  FILE/VIEW drivers runtime block . Object pointer goes in here. for traditional driver this is a &Drv_FCB
                    End
 
-!  // VIEW Control Block 
-Cla_VCBBLK         Group(Cla_FileCB),Type      
-ViewDescriptor       long                   ! &cstring   
+!  // VIEW Control Block
+Cla_VCBBLK         Group(Cla_FileCB),Type
+ViewDescriptor       long                   ! &cstring
 FileIndex            long                   ! void ** ; pointer to an aray of (file) pointers
-filter               long                   ! &cstring   
-order                long                   ! &cstring   
+filter               long                   ! &cstring
+order                long                   ! &cstring
                    End
 
-! // FILE Control Block Structure                                                 
+! // FILE Control Block Structure
 Cla_FCBBLK         Group(Cla_FileCB),type                                                             !16
 phyname              like(Cla_StrDesc)  !                 // (compiler) physical filename
 drvstr               like(Cla_StrDesc)  !                 // (compiler) file driver string
@@ -680,4 +682,51 @@ FILRPC        Equate(01h)           ! // file is remote
 FILNOTRACE    Equate(02h)           ! // suppress tracing
 FILPATCHED    Equate(04h)           ! // FCB structure has been patched
 
-!EndRegion: Compiler                         
+!EndRegion: Compiler
+
+
+!Region ----------  UFO ----------
+! From Mike Duglas on C.L.C. 2010-06-18 - in "Type of variable" thread.
+! The interface was originally by Oleg Rudenko
+driver:iUFO          INTERFACE,TYPE
+_Type                  PROCEDURE(LONG _UfoAddr),LONG       !+00h Type of UFO
+ToMem                  PROCEDURE                           !+04h
+FromMem                PROCEDURE                           !+08h
+OldFromMem             PROCEDURE                           !+0Ch
+Pop                    PROCEDURE(LONG _UfoAddr)            !+10h Get a value from string stack
+Push                   PROCEDURE(LONG _UfoAddr)            !+14h Put a vaule to string stack
+DPop                   PROCEDURE(LONG _UfoAddr)            !+18h Get a value from DECIMAL stack
+DPush                  PROCEDURE(LONG _UfoAddr)            !+1Ch Put a vaule to DECIMAL stack
+_Real                  PROCEDURE(LONG _UfoAddr),REAL       !+20h Get a value as REAL
+_Long                  PROCEDURE(LONG _UfoAddr),LONG       !+24h Get a value as LONG
+_Free                  PROCEDURE(LONG _UfoAddr)            !+28h Disposes memory and frees a reference (sets it to NULL)
+_Clear                 PROCEDURE                           !+2Ch Clears a variable
+_Address               PROCEDURE(LONG _UfoAddr),LONG       !+30h Returns an address of a variable
+AssignLong             PROCEDURE                           !+34h Assign LONG value
+AssignReal             PROCEDURE                           !+38h Assign REAL value
+AssignUFO              PROCEDURE                           !+3Ch Assign a value to another UFO object.
+AClone                 PROCEDURE(LONG _UfoAddr),LONG       !+40h Returns a clone of this UFO object.
+Select                 PROCEDURE                           !+44h For arrays and strings, _Var [Ptr] is equivalent
+Slice                  PROCEDURE                           !+48h For strings, equivalent to _Var [Ptr1: Ptr2]
+Designate              PROCEDURE                           !+4Ch Returns group field as UFO object
+_Max                   PROCEDURE(LONG _UfoAddr),LONG       !+50h Number of elements in first dimension of an array
+_Size                  PROCEDURE(LONG _UfoAddr),LONG       !+54h Size of an object
+BaseType               PROCEDURE(LONG _UfoAddr),LONG       !+58h
+DistinctUpper          PROCEDURE                           !+5Ch
+DistinctsUFO           PROCEDURE                           !+60h
+DistinctsLong          PROCEDURE                           !+64h
+Cleared                PROCEDURE(LONG _UfoAddr)            !+68h Destroyed?
+IsNull                 PROCEDURE(LONG _UfoAddr),LONG       !+6Ch was an object disposed?
+OEM2ANSI               PROCEDURE(LONG _UfoAddr)            !+70h
+ANSI2OEM               PROCEDURE(LONG _UfoAddr)            !+74h
+_Bind                  PROCEDURE(LONG _UfoAddr)            !+78h bind all fields of a group
+_Add                   PROCEDURE                           !+7Ch
+Divide                 PROCEDURE                           !+80h
+Hash                   PROCEDURE(LONG _UfoAddr),LONG       !+84h Calc CRC
+SetAddress             PROCEDURE                           !+88h sets the address of a variable
+Match                  PROCEDURE                           !+8Ch compares the type and the size of a field with a field of ClassDesc structure
+Identical              PROCEDURE                           !+90h
+Store                  PROCEDURE                           !+94h Writes the value of an object into the memory address
+                     END
+
+!EndRegion: UFO

@@ -39,6 +39,7 @@
     <None Include="CLAOBD.exp" />
   </ItemGroup>
   <ItemGroup>
+    <Library Include="CLAOBD.Version" />
     <Library Include="CLASTR.lib" />
   </ItemGroup>
   <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />

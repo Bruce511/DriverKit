@@ -5,7 +5,7 @@
 !------------------------------------------------------------------------------------------------
 
   Member()
-  Map                       
+  Map
     Module('Windows')
       osOutputDebugString(*cstring msg), raw, pascal, name('OutputDebugStringA')
     End
@@ -20,11 +20,11 @@
   include('Errors.clw'),once
 
 !-----------------------------------------------------------------
-! Once the last connection closes, the database goes away. 
+! Once the last connection closes, the database goes away.
 ! So for each database encountered, a connection needs to be made, and kept open.
 ! for now, we'll just put them in a queue
 ! This queue is global, not threaded. So is accessible to all objects on all threads.
-InMemThreadManager  DriverInMemoryThread,Thread   
+InMemThreadManager  DriverInMemoryThread,Thread
 
 DBQCS               DriverCriticalSection
 
@@ -41,7 +41,7 @@ cstr  Cstring(size(pStr) + 10)
   code
   cstr = '[' & thread() & '][imt]' & pStr
   osOutputDebugString(cstr)
-  
+
 !-----------------------------------------------------------------
 DriverInMemoryThread.Construct                    Procedure()
   Code
@@ -49,21 +49,21 @@ DriverInMemoryThread.Construct                    Procedure()
 !-----------------------------------------------------------------
 ! So when a thread destructs then any threaded databases need to be cleaned up.
 DriverInMemoryThread.Destruct                     Procedure()
-result   long,auto           
+result   long,auto
 t        long,auto
   Code
   t = thread()
   DBQCS.wait()
-  Loop 
+  Loop
     DatabaseQueue.Thread = t
     Get(DataBaseQueue,DatabaseQueue.Thread)
     If Errorcode() then break.
     ! There's a threaded-content database, and the thread is ending, so let's close the permanent connection.
     If DatabaseQueue.dbHandle
       result = sqlite3_close(DatabaseQueue.dbHandle)
-    End  
+    End
     Delete(DataBaseQueue)
-  End   
+  End
   DBQCS.release()
   Return
 
@@ -87,47 +87,47 @@ x         Long,auto
   If x then pOwner = sub(pOwner,1,x-1).
   DatabaseQueue.Owner = clip(lower(pOwner))                        ! note this queue is not a property. It's a global, unthreaded queue.
   Get(DatabaseQueue,DatabaseQueue.Owner)
-  If errorcode() 
+  If errorcode()
     Options =  SQLITE_OPEN_READWRITE + SQLITE_OPEN_CREATE
     If sub(DatabaseQueue.Owner,1,5) = 'file:'
       Options = Bor(Options,SQLITE_OPEN_URI)
-    End  
-    result = sqlite3_open_v2(saveOwner,address(DatabaseQueue.dbHandle), Options ,0) 
+    End
+    result = sqlite3_open_v2(saveOwner,address(DatabaseQueue.dbHandle), Options ,0)
     If self.opt:ThreadedContent
       DatabaseQueue.Thread = thread()
     Else
       DatabaseQueue.Thread = 1  ! so databases with not /ThreadedContent will die when thread 1 ends.
-    End  
-    If result = SQLite_Ok  
+    End
+    If result = SQLite_Ok
       Add(DatabaseQueue)
-    End   
-  End  
+    End
+  End
   DBQCS.release()
   Return
-  
+
 !-----------------------------------------------------------------
-! In derived classes derive this method with this exact same code, but 
+! In derived classes derive this method with this exact same code, but
 ! replace the declaration of old with your class name. DO NOT call the parent class.
 DriverFileInMemory2Class.ReplaceObject        Procedure(Long pOldObjectAddress)
-old    &DriverFileInMemory2Class     
+old    &DriverFileInMemory2Class
   Code
   If pOldObjectAddress <> 0
     old &= (pOldObjectAddress)
     self :=: old
     Dispose(old)
-  End  
-  self.ClaFCB.rblock = address(self)  
+  End
+  self.ClaFCB.rblock = address(self)
   Return
 
 !-----------------------------------------------------------------
 DriverFileInMemory2Class.SetDriverOption     Procedure(String pOption, String pValue)
-  Code                  
-  Case upper(pOption) 
+  Code
+  Case upper(pOption)
   Of '/THREADEDCONTENT'
     self.opt:ThreadedContent = TRUE
   End
-  Return Parent.SetDriverOption(pOption,pValue)  
-  
+  Return Parent.SetDriverOption(pOption,pValue)
+
 !-----------------------------------------------Procedure----------------
 DriverFileInMemory2Class.CONNECT             PROCEDURE(Long pOptions=0)
   Code
@@ -135,37 +135,55 @@ DriverFileInMemory2Class.CONNECT             PROCEDURE(Long pOptions=0)
     self.PushDatabase(self.Owner)
   End
   pOptions = SQLITE_OPEN_READWRITE + SQLITE_OPEN_CREATE + SQLITE_OPEN_URI
-  Parent.Connect(pOptions)  
-  Return 
+  Parent.Connect(pOptions)
+  Return
 
 !-----------------------------------------------------------------
-! no need for stream optimization in mem driver
-DriverFileInMemory2Class.STREAM           PROCEDURE()  
+! In the Memory Driver, Disconnect "does nothing"
+! Threaded databases will be destroyed by the DESTRUCT of the DriverInMemoryThread object
+! Unthreaded databases exist forever, and will be cleaned up when the program closes.
+DriverFileInMemory2Class.DISCONNECT     PROCEDURE()!
+!result  Long,Auto
+!stmt    Long
   Code
+!  parent.Disconnect()
+!  If self.dbHandle
+!    If ConnectionPoolSQlite2.Disconnect(self.dbHandle) = true
+!      result = sqlite3_close(self.dbHandle)
+!      self.SetErrorSqlite(result,'[p115]')
+!    End
+!    self.dbHandle = 0
+!  End
+  Return
+!-----------------------------------------------------------------
+! no need for stream optimization in mem driver
+DriverFileInMemory2Class.STREAM           PROCEDURE()
+  Code
+  If self._logClarion then self.Log('[CLAR]STREAM()').
   self.SetError(NoError)
   Return
 
 !-----------------------------------------------------------------
-DriverFileInMemory2Class._UpdateFileStrings  Procedure()  
+DriverFileInMemory2Class._UpdateFileStrings  Procedure()
 s  cstring(255)
   Code
   If self._locknames = false
-    parent._UpdateFileStrings()  
+    parent._UpdateFileStrings()
     s = self.Owner
     if s = '' then s = 'memdb'.
     If self.opt:ThreadedContent then s = s & thread().
     self.Owner        = 'file::'& s &'?mode=memory&cache=shared&journal_mode=MEMORY&synchronous=OFF&busy_timeout=30000'
-  End  
-  Return  
-  
+  End
+  Return
+
 !-----------------------------------------------------------------
-DriverFileInMemory2Class.GETPROP:Driver   PROCEDURE()  
+DriverFileInMemory2Class.GETPROP:Driver   PROCEDURE()
   code
-  Return 'InMemory2' 
-  
+  Return 'InMemory2'
+
 !-----------------------------------------------------------------
-DriverViewInMemory2Class.GETPROP:Driver   PROCEDURE() 
+DriverViewInMemory2Class.GETPROP:Driver   PROCEDURE()
   code
-  Return 'InMemory2' 
-  
+  Return 'InMemory2'
+
 !-----------------------------------------------------------------

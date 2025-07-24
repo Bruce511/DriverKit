@@ -1,0 +1,1 @@
+copy ObdExport.Exe c:\clarion111\accessory\bin /y

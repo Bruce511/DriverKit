@@ -36,5 +36,8 @@
   <ItemGroup>
     <Compile Include="SQLite2Driver.clw" />
   </ItemGroup>
+  <ItemGroup>
+    <Library Include="SQLite3.Lib" />
+  </ItemGroup>
   <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />
 </Project>

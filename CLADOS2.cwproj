@@ -43,6 +43,7 @@
     <Compile Include="Dos2Driver.clw" />
   </ItemGroup>
   <ItemGroup>
+    <Library Include="CLADOS2.Version" />
     <Library Include="CLAOBD.LIB" />
   </ItemGroup>
   <Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" />

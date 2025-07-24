@@ -41,6 +41,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Library Include="CLALIT2.LIB" />
+    <Library Include="CLAMEM2.Version" />
     <Library Include="CLAOBD.LIB" />
     <Library Include="CLASTR.lib" />
     <Library Include="SQLite3.Lib" />

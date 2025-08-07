@@ -27,26 +27,26 @@
        MemSet(long dest, long char, unsigned count), long, proc, name('_memset')
     end
     module('windows')
-      DosGetLastError(), ulong, raw, pascal, name('GetLastError')
-      DosFormatMessage(long pFlags,long lpSource,long pMessageId,long pLanguageId,*cstring pBuffer,long pSize,long pVaList),long,Pascal,raw,name('FormatMessageA')
+      DosGetLastError(), ulong, raw, pascal, name('GetLastError'),dll(1)
+      DosFormatMessage(long pFlags,long lpSource,long pMessageId,long pLanguageId,*cstring pBuffer,long pSize,long pVaList),long,Pascal,raw,name('FormatMessageA'),dll(1)
       DosCreateFile(*cstring lpFileName, long dwDesiredAccess, long dwSharedMode, long lpSecurityAttributes, |
-                      long dwCreationDisposition, long dwFlagsAndAttributes, long hTemplateFile), long, raw, pascal, name('CreateFileA')
-      DosCloseHandle(long hObject),long, proc, pascal, name('CloseHandle')
-      DosReadFile(long hFile, *string lpBuffer, long nNumberOfBytesToRead, *long lpNumberOfBytesRead, long lpOverlapped), raw, long, pascal, name('ReadFile')
+                      long dwCreationDisposition, long dwFlagsAndAttributes, long hTemplateFile), long, raw, pascal, name('CreateFileA'),dll(1)
+      DosCloseHandle(long hObject),long, proc, pascal, name('CloseHandle'),dll(1)
+      DosReadFile(long hFile, *string lpBuffer, long nNumberOfBytesToRead, *long lpNumberOfBytesRead, long lpOverlapped), raw, long, pascal, name('ReadFile'),dll(1)
       DosWriteFile(long hFile, long lpBuffer, long nNumberOfBytesToWrite, *long lpNumberOfBytesWritten, |
-                     long lpOverlapped), long, proc, raw, pascal, name('WriteFile')
-      DosFindFirstFile(*cstring pFileName,Long rFileData), long, proc, raw, pascal, name('FindFirstFileA')
-      DosGetFileSizeEx(long hFile,*Int64 FileSize), long, raw, pascal, name('GetFileSizeEx')
+                     long lpOverlapped), long, proc, raw, pascal, name('WriteFile'),dll(1)
+      DosFindFirstFile(*cstring pFileName,Long rFileData), long, proc, raw, pascal, name('FindFirstFileA'),dll(1)
+      DosGetFileSizeEx(long hFile,*Int64 FileSize), long, raw, pascal, name('GetFileSizeEx'),dll(1)
       DosSetFilePointerEx(long hFile,Int64 liDistanceToMove,*Int64 lpNewFilePointer,long dwMoveMethod), |
-                      long, raw, pascal, proc, name('SetFilePointerEx')
-      DosFlushFileBuffers(long hFile), long, pascal, name('FlushFileBuffers')
-      DosDeleteFile(*cstring lpFileName), long, proc, raw, pascal, name('DeleteFileA')
-      DosSetEndOfFile(long hFile),long, proc, raw, pascal, name('SetEndOfFile')
-      DosMoveFileEx(*cstring pFromName, *cstring pToName, long pFlags),long, proc, raw, pascal, name('MoveFileExA')
-      DosCopyFile(*cstring pOldName, *cstring pNewName, long pFailIfExists ),long, proc, raw, pascal, name('CopyFileA')
-      DosLockFile(long hFile,uLong dwFileOffsetLow, ulong dwFileOffsetHigh, ulong nNumberOfBytesToLockLow, long nNumberOfBytesToLockHigh),long, proc, raw, pascal, name('LockFile')
-      DosUnlockFile(long hFile,uLong dwFileOffsetLow, ulong dwFileOffsetHigh, ulong nNumberOfBytesToLockLow, long nNumberOfBytesToLockHigh),long, proc, raw, pascal, name('UnlockFile')
-      DosSleep(Long pMilliseconds), raw, pascal, name('Sleep')
+                      long, raw, pascal, proc, name('SetFilePointerEx'),dll(1)
+      DosFlushFileBuffers(long hFile), long, pascal, name('FlushFileBuffers'),dll(1)
+      DosDeleteFile(*cstring lpFileName), long, proc, raw, pascal, name('DeleteFileA'),dll(1)
+      DosSetEndOfFile(long hFile),long, proc, raw, pascal, name('SetEndOfFile'),dll(1)
+      DosMoveFileEx(*cstring pFromName, *cstring pToName, long pFlags),long, proc, raw, pascal, name('MoveFileExA'),dll(1)
+      DosCopyFile(*cstring pOldName, *cstring pNewName, long pFailIfExists ),long, proc, raw, pascal, name('CopyFileA'),dll(1)
+      DosLockFile(long hFile,uLong dwFileOffsetLow, ulong dwFileOffsetHigh, ulong nNumberOfBytesToLockLow, long nNumberOfBytesToLockHigh),long, proc, raw, pascal, name('LockFile'),dll(1)
+      DosUnlockFile(long hFile,uLong dwFileOffsetLow, ulong dwFileOffsetHigh, ulong nNumberOfBytesToLockLow, long nNumberOfBytesToLockHigh),long, proc, raw, pascal, name('UnlockFile'),dll(1)
+      DosSleep(Long pMilliseconds), raw, pascal, name('Sleep'),dll(1)
     end
   end
 
@@ -202,9 +202,12 @@ ErrMess          cstring(1024)
     Return NoAccessErr            ! return IsLockedErr  ! compatibility with existing DOS driver
   of dos:ERROR_ALREADY_EXISTS
     Return NoAccessErr
+  of dos:ERROR_SHARING_VIOLATION
+    Return NoAccessErr
   Else
     result = DosFormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,0,pWindowsErrorCode,0,ErrMess,size(ErrMess),0)
     self.SetFileError(pWindowsErrorCode,ErrMess)
+    self.trace('DriverFileDos2Class._ConvertError Setting File System Error ' & pWindowsErrorCode & ' ' & ErrMess)
     Return FileSystemErr
   End
 
@@ -497,7 +500,7 @@ Ptr    like(int64)
 ! (if pLength is > the record size (after decoding) then it is ignored. The read effectivly stops when the
 ! record is full.
 DriverFileDos2Class._ReadFromBuffer    PROCEDURE(BIGINT pFilePointer, LONG pLength)
-ix  BIGINT
+ix  BIGINT,Auto
   Code
   if self._bufferstart = 0 or self._bufferend = 0 then return Driver:notok.  ! buffer not loaded
   If pLength > self._SourceSize() then pLength = self._SourceSize().
@@ -515,12 +518,14 @@ ix  BIGINT
 
 !-----------------------------------------------------------------
 DriverFileDos2Class._ExpandName                 PROCEDURE()
+bs  Cstring(2)
   Code
   If Lower(self.FullPathName) <> ':memory:'
+    If Right(longpath(),1) <> '\' then bs = '\'.
     If Sub(self.FullPathName,1,2) = '.\'
-      self.FullPathName = longpath() & sub(self.FullPathName,2,len(self.FullPathName)-1)
+      self.FullPathName = longpath() & bs & sub(self.FullPathName,3,len(self.FullPathName)-2)
     Elsif instring('\',self.FullPathName,1,1) = 0 and instring('/',self.FullPathName,1,1) = 0
-      self.FullPathName = longpath() & '\' & self.FullPathName
+      self.FullPathName = longpath() & bs & self.FullPathName
     End
   End
   Return
@@ -696,20 +701,22 @@ Filename        Cstring(FILE:MAXFILENAME2),auto
     self.Remove()
   End
   FileName = self.name()
+  If self.opt:BusyTimeout < 0 then self.opt:BusyTimeout = 0.
   Loop x = 0 to self.opt:BusyTimeout                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
     hFile = DosCreateFile(FileName, dos:GENERIC_WRITE, dos:FILE_DENY_ALL, 0, dos:CREATE_ALWAYS, dos:FILE_ATTRIBUTE_NORMAL, 0)
     If hFile >= 0
       DosCloseHandle(hfile)
-      break
+      self.SetError(NoError)
+      Return
     End
     e = DosGetLastError()
     If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyTimeout
       DosSleep(1000)
       Cycle
     End
-    self.SetError(self._ConvertError(e))
     Break
   End
+  self.SetError(self._ConvertError(e))
   Return
 
 !-----------------------------------------------------------------
@@ -791,20 +798,18 @@ rData                       like(dos:_WIN32_FIND_DATAA)
       self._filesize = self._bufferend
     Else
       result = DosFindFirstFile(self.FullPathName,address(rdata))
-      if result <> dos:INVALID_HANDLE_VALUE
+      If result <> dos:INVALID_HANDLE_VALUE
         self._filesize = rData.nFileSizeHigh * MAXULONG + rData.nFileSizeLow
-      else
-        self.trace('ERROR: dos:INVALID_HANDLE_VALUE [' & self.FullPathName & ']')
-      end
+      Else
+        do SetErr   ! failed
+        self.trace('ERROR: dos:INVALID_HANDLE_VALUE [' & self.FullPathName & '] ' &  DosGetLastError() & ' ' & ErrMess)
+      End
     End
   Else
     If self._hfile >= dos:Handle
       result = dosGetFileSizeEx(self._hfile,siz)
       If result = 0
-        ! failed
-        result = DosFormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,0,DosGetLastError(),0,ErrMess,size(ErrMess),0)
-        self.SetFileError(DosGetLastError(),ErrMess)
-        self.SetError(FileSystemErr)
+        do SetErr   ! failed
       End
       self._filesize = siz.hi * MAXULONG + siz.lo
     Else
@@ -812,6 +817,11 @@ rData                       like(dos:_WIN32_FIND_DATAA)
     End
   End
   Return self._filesize
+
+SetErr  routine
+  result = DosFormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,0,DosGetLastError(),0,ErrMess,size(ErrMess),0)
+  self.SetFileError(DosGetLastError(),ErrMess)
+  self.SetError(FileSystemErr)
 
 !-----------------------------------------------------------------
 DriverFileDos2Class.FLUSH            PROCEDURE()

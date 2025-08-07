@@ -514,9 +514,15 @@ Len           BIGINT,Auto
       colname &= sqlite3_column_name(pStmt,sqcol)
       If not colname &= null
         pResult.SetColumnName(column,colname)
-        If self._WithFieldNamed(colname) = Driver:ok
-          pResult.SetColumnIndex(column,self.fields.Index)
+        If self.opt:dummy = false
+          If self._WithFieldNamed(colname) = Driver:ok
+            pResult.SetColumnIndex(column,self.fields.Index)
+          End
+        Else
+          pResult.SetColumnIndex(column,column)
         End
+      Else
+        pResult.SetColumnIndex(column,column)
       End
     End
     coltype = sqlite3_column_type(pStmt,sqcol)
@@ -596,6 +602,7 @@ ans     cstring(255)
 result  long,auto
 mode    string(20)
   Code
+  If self._logOptions then self.Log('[OPTN]' & clip(pOption) & ' =[' & clip(pValue & ']')).
   Case upper(pOption)
   of '/AUTOINC'       ! If the AUTOINCREMENT keyword appears after INTEGER PRIMARY KEY, that changes the automatic ROWID assignment algorithm to prevent the reuse of ROWIDs over the lifetime of the database.
                       ! In other words, the purpose of AUTOINCREMENT is to prevent the reuse of ROWIDs from previously deleted rows.  The AUTOINCREMENT keyword imposes extra CPU, memory, disk space, and
@@ -612,6 +619,7 @@ mode    string(20)
         result = sqlite3_busy_timeout(self.dbHandle,self.opt:BusyTimeout)
       End
     End
+    Return self.opt:BusyTimeout
   of '/NOPRIMARY'                ! There is no documentation as to what this does. In SQLite2 it adds WITHOUT ROWID to the CREATE statement.
     If pValue <> ''
       do checkBoolean
@@ -626,6 +634,7 @@ mode    string(20)
     Return self.opt:UsePrimary
   of '/WHERE'
     self.SetProp:Where(pValue)
+    return self.GetProp:where()
   of '/WAL'
      If self.Owner = '' then return ''.
      If self.CheckConnect() = Driver:notok then return ''.
@@ -643,6 +652,7 @@ mode    string(20)
           ans = self.Result.GetCell(1,1)
         End
       End
+      Return ans
     End
   End
   Return parent.SetDriverOption(pOption,pValue)
@@ -654,6 +664,47 @@ CheckBoolean  routine
   of 'FALSE'
     pValue = 0
   End
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class._ExecuteToRecord    Procedure(Long pStmt,Long pWhichBuffer,Byte pErrIfNoRecord,Long pOpCode)
+result        Long,Auto
+totalchanged  long,auto
+found         Byte
+  code
+  !self.trace('DriverFileSQLite2Class._ExecuteToRecord')
+  If self._BindParameters(pStmt) = driver:ok
+    !self.NewResultSet(driver:DontFreeRam)     ! Explicitly do NOT touch the Result set here
+    totalchanged = sqlite3_total_changes(self.dbHandle)
+    If self._logSQL then self.Log('[SQL ]' & self.SqlCode.GetValue()).
+    Loop
+      result = sqlite3_step(pStmt)
+      Case result
+      Of SQLite_Done
+        case pOpCode
+        of Opcode:DELETE
+        orof Opcode:PUT
+          self.Affected = sqlite3_changes(self.dbHandle)
+          self.ChildrenAffected = sqlite3_total_changes(self.dbHandle) - totalChanged - self.Affected
+          If self.Affected = 0 and pErrIfNoRecord Then self.SetError(pErrIfNoRecord).
+        of Opcode:ADD
+        orof Opcode:APPEND
+          If pErrIfNoRecord Then self.SetError(pErrIfNoRecord).
+        of Opcode:GET
+          If found = false and pErrIfNoRecord Then self.SetError(pErrIfNoRecord).
+        End
+        break
+      Of SQLite_Row
+        If found = false then self._toRecord(pStmt,pWhichBuffer).
+        found = true
+      Else
+        self.SetErrorSqlite(result,'[p001]')
+        Break
+      End
+    End
+    result = sqlite3_reset(pStmt)              ! does an implicit commit if the transaction is implicit
+  End
+  result = sqlite3_clear_bindings(pStmt)     ! do not leak values to next call.
+  Return
 
 !-----------------------------------------------------------------
 ! moves the results from the SQLITE result set to the .Results parameter using the SQLite API.
@@ -1633,11 +1684,12 @@ dbNull        Byte
     Buffer = self.ClaFCB.rec_buf
   of driver:shadow
     Buffer = address(self.ShadowBuffer)
+  of driver:nobuffer
   End
 
   cols = sqlite3_column_count(pStmt)
-  If errorcode() = 0
 
+  If errorcode() = 0 and pBuffer <> driver:nobuffer
     Loop x = 0 to cols-1                                  ! loop through the result columns
       SQLFieldType = sqlite3_column_type(pStmt,x)
       colname &= sqlite3_column_name(pStmt,x)
@@ -2298,6 +2350,7 @@ comma         Byte
 allSql        StringTheory
   Code
   !self.trace('DriverFileSQLite2Class._CREATETABLE')
+  If self.opt:dummy then Return.   ! Dummy Tables are not created.
   If self.CheckConnect() = Driver:notok then Return.
   ! before this table can be created, all the parent tables need to be created.
   Loop x = 1 to Records(self.relations)
@@ -2870,6 +2923,7 @@ result      Long,Auto
     self.SetError(NoFileErr)
     Return driver:notok
   End
+  str.SetEncodingFromBOM(st:removeBOM)
   str.Split(self.LineEndings)
   str.RemoveLines()
   Offset += str.EndOfLastLine - 1
@@ -2889,7 +2943,7 @@ result      Long,Auto
       sqlColumnName = self.result.GetCell(i,2)
       sqlColumnNameSafe = self.TranslateReserved(sqlColumnName)
       Loop y = 1 to lne.records()
-        If lne.GetLine(y) = sqlColumnName
+        If upper(lne.GetLine(y)) = upper(sqlColumnName)
           mapColumns[y] = i
           sqlColumnNotNull[y] = self.result.GetCell(i,4)
           case self.result.GetCell(i,3)
@@ -3288,18 +3342,22 @@ DriverFileSQLite2Class.OPEN             PROCEDURE(LONG pAccessMode=022h)
   ! indexes do not need to match, unless asked for.
   ! sql table can have more fields than are listed here.
   !!!todo this is effectivly doing a / GATHERATOPEN. could test for that and check structure later if necessary.
-  If self.SharedProperties.ValidatedOwner <> self.Owner or self.SharedProperties.ValidatedFileName <> self.FullPathName
+  If self.opt:dummy
+    self.SharedProperties.ValidatedOwner     = self.Owner
+    self.SharedProperties.ValidatedFileName  = self.FullPathName
+    self.AfterOpen(pAccessmode,true)
+  ElsIf self.SharedProperties.ValidatedOwner <> self.Owner or self.SharedProperties.ValidatedFileName <> self.FullPathName
     If self.ValidateStructure() = Driver:ok
       self.AfterOpen(pAccessmode,true)
       self.SharedProperties.ValidatedOwner     = self.Owner
       self.SharedProperties.ValidatedFileName  = self.FullPathName  !!!todo, could just use the server, port, database parts of the owner.
     Else
-      self.AfterOpen(pAccessmode,false)
+      self.AfterOpen(pAccessmode,false)  ! false means "not open"
     End
   Else
     self.AfterOpen(pAccessmode,true)
   End
-  If self._opened
+  If self._opened and self.opt:dummy = false
     self.Send('/pragma_foreign_keys=ON')
   End
   Return
@@ -3463,14 +3521,7 @@ result  long,Auto
   If Errorcode() then Return.
   self._PrepareAdd(Opcode:Add)
   If self.Stmt_Add
-    If self._BindParameters(self.Stmt_Add) = driver:ok
-      self._ExecuteToResults(self.Stmt_Add,self.result)  ! RETURN INTO
-      If self.result.Rows()
-        self.ResultToRecord(1, self.ClaFCB.rec_buf, true)
-      End
-      result = sqlite3_reset(self.Stmt_Add)               ! does an implicit commit if the transaction is implicit
-    End
-    result = sqlite3_clear_bindings(self.Stmt_Add)      ! do not leak values to next call.
+    self._ExecuteToRecord(self.Stmt_Add,driver:buffer,NoError,Opcode:ADD)
   End
   self._AfterWrite(opcode:Add)
   Return
@@ -3487,11 +3538,7 @@ result  long,Auto
   self.SetError(NoError)
   self._PrepareAdd(Opcode:APPEND)
   If self.Stmt_Append
-    If self._BindParameters(self.Stmt_Append) = Driver:ok
-      self._ExecuteToResults(self.Stmt_Append,self.result)
-      result = sqlite3_reset(self.Stmt_Append)              ! does an implicit commit if the transaction is implicit
-    End
-    result = sqlite3_clear_bindings(self.Stmt_Append)     ! do not leak values to next call.
+    self._ExecuteToRecord(self.Stmt_Append,driver:nobuffer,NoError,Opcode:APPEND)
   End
   self._AfterWrite(opcode:Append)
   Return
@@ -3505,11 +3552,7 @@ result  long,Auto
   parent.Delete()
   If Errorcode() = NoError
     If self._PrepareDelete() = driver:ok and Errorcode() = NoError
-      If self._BindParameters(self.Stmt_Delete) = driver:ok
-        self._ExecuteToResults(self.Stmt_Delete,self.result)
-        result = sqlite3_reset(self.Stmt_Delete) ! does an implicit commit if the transaction is implicit
-      End
-      result = sqlite3_clear_bindings(self.Stmt_Delete) ! do not leak values to next call.
+      self._ExecuteToRecord(self.Stmt_Delete,driver:buffer,NoRecErr,Opcode:DELETE)
     End
   End
   self._AfterWrite(opcode:Delete)
@@ -3551,19 +3594,7 @@ stmt    Long,Auto
     stmt = self._PrepareGet(pKey)
     If ErrorCode() = NoError
       ! the bit about memo or nomemo only affects the Project List, not the parameter list.
-      If self._BindParameters(stmt) = driver:ok
-        !self.NewResultSet(driver:DontFreeRam)     ! The GET doesn't go to the result set, so no need to clear that here?
-        If self._logSQL then self.Log('[SQL ]' & self.SqlCode.GetValue()).
-        result = sqlite3_step(stmt)
-        Case result
-        Of SQLite_Done
-          self.SetError(NoRecErr)    !
-        Of SQLite_Row
-          self._toRecord(stmt,self._GetBuffer)
-        End
-        result = sqlite3_reset(stmt)              ! does an implicit commit if the transaction is implicit
-      End
-      result = sqlite3_clear_bindings(stmt)     ! do not leak values to next call.
+      self._ExecuteToRecord(stmt,self._GetBuffer,NoRecErr,Opcode:GET)
     End
   Else
     self.SetError(InvKeyErr)
@@ -3591,18 +3622,7 @@ stmt    Long,Auto
     rnd = Random(0,recs-1)                     !!!todo - Random only returns in the range 1 to 2 billion.
     stmt = self._PrepareRandom(pFilter,rnd)
     If stmt
-      If self._BindParameters(stmt) = driver:ok
-        !self.NewResultSet(driver:DontFreeRam)  ! The GET doesn't go to the result set, so no need to clear that here?
-        If self._logSQL then self.Log('[SQL ]' & self.SqlCode.GetValue()).
-        result = sqlite3_step(stmt)
-        Case result
-        of SQLite_Done
-          self.SetError(BadRecErr)
-        of SQLite_Row
-          self._toRecord(stmt,driver:buffer)
-        End
-        result = sqlite3_finalize(stmt)
-      End
+      self._ExecuteToRecord(stmt,driver:buffer,NoRecErr,Opcode:GET)
     End
     Parent.GetRandom(pFilter)
   End
@@ -3666,16 +3686,7 @@ result  long,auto
   If Errorcode() then Return.
   stmt = self._PreparePut()
   If stmt
-    If self._BindParameters(stmt) = Driver:ok   ! put
-      ! server-side fields and read-only fields in the record are reset to their actual values at this point
-      self._ExecuteToResults(self.Stmt_Put,self.result)  !(does the sqlite3_step(stmt))  ! RETURN INTO
-      If self.result.Rows()
-        self.ResultToRecord(1, self.ClaFCB.rec_buf, true)
-      End
-      !
-      result = sqlite3_reset(stmt) ! does an implicit commit if the transaction is implicit
-    End
-    result = sqlite3_clear_bindings(stmt) ! do not leak values to next call.
+    self._ExecuteToRecord(stmt,driver:buffer,NoError,Opcode:PUT)
   End
   self._AfterWrite(opcode:Put)
   Return

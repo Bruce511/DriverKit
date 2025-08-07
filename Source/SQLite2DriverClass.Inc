@@ -237,6 +237,7 @@ _BindParameters             Procedure(Long pStmt),Long,Virtual
 _BindField                  Procedure(Long pStmt,Long pCount, Long pAddress),Virtual
 _BindBlob                   Procedure(Long pStmt,Long pCount),Virtual
 _ToRecord                   Procedure(Long pStmt,Long pBuffer),Virtual
+_ExecuteToRecord            Procedure(Long pStmt,Long pWhichBuffer,Byte pErrIfNoRecord,Long pOpCode),Virtual
 _ExecuteToResults           Procedure(Long pStmt,iResultSet pResult),Virtual
 _ToResult                   Procedure(Long pStmt, Long pColumns,iResultSet pResult),Virtual
 _ExecuteSelect              Procedure(),DERIVED

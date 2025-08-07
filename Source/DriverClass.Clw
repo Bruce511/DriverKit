@@ -17,6 +17,7 @@
 !!!todo Alter table  Alter(file), Alter(key), Alter(file,field), Alter(file,blob)
 !!!todo Server side math, like Records, Average etc.
 !!!todo VIEW prop:NotDistinct
+!!!todo Auto-Generate GROUP BY from PROJECT LIST when either prop:GroupBy is set, or PROJECT contains an aggregate function.
 
 !!! for more powerful database engines;
 !!!todo prop:hint                                  ! MSSQL possibly ORACLE?
@@ -67,7 +68,7 @@ _User                 Cstring(255)
       osFormatMessage(long pFlags,long lpSource,long pMessageId,long pLanguageId,*cstring pBuffer,long pSize,long pVaList),long,Pascal,raw,name('FormatMessageA'), dll(1)
 
       osCreateFile(*cstring lpFileName, long dwDesiredAccess, long dwSharedMode, long lpSecurityAttributes, |
-                    long dwCreationDisposition, long dwFlagsAndAttributes, long hTemplateFile), long, raw, pascal, name('CreateFileA')      , dll(1)
+                    long dwCreationDisposition, long dwFlagsAndAttributes, long hTemplateFile), long, raw, pascal, name('CreateFileA'), dll(1)
       osSetEndOfFile(long hFile),long, proc, raw, pascal, name('SetEndOfFile'), dll(1)
       osWriteFile(long hFile, long lpBuffer, long nNumberOfBytesToWrite, *long lpNumberOfBytesWritten, |
                   long lpOverlapped), long, proc, raw, pascal, name('WriteFile'), dll(1)
@@ -141,7 +142,6 @@ DriverBaseClass.Construct  Procedure()
   self.SqlCode &= New StringTheory
   self.tempstr &= New StringTheory
   self.TokenStr &= New StringTheory
-  self.fetchsize = 30                 ! a somewhat arbitary value, but is more-or-less the size of a browse list page. Can be set using BUFFER. or prop:FetchSize
   self.QuoteString    = '"'           ! this is the default value. May be overiden by a derived driver.
   Return
 
@@ -722,10 +722,9 @@ strt    long
 einde   long
 p       long
   code
-  !self.trace('REPARM: ' & pOrc.GetValue() & ' err=' & errorcode())
+  !self.trace('DriverBaseClass._reparm ' & pOrc.GetValue() & ' err=' & errorcode() & ' pCount=' & pCount)
   newOrc.setValue(pOrc)
   loop
-    newOrc.trace()
     strt = 0
     einde = 0
     x = newOrc.FindBetween('@<<{{','}>@',strt,einde,false,true)
@@ -1806,15 +1805,17 @@ DriverBaseClass._FillOrderFromLabel              Procedure(String pLabel, Byte p
 ! After calling this The File class prepends the Key fields to the where, and the paging after it.
 ! The View class adds the Fixed values (as determined by the SET call) before this, and the paging after.
 DriverBaseClass.BuildWhere              Procedure()
+where   StringTheory
  code
   If self.SearchFilter
     If self.ParseProperty(self.SearchFilter,driver:searchfilter,self.TokenStr) = driver:ok
-      self.SetProp:Where(self._ExpandExpression(self.TokenStr.GetValue()))
+      where.SetValue(self._ExpandExpression(self.TokenStr.GetValue()))
     End
   End
 
   If (self.SqlFilter &= NULL or self.SqlFilter = '') and (self.Filter &= NULL or self.Filter = '')
     ! No filters in play, nothing to do.
+    self.SetProp:Where(where.GetValue())
     Return
   End
 
@@ -1822,7 +1823,8 @@ DriverBaseClass.BuildWhere              Procedure()
   If not self.SqlFilter &= NULL and self.SqlFilter <> ''
     If (sub(self.SQLFilter,1,1) <> '+') or (self.Filter &= NULL or self.Filter = '')
       ! yep. just handle prop:SqlFilter and get out.
-      self.SetProp:Where(self.sqlfilter)
+      where.Append(self.sqlFilter,,' AND ')
+      self.SetProp:Where(where.GetValue())
       Return
     End
   End
@@ -1830,15 +1832,17 @@ DriverBaseClass.BuildWhere              Procedure()
   ! Check for no prop:SqlFilter, but only prop:filter
   If (not self.Filter &= NULL and self.Filter <> '') and (self.SqlFilter &= NULL or self.SqlFilter = '')
     If self.ParseProperty(self.filter,driver:filter,self.TokenStr) = driver:ok
-      self.SetProp:Where(self._ExpandExpression(self.TokenStr.GetValue()))
+      where.Append(self._ExpandExpression(self.TokenStr.GetValue()),,' AND ')
     End
+    self.SetProp:Where(where.GetValue())
     Return
   End
 
   ! so now we have both sqlfilter and filter, and they both need to be used
   If self.ParseProperty(self.filter,driver:filter,self.TokenStr) = driver:ok
-    self.SetProp:Where('(' & self._ExpandExpression(self.TokenStr.GetValue()) & ') AND (' & self.sqlfilter & ')')
+    where.Append('(' & self._ExpandExpression(self.TokenStr.GetValue()) & ') AND (' & self.sqlfilter & ')')
   End
+  self.SetProp:Where(where.GetValue())
   Return
 
 !------------------------------------------------------------------------------------------------------------
@@ -3295,7 +3299,7 @@ x   long,auto
 DriverBaseClass._SetParameterBlob          Procedure(Long pCount, Long pIndex)
 x   long,auto
   code
-  !self.trace('DriverBaseClass._SetParameterBlob pCount=' & pCount)
+  !self.trace('DriverBaseClass._SetParameterBlob pCount=' & pCount & ' index=' & pIndex)
   x = self._GetFreeParameter()
   if x > self.ParameterQueue.ParameterArrayIndex then self.ParameterQueue.ParameterArrayIndex = x.
   clear(self.ParameterQueue.ParameterArray[x])
@@ -3329,7 +3333,7 @@ x        Long,Auto
 y        Long,Auto
   code
   If self.ParameterQueue &= NULL
-    self.trace('self.ParameterQueue is null')
+    self.trace('DriverBaseClass._DuplicateParameter : self.ParameterQueue is null')
   End
   !self.trace('DriverBaseClass._DuplicateParameter 0 recs=' & records(self.ParameterQueue) & ' err=' & errorcode())
   Loop y = 1 to records(self.ParameterQueue)
@@ -3676,6 +3680,7 @@ DriverBaseClass.ClearProps            PROCEDURE()
   self._SearchOrderClause   = ''
   self.SearchRank           = 0
   self._SearchParameter     = 0
+  self.fetchsize = 30                 ! a somewhat arbitary value, but is more-or-less the size of a browse list page. Can be set using BUFFER. or prop:FetchSize
 
   Free(self.BindQueue)
   Return
@@ -3858,6 +3863,72 @@ DriverBaseClass.RESULTRECORDS    PROCEDURE()
 DriverBaseClass.ResultToExplain  Procedure(iResultSet pResult)
   Code
   Return
+
+!-----------------------------------------------------------------
+! Send commands are in the form /a=b /c=d
+! ie, a space separated list, sql commands start with / (isam might not),
+!  and are of the form name=value
+! value can be anything, including TRUE or FALSE
+DriverBaseClass.SEND             PROCEDURE(STRING pMessage)
+str  StringTheory
+lne  StringTheory
+x    Long
+ans  String(255)
+  Code
+  If pMessage = '' then Return ''.
+  !self.trace('DriverBaseClass.SEND ' & pMessage)
+  str.SetValue(pMessage,st:clip)
+  str.Split(' ','"','"')
+  Loop x = 1 to str.Records()
+    lne.SetValue(str.GetLine(x))
+    If lne.Instring('=') = 0
+      ans = self.SetDriverOption(lne.GetValue(),'')
+    Else
+      ans = self.SetDriverOption(lne.Before('='),lne.After('='))
+    End
+  End
+  Return ans
+
+!-----------------------------------------------------------------
+! SetDriverOption is called in reverse order. ie Driver, then generic class, then base class.
+! The LOG statement may appear multiple times as it flows through this call tree, however that cannot be helped.
+! Note that these Base class options apply to FILE and VIEW structures.
+DriverBaseClass.SetDriverOption  Procedure(String pOption, String pValue)
+  Code
+  !self.trace('SetDriverOption ' & pOption & ' = ' & pValue)
+  If self._logOptions then self.Log('[OPTN]' & clip(pOption) & ' =[' & clip(pValue & ']')).
+
+  Case upper(pOption)
+  of '/DUMMY'
+    If pValue = ''
+      self.opt:dummy = True
+    Else
+      self.opt:dummy = pValue
+    End
+    return self.opt:dummy
+  of '/EXPLAIN'
+    If pValue = ''
+      self.opt:explain = false
+    Else
+      self.opt:explain = pValue
+    End
+    Return self.opt:explain
+  of '/UNSAFE'
+    case upper(pValue)
+    of 'TRUE' orof '1'
+      self.opt:unsafe = 1
+    of 'FALSE' orof '0'
+      self.opt:unsafe = 0
+    of 'STOP'
+      self.opt:unsafe = 2
+    of 'GPF'
+      self.opt:unsafe = 3
+    else
+      self.opt:unsafe = pValue
+    End
+    return self.opt:unsafe
+  End
+  Return 'Unknown Driver String'
 
 !-----------------------------------------------------------------
 DriverBaseClass.SQL            Procedure(String pSql,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>)
@@ -4207,6 +4278,9 @@ DriverBaseClass.SetProp:GroupBy           Procedure(String pValue)
     self.GroupBy = clip(pValue)
     self._PropsCache += 1
   End
+  If self.GroupBy <> ''
+    self.noKeyProject = Driver:ProjectNoKeys
+  End
   Return
 
 !-----------------------------------------------------------------
@@ -4538,11 +4612,13 @@ DriverBaseClass.DoProp:Sql            PROCEDURE()
     Self.SetError(NoError)
     If self._ExecuteSql() = driver:ok
     End
+    self._HasBeenPropSql = true
   of 2 ! post a STOP then continue with the command
     Stop('Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
     Self.SetError(NoError)
     If self._ExecuteSql() = driver:ok
     End
+    self._HasBeenPropSql = true
   Else
     Self.SetError(FileSystemErr)
     Self.SetFileError(UnsafeSQLErr,'Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
@@ -6026,7 +6102,6 @@ e         Cstring(4096)
   ! c) a.address                            ! translate this to columnname (without the alias)
 
   ! first: known equates which can be used in filters
-  !self.trace('TranslateLabel: ' & pValue)
 
   If self.TranslateConstant(pValue,i) = Driver:Ok
     pReturnType = driver:constant
@@ -7591,18 +7666,18 @@ check  StringTheory
     orof ClaDECIMAL
     orof ClaPDECIMAL
       If self.fields.NotNull
-        self.SqlCode.append(' NOT NULL CONSTRAINT check_'& self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (0, 1))')
+        self.SqlCode.append(' NOT NULL CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (0, 1))')
       Else
-        self.SqlCode.append(' CONSTRAINT check_'& self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (0, 1) OR ' & self.Fields.column & ' IS NULL)')
+        self.SqlCode.append(' CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (0, 1) OR ' & self.Fields.column & ' IS NULL)')
       End
       Return
     of ClaString
     orof ClaCString
     orof ClaPString
       If self.fields.NotNull
-        self.SqlCode.append(' NOT NULL CONSTRAINT check_'& self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (''0'', ''1''))')
+        self.SqlCode.append(' NOT NULL CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (''0'', ''1''))')
       Else
-        self.SqlCode.append(' CONSTRAINT check_'& self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (''0'', ''1'') OR ' & self.Fields.column & ' IS NULL)')
+        self.SqlCode.append(' CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK (' & self.Fields.column & ' IN (''0'', ''1'') OR ' & self.Fields.column & ' IS NULL)')
       End
       Return
     End
@@ -7625,9 +7700,9 @@ check  StringTheory
   End
   If Check.Length()
     If self.fields.NotNull
-      self.SqlCode.append(' NOT NULL CONSTRAINT check_'& self.Fields.Column & ' CHECK (' & check.getvalue() & ')' )
+      self.SqlCode.append(' NOT NULL CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK (' & check.getvalue() & ')' )
     Else
-      self.SqlCode.append(' CONSTRAINT check_'& self.Fields.Column & ' CHECK ((' & check.getvalue() & ') OR ' & self.Fields.column & ' IS NULL)')
+      self.SqlCode.append(' CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK ((' & check.getvalue() & ') OR ' & self.Fields.column & ' IS NULL)')
     End
   ElsIf self.fields.NotNull
     self.SqlCode.append(' NOT NULL')
@@ -8302,38 +8377,6 @@ DriverFileClass.REOPEN           PROCEDURE(Long pAccessMode)
   Return
 
 !-----------------------------------------------------------------
-! Send commands are in the form /a=b /c=d
-! ie, a space separated list, sql commands start with / (isam might not),
-!  and are of the form name=value
-! value can be anything, including TRUE or FALSE
-DriverFileClass.SEND             PROCEDURE(STRING pMessage)
-str  StringTheory
-lne  StringTheory
-x    Long
-ans  String(255)
-  Code
-  If pMessage = '' then Return ''.
-  !self.trace('DriverFileClass.SEND ' & pMessage)
-  str.SetValue(pMessage,st:clip)
-  str.Split(' ','"','"')
-  Loop x = 1 to str.Records()
-    lne.SetValue(str.GetLine(x))
-    If lne.Instring('=') = 0
-      ans = self.SetDriverOption(lne.GetValue(),'')
-    Else
-      ans = self.SetDriverOption(lne.Before('='),lne.After('='))
-    End
-  End
-  Return ans
-
-!-----------------------------------------------------------------
-!!!DERIVE
-DriverFileClass.SetDriverOption            Procedure(String pOption, String pValue)
-  Code
-  If self._logOptions then self.Log('[OPTN]' & clip(pOption) & ' =[' & clip(pValue & ']')).
-  Return ''
-
-!-----------------------------------------------------------------
 DriverFileClass.SHARE            PROCEDURE(LONG pAccessMode=042h)
   Code
   self.Open(pAccessMode)
@@ -8609,6 +8652,10 @@ DriverFileClass.GET              PROCEDURE(KEY pKey, BIGINT pKeyPointer)
   Return
 
 !-----------------------------------------------------------------
+DriverFileClass.GETROW           PROCEDURE(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>)
+  Code
+
+!-----------------------------------------------------------------
 DriverFileClass.HOLD             PROCEDURE()
   Code
   self.SetError(NoDriverSupport)
@@ -8719,6 +8766,7 @@ DriverFileClass.RELEASE          PROCEDURE()
   Return
 
 !-----------------------------------------------------------------
+! bear in mind that a completely blank string is still a valid "position".
 DriverFileClass.REGET            PROCEDURE(STRING pPosition)
 k       &key,auto
 minlen  long(0)
@@ -8727,7 +8775,7 @@ x       long,auto
   If self._CheckOpen() = 0 then Return.
   self.SetError(NoError)
   self.SetProp:Project('')
-  self._SetPrimaryKeyPosition(pPosition,driver:buffer,x)
+  self._SetPrimaryKeyPosition(pPosition,driver:buffer,x)  ! x is a return value
   If Errorcode() then Return.
   If self._WithPrimaryKey() = Driver:ok
     k &= (self.keys.keyptr)
@@ -11454,8 +11502,6 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
       self.opt:AllowDetails = pValue
     End
     Return self.opt:AllowDetails
-  of '/EXPLAIN'
-    self.opt:explain = pValue
   of '/LOGFILENAME'
     If pValue <> ''
       if self.opt:LogFileName &= null then self.opt:LogFileName &= new Cstring(255).
@@ -11487,19 +11533,6 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
       self.opt:TurboSQL = pValue
     End
     Return self.opt:TurboSQL
-  of '/UNSAFE'
-    case upper(pValue)
-    of 'TRUE' orof '1'
-      self.opt:unsafe = 1
-    of 'FALSE' orof '0'
-      self.opt:unsafe = 0
-    of 'STOP'
-      self.opt:unsafe = 2
-    of 'GPF'
-      self.opt:unsafe = 3
-    else
-      self.opt:unsafe = pValue
-    End
   of '/ZERODATE'
     case upper(pValue)
     of 'NULL'
@@ -12313,7 +12346,7 @@ DriverFileSQLClass._NextPrevious             Procedure(Long pOpcode)
 rows    long,Auto
 dbg     stringtheory
   Code
-  !self.trace('DriverFileSQLClass._NextPrevious self._justset=' & self._justset & ' self.ResultRow=' & self.ResultRow & ' self._ResultSetDirection=' & self._ResultSetDirection & ' pOpcode=' & pOpcode & ' self.fetchsize=' & self.fetchsize & ' errorcode=' & errorcode())
+  !self.trace('DriverFileSQLClass._NextPrevious self._justset=' & self._justset & ' self.ResultRow=' & self.ResultRow & ' self._ResultSetDirection=' & self._ResultSetDirection & ' pOpcode=' & pOpcode & ' self.fetchsize=' & self.fetchsize & ' errorcode=' &
   Loop 2 times
     ! first check results to see if a row is waiting there.
     If self._justset = false
@@ -12765,10 +12798,10 @@ stmt  Long
   self.SqlCode.SetValue(clip(pSql))
   If self._executeSql(self.SqlCode,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20) = Driver:ok
   End
-  self._HasBeenPropSql = true
   self._justSet = false
   self.Paging = false
   self._ResultSetDirection = Opcode:NEXT
+  self._HasBeenPropSql = true
   Return
 
 !-----------------------------------------------------------------
@@ -13080,6 +13113,7 @@ DriverViewClass.ClearProps    Procedure()
   self.NoKeyProject    = False
   self._PropFilterCalled = False
   self._PropOrderCalled  = False
+  self._PropSQLCalled = False
   self._ClearPropsWalker(self.tree)
   Return
 
@@ -13202,9 +13236,12 @@ lparm2  long
     !!!todo View Opcode:Release  (Release not supported by Traditional SQL drivers)
 
   of Opcode:RESETviewf
-    !self.Reset()
-    If self._logClarion then self.Log('[CLAR]RESET(view)').
-    !!!todo View Opcode:Reset for a View?
+    If self._logClarion then self.Log('[CLAR]RESET(view,file)').
+    self.Reset()
+
+  of Opcode:SEND
+    If self._logClarion then self.Log('[CLAR]SEND(view,driveroption)').
+    self._PushString(self.Send(self._PopString()))
 
   of Opcode:SETviewfields
     lparm1 = self._GetParmAsLong(pVarList,1)
@@ -13714,12 +13751,14 @@ x       long,Auto
 !-----------------------------------------------------------------
 DriverViewClass.Next                      Procedure()
   code
-  if self._JustSetSearch
+  If self._JustSetSearch
     clear(self.SearchRank,-1)
     self._JustSetSearch = false
-  end
+  End
   If self._HasBeenSet = False
-    If self._PropOrderCalled
+    If self._PropSqlCalled
+
+    ElsIf self._PropOrderCalled
       Self.SetError(BadRecErr)
     ElsIf self._SetFromFile() = driver:ok
     Else
@@ -13803,7 +13842,9 @@ DriverViewClass.Previous                  Procedure()
     self._JustSetSearch = false
   End
   If self._HasBeenSet = False
-    If self._PropOrderCalled
+    If self._PropSQLCalled
+
+    ElsIf self._PropOrderCalled
       Self.SetError(BadRecErr)
     ElsIf self._SetFromFile() = driver:ok
     Else
@@ -13930,6 +13971,10 @@ srStr    String(8),over(self.SearchRank)
   Return
 
 !-----------------------------------------------------------------
+DriverViewClass.RESET                     Procedure()
+  Code
+
+!-----------------------------------------------------------------
 DriverViewClass.ResultGet        PROCEDURE(BIGINT pRow)
   code
   If pRow < 1 or pRow > self.Result.Rows()
@@ -13938,6 +13983,16 @@ DriverViewClass.ResultGet        PROCEDURE(BIGINT pRow)
   End
   self._ResultRow = pRow
   self.ResultToRecords(self._ResultRow, driver:buffer)
+  Return
+
+!-----------------------------------------------------------------
+DriverViewClass.DoPROP:SQL                Procedure()
+  Code
+  If self._HasBeenSet = False
+    Self.Paging = false
+    Self.Set(0)
+  End
+  parent.DoProp:SQL()
   Return
 
 !-----------------------------------------------------------------
@@ -13992,13 +14047,29 @@ obj          &DriverFileClass
 DriverViewClass.ResultToRecords  Procedure(Long pRow,Long pOptions)
 index        long,Auto
 obj          &DriverFileClass,Auto
+cols         Long,Auto
+colname      Cstring(255)
+F            &File
   Code
   PushErrors()
   !For each field move it from the results into the appropriate record
-  Loop index = 1 to self._RecordsViewMap
-    obj &= (self.ViewMapObj[Index])
-    obj.fields &= (self.ViewMapFieldNode[Index])
-    obj.ResultToFieldNumber(self.Result,pRow,index , self.ViewMapFieldNumber[Index], pOptions)
+  If self._RecordsViewMap = 0
+    cols = self.Result.Columns()
+    Loop index = 1 to cols
+      colName = self.Result.GetColumnName(index)
+      F &= self.GetProp:File(index)
+      obj &= F{prop:object}
+      If obj &= null then cycle.
+      If obj._WithFieldNamed(colname) = Driver:ok
+        obj.ResultToFieldNumber(self.Result,pRow,index,index, pOptions)
+      End
+    End
+  Else
+    Loop index = 1 to self._RecordsViewMap
+      obj &= (self.ViewMapObj[Index])
+      obj.fields &= (self.ViewMapFieldNode[Index])
+      obj.ResultToFieldNumber(self.Result,pRow,index , self.ViewMapFieldNumber[Index], pOptions)
+    End
   End
   If self.readonly = false
     Loop index = 1 to self.Files
@@ -14845,7 +14916,7 @@ PutNode    byte
           self._ParseContext = driver:project
           OneFileProjectList.Append(usename,,',')  ! before alias added
           expr = self._tokenize(expr,driver:project)
-          expr = self._ExpandExpression(expr,driver:project,count)
+          expr = self._ExpandExpression(expr) !,driver:project,count)
           If i
             usename = expr & Sub(usename,i,len(usename))
           Else
@@ -14962,7 +15033,7 @@ count  Long
     If self._withNodeFieldLabel(pAs) = Driver:ok
       obj &= self.node.file{prop:object}
       i = self._ProjectField(self.node,obj.Fields.index,pExpression)
-      if i
+      If i
         !self.Node.name[i] = pExpression    !!!todo set expression
         !Put(self.node)
       End
@@ -14974,7 +15045,7 @@ count  Long
   end
   If pAs
     self.ParseProperty(clip(pExpression) & ' AS ' & upper(clip(pAs)), driver:project,self.TokenStr)
-    Expr.SetValue(self._ExpandExpression(self.TokenStr.GetValue(),driver:project,count))
+    Expr.SetValue(self._ExpandExpression(self.TokenStr.GetValue()))
     If self._ProjectClauses.Instring(Expr.GetValue()) = 0
       self._ProjectClauses.Append(Expr.GetValue(),,',')
     End
@@ -15173,7 +15244,11 @@ DriverViewSQLClass.BuildOrderBy            Procedure()
     Add(self.OrderQueue)
   End
   self.BuildOrderByProps()                                 ! prop:order and prop:SqlOrder
-  self.BuildOrderByUnique()                                ! Regardless of the properties, add the Primary Key fields.
+  If self.GroupBy &= null or self.groupBy = ''
+    If self.NoKeyProject <> driver:ProjectNoKeys
+      self.BuildOrderByUnique()                            ! As long as the primary keys are being projected, they can be added in here
+    End
+  End
   self.SetOrderByFromQueue()                               ! This takes the OrderBy queue as input, and generates the prop:OrderBy as output
   Return
 
@@ -15450,6 +15525,7 @@ obj     &DriverFileSQLClass
 !-----------------------------------------------------------------
 DriverViewSQLClass.NEXT             PROCEDURE()
   Code
+  self.SetError(NoError)
   Parent.Next()
   If Errorcode() then Return.
   self._NextPrevious(Opcode:NEXT)
@@ -15464,6 +15540,7 @@ DriverViewSQLClass._ExecuteSelect     PROCEDURE()
 !-----------------------------------------------------------------
 DriverViewSQLClass.PREVIOUS             PROCEDURE()
   code
+  self.SetError(NoError)
   Parent.Previous()
   If Errorcode() then Return.
   self._NextPrevious(Opcode:PREVIOUS)
@@ -15479,7 +15556,7 @@ reverse             Byte
 ShadowBufferPrimed  Byte
 
   Code
-  !self.trace('DriverViewSQLClass._NextPrevious pOpcode=' & pOpcode & ' _setdirection=' &  self._setdirection & ' _justset=' & self._justset & ' _JustReset=' & self._JustReset & ' ResultRow=' & self.ResultRow & ' explain=' & self.explain & ' opt:explain = ' & self.opt:explain & ' logexplain=' & self._logExplain)
+  !self.trace('DriverViewSQLClass._NextPrevious pOpcode=' & pOpcode & ' _setdirection=' &  self._setdirection & ' _justset=' & self._justset & ' _JustReset=' & self._JustReset & ' ResultRow=' & self.ResultRow & ' explain=' & self.explain & ' opt:explain =
 
   self.SetError(NoError)
   self._ParameterOpcode = Opcode:SET
@@ -15692,8 +15769,6 @@ p    Byte
 ! Resets to the record identified by the string that was returned by the POSITION procedure.
 ! Once RESET has restored the record pointer, either NEXT or PREVIOUS will read that record.
 DriverViewSQLClass.RESET                     Procedure(String pPosition)
-obj  &DriverFileClass,auto
-x    Long,Auto
 hash  String(16),Auto
   code
   ! resetting on position. But possibly resetting into current result set. If so can avoid a request to the backend.
@@ -15704,6 +15779,16 @@ hash  String(16),Auto
     self.ResultRow = self.Result.GetRowWithPosition(hash)
     If self.ResultRow then Return.
   End
+  Self.Reset()
+  Return
+
+!-----------------------------------------------------------------
+! Resets to the record identified by the string that was returned by the POSITION procedure.
+! Once RESET has restored the record pointer, either NEXT or PREVIOUS will read that record.
+DriverViewSQLClass.RESET                     Procedure()
+obj     &DriverFileClass,auto
+x       Long,Auto
+  code
   ! A property changed, or the position was not in the result set, so go ahead and do a new SET
   Self.NewResultSet(driver:DontFreeRam)           ! This will force the next or previous to get the next page.
   self._setdirection = 0                          ! force generation of a new SELECT statement, because things like Prop:Order and Prop:Filter may have changed
@@ -15714,7 +15799,7 @@ hash  String(16),Auto
     If obj &= null then cycle.
     obj._GetBuffer = driver:shadow
     obj.Get(obj.primarykey)
-    obj._GetBuffer = 0
+    obj._GetBuffer = driver:buffer
   End
   Return
 
@@ -16431,7 +16516,7 @@ strmem &String,Auto
   self.state.Id = pStateId
   Get(self.state,self.state.id)
   If Errorcode()
-    self.trace('Invalid State ' & pStateId)
+    self.trace('DriverResultSetClass.iResultSet.RestoreState : Invalid State ' & pStateId)
     return
   End
   self.NumColumns         =  self.state.NumColumns

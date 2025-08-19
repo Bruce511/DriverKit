@@ -30,7 +30,7 @@ Copyright    Equate('(c) 2025 by CapeSoft<0>{20}')                              
 DriverDesc   Equate('SQLite2 {23}')                                                ! Maintain length as exactly 30 characters
 DLLName      Equate('CLA'&ShortName&'.DLL<0>')                                     ! Maintain length as exactly 12 characters
 DSIDLLNAME   Equate('CLA'&ShortName&'S.DLL')                                       ! Maintain length as exactly 12 characters
-TDescAddress Equate(00a5282ch)
+TDescAddress Equate(00a4f77ch)
 
   MAP
     SQLite2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)   

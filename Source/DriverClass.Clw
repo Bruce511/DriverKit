@@ -4610,20 +4610,31 @@ DriverBaseClass.DoProp:Sql            PROCEDURE()
   Case self.opt:Unsafe
   of 1 ! allow unsafe commands
     Self.SetError(NoError)
-    If self._ExecuteSql() = driver:ok
-    End
-    self._HasBeenPropSql = true
+    do ExecuteSql
+
   of 2 ! post a STOP then continue with the command
     Stop('Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
-    Self.SetError(NoError)
-    If self._ExecuteSql() = driver:ok
-    End
-    self._HasBeenPropSql = true
+    do ExecuteSql
+
   Else
     Self.SetError(FileSystemErr)
     Self.SetFileError(UnsafeSQLErr,'Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
   End
   Return
+
+ExecuteSql  routine
+  ! There may or may not have been a SET. If not there's some housekeeping to do
+  If self._HasBeenSet = false
+  End
+  !
+  self._justSet = false
+  self.Paging = false
+  self._ResultSetDirection = Opcode:NEXT
+  self._SetDirection = Opcode:NEXT
+  self._HasBeenPropSql = true
+
+  If self._ExecuteSql() = driver:ok
+  End
 
 !-----------------------------------------------------------------
 !!!Derive
@@ -4959,6 +4970,7 @@ node  &FieldGroupType,auto
 cstr  cstring(size(pName)),auto
 x     long
   code
+  If size(pName) = 0 then return Driver:Notok.
   cstr = upper(pName)
   Loop x = 1 to self.SharedProperties.FieldList.nodes
     node &= self._withFieldNode(x)
@@ -5280,7 +5292,7 @@ dbName       pString(254)  ! the name, as it is in the database. If from the lab
 ! if the field is already in the order, then the index of the already field is returned.
 ! If the field is added to the order, then it returns 0.
 DriverFileClass._FillOrderFromLabel              Procedure(String pLabel, Byte pCase)
-column     cstring(100)
+column     cstring(255)
 LabelType  byte
   code
   column = clip(pLabel)
@@ -5413,7 +5425,6 @@ lgSize          Long
 lgGroupFields   Long
 lgGroupDef      Long
   Code
-  !self.trace('zzz DriverFileClass._parseFields')
   self.SharedProperties.FieldList  &= new(ListType)
   peek(pAddr + 6 , self.SharedProperties.FieldList.Nodes)
   self.SharedProperties.FieldList.nodelist &= new String(self.SharedProperties.FieldList.Nodes*4)
@@ -5450,7 +5461,6 @@ lgGroupDef      Long
     node.SqlTimeStamp = true
   End
   self._AfterParseFields()
-  !self.trace('zzz DriverFileClass._parseFields done')
   Return
 
 !-----------------------------------------------------------------
@@ -6478,7 +6488,7 @@ lReturn1  long,auto
 ulReturn1 Ulong,over(lReturn1)
 
   Code
- !self.trace('DriverFileClass.Pipe : err=[' & errorcode() & '] opcode:' & pOpcode & ' ' & self.InterpretOpCode(pOpcode) & ' pVarList='& pVarList)
+  !self.trace('DriverFileClass.Pipe :  err=[' & errorcode() & '] opcode:' & pOpcode & ' ' & self.InterpretOpCode(pOpcode) & ' pVarList='& pVarList)
 !----- call object methods
   case pOpCode
   of Opcode:GET_PROPERTY                              ! comes first for performance reasons
@@ -6977,6 +6987,20 @@ ulReturn1 Ulong,over(lReturn1)
   Return 0
 
 !-----------------------------------------------------------------
+DriverFileClass._FindBindQueue             Procedure(Long pAddress)
+x  Long,Auto
+  Code
+  If pAddress = 0 then Return Driver:notok.
+  Loop x = 1 to Records(self.BindQueue)
+    Get(self.BindQueue,x)
+    If self.BindQueue.cst &= (pAddress) then return driver:ok.
+    If self.BindQueue.st &= (pAddress) then return driver:ok.
+    If self.BindQueue.rl &= (pAddress) then return driver:ok.
+    If self.BindQueue.lg &= (pAddress) then return driver:ok.
+  End
+  Return Driver:notok
+
+!-----------------------------------------------------------------
 ! File Methods
 !-----------------------------------------------------------------
 !-----------------------------------------------------------------
@@ -6995,6 +7019,9 @@ DriverFileClass.BINDFIELD                     Procedure(String pName,*Long pLong
     self.BindQueue.lg &= pLong
     Add(self.BindQueue)
   Else
+    self.BindQueue.rl &= null
+    self.BindQueue.st &= null
+    self.BindQueue.cst &= null
     self.BindQueue.lg &= pLong
     Put(self.BindQueue)
   End
@@ -7014,6 +7041,9 @@ DriverFileClass.BINDFIELD                     Procedure(String pName,*Real pReal
     self.BindQueue.rl &= pReal
     Add(self.BindQueue)
   Else
+    self.BindQueue.lg &= null
+    self.BindQueue.st &= null
+    self.BindQueue.cst &= null
     self.BindQueue.rl &= pReal
     Put(self.BindQueue)
   End
@@ -7033,6 +7063,9 @@ DriverFileClass.BINDFIELD                     Procedure(String pName,*String pSt
     self.BindQueue.st &= pString
     Add(self.BindQueue)
   Else
+    self.BindQueue.lg &= null
+    self.BindQueue.rl &= null
+    self.BindQueue.cst &= null
     self.BindQueue.st &= pString
     Put(self.BindQueue)
   End
@@ -7052,6 +7085,9 @@ DriverFileClass.BINDFIELD                     Procedure(String pName,*Cstring pC
     self.BindQueue.cst &= pCstring
     Add(self.BindQueue)
   Else
+    self.BindQueue.lg &= null
+    self.BindQueue.rl &= null
+    self.BindQueue.st &= null
     self.BindQueue.cst &= pCstring
     Put(self.BindQueue)
   End
@@ -7521,6 +7557,12 @@ DriverFileClass.BYTES            PROCEDURE()
   Return self._Bytes
 !
 !-----------------------------------------------------------------
+DriverFileClass.CALL             Procedure(String pStoredProcedure,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>)
+  code
+  self.SetError(NoDriverSupport)
+  Return
+
+!-----------------------------------------------------------------
 ! clear fields based on type. If memos and blobs clear those too.
 ! also calls ClearProps
 DriverFileClass.CLEARFILE        PROCEDURE(Long pWhat)
@@ -7852,6 +7894,12 @@ DriverFileClass.EXISTS           PROCEDURE(String pTablename)     ! new command
   Return false
 
 !-----------------------------------------------------------------
+DriverFileClass.EXISTS           PROCEDURE(Long pWhat,String pName)     ! new command
+  Code
+  self.SetError(NoDriverSupport)
+  Return false
+
+!-----------------------------------------------------------------
 DriverFileClass.EXISTSDB         PROCEDURE(String pTablename)     ! new command
   Code
   self.SetError(NoDriverSupport)
@@ -8097,9 +8145,11 @@ x  Long,Auto
     self.Fields &= self._withFieldNode(x)
     self.Log('[DATA]  ' & self.fields.Label & ' | ' & self.GetPROP:Text(x))
   End
-  Loop x = 1 to Records(self.blobs)
-    get(self.blobs,x)
-    self.Log('[DATA]  ' & self.blobs.Label & ' | ' & self.GetPROP:Text(-x))
+  If self._opened
+    Loop x = 1 to Records(self.blobs)
+      get(self.blobs,x)
+      self.Log('[DATA]  ' & self.blobs.Label & ' | ' & self.GetPROP:Text(-x))
+    End
   End
   PopErrors()
   Return
@@ -10328,6 +10378,10 @@ DriverFileClass.GetProp:ConnectString      PROCEDURE()!,STRING,VIRTUAL
 !-----------------------------------------------------------------
 DriverFileClass.GetProp:Create             PROCEDURE()!,BYTE,VIRTUAL  ! Get create attribute
   code
+  self.trace('DriverFileClass.GetProp:Create')
+  If self.SharedProperties &= NULL
+    self.trace('DriverFileClass.GetProp:Create SharedProperties=null')
+  End
   return choose(self.SharedProperties.create = true,'1','')
 !-----------------------------------------------------------------
 ! NOTE: This affects ALL instances of this stucture, on all threads, for the life of the program
@@ -12346,7 +12400,7 @@ DriverFileSQLClass._NextPrevious             Procedure(Long pOpcode)
 rows    long,Auto
 dbg     stringtheory
   Code
-  !self.trace('DriverFileSQLClass._NextPrevious self._justset=' & self._justset & ' self.ResultRow=' & self.ResultRow & ' self._ResultSetDirection=' & self._ResultSetDirection & ' pOpcode=' & pOpcode & ' self.fetchsize=' & self.fetchsize & ' errorcode=' &
+  !self.trace('DriverFileSQLClass._NextPrevious self._justset=' & self._justset & ' self.ResultRow=' & self.ResultRow & ' self._ResultSetDirection=' & self._ResultSetDirection & ' pOpcode=' & pOpcode & ' self.fetchsize=' & self.fetchsize & ' errorcode=' & errorcode())
   Loop 2 times
     ! first check results to see if a row is waiting there.
     If self._justset = false
@@ -13177,7 +13231,7 @@ lparm2  long
 
   of Opcode:GET_PROPERTY                                           ! browses use GET Property, POSITION and RESET a lot
     lparm1 = self._GetParmAsLong(pVarList,1)
-    self._PushString(self.GetProperty(self._PopString(),lparm1)     )
+    self._PushString(self.GetProperty(self._PopString(),lparm1))
 
   of Opcode:POSITIONview
     If self._logClarion then self.Log('[CLAR]POSITION(view,string)').
@@ -13209,7 +13263,6 @@ lparm2  long
 
   of Opcode:HOLD                   !(Hold not supported by Traditional SQL drivers)
     !!!todo View Opcode:Hold
-
 
   of Opcode:DO_PROPERTY    ! equate(88)
     lparm1 = self._GetParmAsLong(pVarList,1)
@@ -13738,13 +13791,19 @@ ptr   long
 
 !-----------------------------------------------------------------
 DriverViewClass.LogBuffer                 Procedure()
-f       &file,Auto
+LogFile &file
 x       long,Auto
+p       long,Auto
+obj      &DriverFileClass
   code
-  Loop x = 1 to self.GetProp:Files(0)
-    f &= self.GetProp:File(x)
-    If f &= null then cycle.
-    LogBuffer(f)
+  p = self.GetProp:Files(0)
+  Loop x = 1 to p
+    LogFile &= self.GetProp:File(x)
+    If LogFile &= null then cycle.
+    obj &= LogFile{prop:object}
+    If not obj &= null
+      obj.LogBuffer()
+    End
   End
   Return
 
@@ -14056,8 +14115,9 @@ F            &File
   If self._RecordsViewMap = 0
     cols = self.Result.Columns()
     Loop index = 1 to cols
+      If index > self.fields then break. ! because of prop:sql the result set may contain more fields than are in the view.
       colName = self.Result.GetColumnName(index)
-      F &= self.GetProp:File(index)
+      F &= self.GetProp:FieldsFile(index)
       obj &= F{prop:object}
       If obj &= null then cycle.
       If obj._WithFieldNamed(colname) = Driver:ok
@@ -14071,6 +14131,7 @@ F            &File
       obj.ResultToFieldNumber(self.Result,pRow,index , self.ViewMapFieldNumber[Index], pOptions)
     End
   End
+
   If self.readonly = false
     Loop index = 1 to self.Files
       obj &= (self.FileObject[index])
@@ -14592,7 +14653,7 @@ DriverViewClass.GetProp:FieldsFile        Procedure(Long pIndex)
   Code
   If self._withNodeField(pIndex) = driver:ok
     Return Address(self.FieldsFile)
-  end
+  End
   Return 0
 
 !-----------------------------------------------------------------
@@ -14735,7 +14796,7 @@ DriverViewClass.SetPROP:SQLJoinExpression           PROCEDURE(Long pIndex,String
 
 !-----------------------------------------------------------------
 DriverViewClass._FillOrderFromLabel              Procedure(String pLabel, Byte pCase)
-column  cstring(100)
+column  cstring(255)
 obj     &DriverFileClass
 x       Long
 i       Long
@@ -15556,7 +15617,7 @@ reverse             Byte
 ShadowBufferPrimed  Byte
 
   Code
-  !self.trace('DriverViewSQLClass._NextPrevious pOpcode=' & pOpcode & ' _setdirection=' &  self._setdirection & ' _justset=' & self._justset & ' _JustReset=' & self._JustReset & ' ResultRow=' & self.ResultRow & ' explain=' & self.explain & ' opt:explain =
+  !self.trace('DriverViewSQLClass._NextPrevious pOpcode=' & pOpcode & ' _setdirection=' &  self._setdirection & ' _justset=' & self._justset & ' _JustReset=' & self._JustReset & ' ResultRow=' & self.ResultRow & ' explain=' & self.explain )
 
   self.SetError(NoError)
   self._ParameterOpcode = Opcode:SET

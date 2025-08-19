@@ -40,7 +40,7 @@ Copyright      Equate('(c) 2025 by CapeSoft<0>{20}')                            
 DriverDesc     Equate('DOS2 (Binary) {17}')                                            ! Maintain length as exactly 30 characters. Space padded
 DLLName        Equate('CLA'&ShortName&'.DLL<0>')                                       ! Maintain length as exactly 12 characters
 DSIDLLNAME     Equate('CLA'&ShortName&'S.DLL')                                         ! Maintain length as exactly 12 characters
-TDescAddress   Equate(00a0848ch)       !00854BB4h
+TDescAddress   Equate(00a073ech)       !00854BB4h
 
   MAP
     Dos2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)   

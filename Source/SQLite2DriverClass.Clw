@@ -1715,8 +1715,7 @@ dbNull        Byte
       Of SQLITE_NULL
         dbNull = true
       End
-
-      If self._WithFieldNamed(colname) = driver:ok        ! see if a FILE field matches this name. This is case insensitive.
+      If not colname &= null and self._WithFieldNamed(colname) = driver:ok        ! see if a FILE field matches this name. This is case insensitive.
         If dbNull
           self._SetFieldNull()
         ElsIf not self.Fields.Interface &= NULL
@@ -4390,7 +4389,7 @@ orc       StringTheory
 alias     Cstring(DRIVER:MAXALIASLENGTH)
 nocase    Cstring(20)
 first     Byte
-thisparm  cstring(7)
+thisparm  Cstring(7)
   code
   obj1 &= (self.FileObject[1])
   if obj1 &= null then return.
@@ -4550,7 +4549,7 @@ x                Long,Auto
 
 !-----------------------------------------------------------------
 DriverViewSQLite2Class.Set                       Procedure(Long pIndex)
-result   long,auto
+result   Long,auto
   Code
   If self.CheckConnect() = driver:notok then Return.
   Parent.Set(pIndex)
@@ -4564,7 +4563,7 @@ result   long,auto
 
 !-----------------------------------------------------------------
 DriverViewSQLite2Class._Set                       Procedure(Long pOpcode)
-result  long
+result    Long,Auto
   Code
   If self.CheckConnect() = driver:notok then Return.
   Parent._Set(pOpcode)
@@ -4583,8 +4582,8 @@ result  long
 ! results are set to Results
 ! returns driver:notok if the SQL part is faulty
 DriverViewSQLite2Class._executeSql procedure()
-stmt    Long
-result  Long
+stmt    Long,Auto
+result  Long,Auto
   code
   If self.CheckConnect() = driver:notok then Return driver:notok.
   stmt = self._Prepare()

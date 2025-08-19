@@ -268,7 +268,7 @@ Source                       Byte
                          End
 
 BindQueueType       Queue,Type 
-Name                  Cstring(50)
+Name                  Cstring(52)
 lg                    &Long
 rl                    &Real
 st                    &String
@@ -938,6 +938,7 @@ BindField                  Procedure(String pName,*Long pLong),Virtual
 BindField                  Procedure(String pName,*Real pReal),Virtual
 BindField                  Procedure(String pName,*String pString),Virtual                  
 BindField                  Procedure(String pName,*Cstring pCstring),Virtual                          
+_FindBindQueue             Procedure(Long pAddress),Long,Virtual
 
 BLOBSIZE                   Procedure(Long pIndex),BIGINT,VIRTUAL
 BLOBTAKE                   Procedure(Long pIndex,BIGINT pStartPos, BIGINT pEndPos),VIRTUAL
@@ -964,6 +965,7 @@ BUILD                      Procedure(KEY pKey),VIRTUAL
 BUILD                      Procedure(KEY pKey, <STRING pComponents>,STRING pFilter),VIRTUAL
 BUILD                      Procedure(KEY pKey, STRING pComponents),VIRTUAL
 BYTES                      Procedure(),BIGINT,VIRTUAL  
+CALL                       Procedure(String pStoredProcedure,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),VIRTUAL
 CLEARPROPS                 Procedure(),DERIVED  
 CLOSE                      Procedure(),DERIVED
 CONNECT                    Procedure(Long pOptions=0),VIRTUAL                
@@ -988,6 +990,7 @@ DUPLICATE                  Procedure(KEY pKey),VIRTUAL,LONG
 EMPTY                      Procedure(),VIRTUAL  
 EOF                        Procedure(),LONG,VIRTUAL 
 EXISTS                     Procedure(String pTablename),LONG,PROC,VIRTUAL
+EXISTS                     Procedure(Long pWhat,String pName),LONG,PROC,VIRTUAL
 EXISTSDB                   Procedure(String pDatabaseName),LONG,PROC,VIRTUAL
 EXPORT                     Procedure(String pDosFileName, Long pOptions=0,Long pFormat=0),LONG,PROC,VIRTUAL
 IMPORT                     Procedure(String pDosFileName, Long pOptions=0,Long pFormat=0),LONG,PROC,VIRTUAL
@@ -1375,141 +1378,141 @@ children            &ViewTreeType
 
 !==================================================================================================
 ! Class for VIEW support in Driver
-DriverViewClass         Class(DriverBaseClass), Type, MODULE('DriverClass.Clw'),LINK('DriverClass.Clw',DRVLM), DLL(DRVDM)
-View                      &View
-ClaVCB                    &Cla_VCBBLK      ! same as View, but different type
-_DeclaredOrder            &Cstring
-_DeclaredFilter           &Cstring
-Position                  String(4096)     ! value of all the primary key fields of all the tables in the view 
-_PosLen                   Long             ! Length of Position string
-_SetPropsCache            Byte
-Tree                      &ViewTreeType
-Node                      &ViewTreeType    
-ViewMapObj                Long,dim(DRIVER:MAXPROJECTEDFIELDS) ! &DriverFileClass ! file object
-ViewMapFieldNumber        Long,dim(DRIVER:MAXPROJECTEDFIELDS) ! + for fields, -ve for blobs
-ViewMapFieldNode          Long,dim(DRIVER:MAXPROJECTEDFIELDS) ! &FieldGroupType  ! &= file._WithFieldNode(pIndex) ! file.Fields &= viewmap[n].FieldNode
-ViewMapIsPrimary          Byte,dim(DRIVER:MAXPROJECTEDFIELDS) ! set to true if the field is a Primary Key Field.
+DriverViewClass               Class(DriverBaseClass), Type, MODULE('DriverClass.Clw'),LINK('DriverClass.Clw',DRVLM), DLL(DRVDM)
+View                            &View
+ClaVCB                          &Cla_VCBBLK      ! same as View, but different type
+_DeclaredOrder                  &Cstring
+_DeclaredFilter                 &Cstring
+Position                        String(4096)     ! value of all the primary key fields of all the tables in the view 
+_PosLen                         Long             ! Length of Position string
+_SetPropsCache                  Byte
+Tree                            &ViewTreeType
+Node                            &ViewTreeType    
+ViewMapObj                      Long,dim(DRIVER:MAXPROJECTEDFIELDS) ! &DriverFileClass ! file object
+ViewMapFieldNumber              Long,dim(DRIVER:MAXPROJECTEDFIELDS) ! + for fields, -ve for blobs
+ViewMapFieldNode                Long,dim(DRIVER:MAXPROJECTEDFIELDS) ! &FieldGroupType  ! &= file._WithFieldNode(pIndex) ! file.Fields &= viewmap[n].FieldNode
+ViewMapIsPrimary                Byte,dim(DRIVER:MAXPROJECTEDFIELDS) ! set to true if the field is a Primary Key Field.
                           
-_RecordsViewMap           Long
-ViewDriver                Cstring(50)
-Files                     Long
-FilePtr                   Long,dim(DRIVER:MAXFILESINVIEW)   
-FileObject                Long,dim(DRIVER:MAXFILESINVIEW)    
-Fields                    Long
-FieldsFile                &File
-_FieldsOffset             Long
-_fieldcounter             Long
+_RecordsViewMap                 Long
+ViewDriver                      Cstring(50)
+Files                           Long
+FilePtr                         Long,dim(DRIVER:MAXFILESINVIEW)   
+FileObject                      Long,dim(DRIVER:MAXFILESINVIEW)    
+Fields                          Long
+FieldsFile                      &File
+_FieldsOffset                   Long
+_fieldcounter                   Long
 
-OrderAllTables            Byte
-OrderInSelect             Byte ! Force any fields in OrderBy to also be in SELECT. Necessary for some uses of DISTINCT (SQLite, MySQL, Firebird)
+OrderAllTables                  Byte
+OrderInSelect                   Byte ! Force any fields in OrderBy to also be in SELECT. Necessary for some uses of DISTINCT (SQLite, MySQL, Firebird)
 
-_inited                   Byte               
-_SetOffset                Long
+_inited                         Byte               
+_SetOffset                      Long
 
-Construct                 Procedure()
-Destruct                  Procedure(),Virtual
+Construct                       Procedure()
+Destruct                        Procedure(),Virtual
 
-_BuildTree                Procedure(),Virtual
-_parseDescriptor          Procedure(*Long pAddr, *Long pFileIndex, ViewTreeType pNode, FILE pParentFile),Virtual
-_FreeTree                 Procedure(ViewTreeType pNode),Virtual
-_withNodeFileIndex        Procedure(Long pIndex),LONG,VIRTUAL
-_withNodeFileIndexWalker  Procedure(ViewTreeType pNode, Long pIndex,Long pCounter),LONG,VIRTUAL
-_withNodeFieldLabel       Procedure(String pLabel),Long,Virtual
-_withNodeFieldLabelWalker Procedure(ViewTreeType pNode, *CString pLabel),Long,Virtual
-_withNodeField            Procedure(Long pIndex),LONG,VIRTUAL
-_withNodeFieldWalker      Procedure(ViewTreeType pNode, Long pIndex,Long pCounter),LONG,VIRTUAL
-_withNodeFile             Procedure(File pFile),long,VIRTUAL
-_withNodeFileWalker       Procedure(ViewTreeType pNode,File pFile),long,VIRTUAL
-_withNodeTableName        Procedure(String pTableName),long,VIRTUAL
-_withNodeTableNameWalker  Procedure(ViewTreeType pNode, String pTableName),long,VIRTUAL
-_countNodes               Procedure(ViewTreeType pNode),Long,Virtual
-_CountFields              Procedure(),Virtual
-_FillOrderFromLabel       Procedure(String pLabel, Byte pCase),Long,Derived
-_SetViewFieldColumn       Procedure(String pLabel, String pValue),Virtual
-_SetViewFieldWalker       Procedure(ViewTreeType pNode,String pLabel, String pValue,Long pFileNumber),Long,Virtual
-_ForceAutoProjectNow      Procedure(ViewTreeType pNode),Virtual
-_IsProjected              Procedure(ViewTreeType pNode,Long pIndex),Long,Virtual  ! returns i in pNode.Field[i]
-_ProjectField             Procedure(ViewTreeType pNode,Long pIndex,String pExpression),Long,Proc,Virtual  ! returns i in pNode.Field[i]
-_Morph                    Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp),Derived
+_BuildTree                      Procedure(),Virtual
+_parseDescriptor                Procedure(*Long pAddr, *Long pFileIndex, ViewTreeType pNode, FILE pParentFile),Virtual
+_FreeTree                       Procedure(ViewTreeType pNode),Virtual
+_withNodeFileIndex              Procedure(Long pIndex),LONG,VIRTUAL
+_withNodeFileIndexWalker        Procedure(ViewTreeType pNode, Long pIndex,Long pCounter),LONG,VIRTUAL
+_withNodeFieldLabel             Procedure(String pLabel),Long,Virtual
+_withNodeFieldLabelWalker       Procedure(ViewTreeType pNode, *CString pLabel),Long,Virtual
+_withNodeField                  Procedure(Long pIndex),LONG,VIRTUAL
+_withNodeFieldWalker            Procedure(ViewTreeType pNode, Long pIndex,Long pCounter),LONG,VIRTUAL
+_withNodeFile                   Procedure(File pFile),long,VIRTUAL
+_withNodeFileWalker             Procedure(ViewTreeType pNode,File pFile),long,VIRTUAL
+_withNodeTableName              Procedure(String pTableName),long,VIRTUAL
+_withNodeTableNameWalker        Procedure(ViewTreeType pNode, String pTableName),long,VIRTUAL
+_countNodes                     Procedure(ViewTreeType pNode),Long,Virtual
+_CountFields                    Procedure(),Virtual
+_FillOrderFromLabel             Procedure(String pLabel, Byte pCase),Long,Derived
+_SetViewFieldColumn             Procedure(String pLabel, String pValue),Virtual
+_SetViewFieldWalker             Procedure(ViewTreeType pNode,String pLabel, String pValue,Long pFileNumber),Long,Virtual
+_ForceAutoProjectNow            Procedure(ViewTreeType pNode),Virtual
+_IsProjected                    Procedure(ViewTreeType pNode,Long pIndex),Long,Virtual  ! returns i in pNode.Field[i]
+_ProjectField                   Procedure(ViewTreeType pNode,Long pIndex,String pExpression),Long,Proc,Virtual  ! returns i in pNode.Field[i]
+_Morph                          Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp),Derived
 
 
-Walk                      Procedure(),VIRTUAL
-_Walk                     Procedure(ViewTreeType pNode,Long pLevel),VIRTUAL
-Pipe                      Procedure(Long pOpCode, LONG pClaVCB,long pVarList),LONG,Virtual
-Init                      Procedure(View pView, Long pForce=false),Virtual
-BindField                 Procedure(String pName,*Long pLong),Virtual
-BindField                 Procedure(String pName,*Real pReal),Virtual
-BindField                 Procedure(String pName,*String pString),Virtual
-BindField                 Procedure(String pName,*CString pCstring),Virtual
-_ClearParameterQueue      Procedure(Long pOpcode),Derived
-PrimeSubset               Procedure(),DERIVED
-_FillBuffersFromPosition  Procedure(STRING pPosition, Long pOffset, Long pWhichBuffer),Long,Proc,VIRTUAL
+Walk                            Procedure(),VIRTUAL
+_Walk                           Procedure(ViewTreeType pNode,Long pLevel),VIRTUAL
+Pipe                            Procedure(Long pOpCode, LONG pClaVCB,long pVarList),LONG,Virtual
+Init                            Procedure(View pView, Long pForce=false),Virtual
+BindField                       Procedure(String pName,*Long pLong),Virtual
+BindField                       Procedure(String pName,*Real pReal),Virtual
+BindField                       Procedure(String pName,*String pString),Virtual
+BindField                       Procedure(String pName,*CString pCstring),Virtual
+_ClearParameterQueue            Procedure(Long pOpcode),Derived
+PrimeSubset                     Procedure(),DERIVED
+_FillBuffersFromPosition        Procedure(STRING pPosition, Long pOffset, Long pWhichBuffer),Long,Proc,VIRTUAL
 
-BUFFER                    Procedure(UNSIGNED pPageSize, UNSIGNED pBehind=0, UNSIGNED pAhead=0, UNSIGNED pTimeout=0),Virtual 
-CLEARPROPS                Procedure(),Derived  
-CLOSE                     Procedure(),Derived
-CreateView                Procedure(FILE pMainFile),Long,Virtual
-DELETE                    Procedure(),Virtual
-GetProperty               Procedure(String pProperty,Long pIndex=0),String,Virtual                         
-JoinTable                 Procedure(FILE pParentFile,FILE pJoinFile, Byte pJoinType, String pExpression),Virtual
-JoinTable                 Procedure(FILE pParentFile,KEY pKey, Byte pJoinType, <*? pField1>),Virtual
-LOGBUFFER                 Procedure(),VIRTUAL
-LOGGINGON                 Procedure(<String pFileName>,Long pOptions=0),VIRTUAL
-LOGGINGOFF                Procedure(),VIRTUAL
-NEXT                      Procedure(),Virtual
-OPEN                      Procedure(),Virtual
-POSITION                  Procedure(),String,Virtual  
-PREVIOUS                  Procedure(),Virtual
-ProjectField              Procedure(String pExpression,String pAs),Virtual
-ProjectField              Procedure(File pFile,Long pIndex),Virtual
-ProjectField              Procedure(*? pField),Virtual
-PUT                       Procedure(),Virtual
-RECORDS                   Procedure(),BIGINT,Virtual
-RECORDS                   Procedure(Long pIndex),BIGINT,Virtual
-REGET                     Procedure(String pPosition),Virtual
-RESET                     Procedure(String pPosition),Virtual
-RESET                     Procedure(),Virtual
-ResultGet                 Procedure(BIGINT pRow),Derived
-ResultToRecords           Procedure(Long pRow,Long pOptions),Virtual
-ResultToBind              Procedure(Long pRow),Virtual
-ResultToExplain           Procedure(iResultSet pResult),Derived
-DoPROP:SQL                Procedure(),Derived
-BuildMap                  Procedure(),Virtual
-_BuildMapWalker           Procedure(ViewTreeType pNode,*Long pIndex),Virtual
-SEARCH                    Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),VIRTUAL
-_SetFromFile              Procedure(),Long,Virtual
-SET                       Procedure(Long pIndex),Virtual
-STATUS                    Procedure(),LONG,DERIVED
+BUFFER                          Procedure(UNSIGNED pPageSize, UNSIGNED pBehind=0, UNSIGNED pAhead=0, UNSIGNED pTimeout=0),Virtual 
+CLEARPROPS                      Procedure(),Derived  
+CLOSE                           Procedure(),Derived
+CreateView                      Procedure(FILE pMainFile),Long,Virtual
+DELETE                          Procedure(),Virtual
+GetProperty                     Procedure(String pProperty,Long pIndex=0),String,Virtual                         
+JoinTable                       Procedure(FILE pParentFile,FILE pJoinFile, Byte pJoinType, String pExpression),Virtual
+JoinTable                       Procedure(FILE pParentFile,KEY pKey, Byte pJoinType, <*? pField1>),Virtual
+LOGBUFFER                       Procedure(),VIRTUAL
+LOGGINGON                       Procedure(<String pFileName>,Long pOptions=0),VIRTUAL
+LOGGINGOFF                      Procedure(),VIRTUAL
+NEXT                            Procedure(),Virtual
+OPEN                            Procedure(),Virtual
+POSITION                        Procedure(),String,Virtual  
+PREVIOUS                        Procedure(),Virtual
+ProjectField                    Procedure(String pExpression,String pAs),Virtual
+ProjectField                    Procedure(File pFile,Long pIndex),Virtual
+ProjectField                    Procedure(*? pField),Virtual
+PUT                             Procedure(),Virtual
+RECORDS                         Procedure(),BIGINT,Virtual
+RECORDS                         Procedure(Long pIndex),BIGINT,Virtual
+REGET                           Procedure(String pPosition),Virtual
+RESET                           Procedure(String pPosition),Virtual
+RESET                           Procedure(),Virtual
+ResultGet                       Procedure(BIGINT pRow),Derived
+ResultToRecords                 Procedure(Long pRow,Long pOptions),Virtual
+ResultToBind                    Procedure(Long pRow),Virtual
+ResultToExplain                 Procedure(iResultSet pResult),Derived
+DoPROP:SQL                      Procedure(),Derived
+BuildMap                        Procedure(),Virtual
+_BuildMapWalker                 Procedure(ViewTreeType pNode,*Long pIndex),Virtual
+SEARCH                          Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),VIRTUAL
+_SetFromFile                    Procedure(),Long,Virtual
+SET                             Procedure(Long pIndex),Virtual
+STATUS                          Procedure(),LONG,DERIVED
 
-SetProperty               Procedure(String pProperty,Long pIndex,STRING pValue),Virtual                         
-GetProp:Alias             Procedure(Long pFileNumber),String,Virtual  
-GetProp:AutoProject       Procedure(Long pIndex),String,Virtual
-SetProp:AutoProject       Procedure(Long pIndex, Byte pValue),Virtual
-_ClearPropsWalker         Procedure(ViewTreeType pNode),Virtual
-GetProp:Field             Procedure(Long pIndex),String,Virtual
-GetProp:Fields            Procedure(Long pIndex),String,Derived
-GetProp:File              Procedure(Long pIndex),String,Virtual
-GetProp:Files             Procedure(Long pIndex),String,Virtual
-GetProp:FieldsFile        Procedure(Long pIndex),String,Virtual
-GetProp:Hint              Procedure(Long pIndex),String,Virtual
-SetProp:Hint              Procedure(Long pIndex, String pValue),Virtual
-GetProp:Inner             Procedure(Long pIndex),String,Virtual
-SetProp:Inner             Procedure(Long pIndex, Byte pValue),Virtual
-GetProp:Name              Procedure(Long pIndex),String,Virtual
-SetProp:Name              Procedure(Long pIndex,String pName),Virtual
-GetProp:NoKeyProject      Procedure(Long pIndex),String,Virtual
-SetProp:NoKeyProject      Procedure(Long pIndex, Byte pValue),Virtual
-GetProp:Object            Procedure(),String,Virtual
-SetProp:Object            Procedure(Long pAddress),Virtual
-GetPROP:OrderAllTables    Procedure(),STRING,VIRTUAL             ! use linking fields and secondary files' key component fields, as well as the primary file's key component fields, in the ORDER BY clause it sends to the server.
-SetPROP:OrderAllTables    Procedure(Byte pValue),VIRTUAL 
-GetPROP:OrderInSelect     Procedure(),STRING,VIRTUAL             ! Some SQL backends require that any fields used in the ORDER BY clause also appear in the SELECT statement. 
-SetPROP:OrderInSelect     Procedure(Byte pValue),VIRTUAL  
-GetProp:Project           Procedure(Long pIndex),String,Virtual
-GetPROP:SQLJoinExpression Procedure(Long pIndex),STRING,VIRTUAL  ! You can use PROP:SQLJoinExpression to structure your VIEWs using native SQL code rather than Clarion code.
-SetPROP:SQLJoinExpression Procedure(Long pIndex,String pValue),VIRTUAL  ! You can use PROP:SQLJoinExpression to structure your VIEWs using native SQL code rather than Clarion code.
+SetProperty                     Procedure(String pProperty,Long pIndex,STRING pValue),Virtual                         
+GetProp:Alias                   Procedure(Long pFileNumber),String,Virtual  
+GetProp:AutoProject             Procedure(Long pIndex),String,Virtual
+SetProp:AutoProject             Procedure(Long pIndex, Byte pValue),Virtual
+_ClearPropsWalker               Procedure(ViewTreeType pNode),Virtual
+GetProp:Field                   Procedure(Long pIndex),String,Virtual
+GetProp:Fields                  Procedure(Long pIndex),String,Derived
+GetProp:File                    Procedure(Long pIndex),String,Virtual
+GetProp:Files                   Procedure(Long pIndex),String,Virtual
+GetProp:FieldsFile              Procedure(Long pIndex),String,Virtual
+GetProp:Hint                    Procedure(Long pIndex),String,Virtual
+SetProp:Hint                    Procedure(Long pIndex, String pValue),Virtual
+GetProp:Inner                   Procedure(Long pIndex),String,Virtual
+SetProp:Inner                   Procedure(Long pIndex, Byte pValue),Virtual
+GetProp:Name                    Procedure(Long pIndex),String,Virtual
+SetProp:Name                    Procedure(Long pIndex,String pName),Virtual
+GetProp:NoKeyProject            Procedure(Long pIndex),String,Virtual
+SetProp:NoKeyProject            Procedure(Long pIndex, Byte pValue),Virtual
+GetProp:Object                  Procedure(),String,Virtual
+SetProp:Object                  Procedure(Long pAddress),Virtual
+GetPROP:OrderAllTables          Procedure(),STRING,VIRTUAL             ! use linking fields and secondary files' key component fields, as well as the primary file's key component fields, in the ORDER BY clause it sends to the server.
+SetPROP:OrderAllTables          Procedure(Byte pValue),VIRTUAL 
+GetPROP:OrderInSelect           Procedure(),STRING,VIRTUAL             ! Some SQL backends require that any fields used in the ORDER BY clause also appear in the SELECT statement. 
+SetPROP:OrderInSelect           Procedure(Byte pValue),VIRTUAL  
+GetProp:Project                 Procedure(Long pIndex),String,Virtual
+GetPROP:SQLJoinExpression       Procedure(Long pIndex),STRING,VIRTUAL  ! You can use PROP:SQLJoinExpression to structure your VIEWs using native SQL code rather than Clarion code.
+SetPROP:SQLJoinExpression       Procedure(Long pIndex,String pValue),VIRTUAL  ! You can use PROP:SQLJoinExpression to structure your VIEWs using native SQL code rather than Clarion code.
 
-                        End
+                              End
 
 !==================================================================================================                       
 DriverViewSQLClass            Class(DriverViewClass), Type, MODULE('DriverClass.Clw'),LINK('DriverClass.Clw',DRVLM), DLL(DRVDM)

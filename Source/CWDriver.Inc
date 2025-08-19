@@ -42,7 +42,23 @@ Driver:DefaultValues    Equate(2)
 Driver:Constraints      Equate(4)
 Driver:ForeignKeys      Equate(8)
 Driver:Indexes          Equate(16)
-Driver:Triggers         Equate(32)
+Driver:Triggers         Equate(32)  
+
+driver:Table                Equate(1)    ! U
+driver:StoredProcedure      Equate(2)    ! P
+driver:SP                   Equate(2)
+driver:Trigger              Equate(3)    ! TR
+driver:Index                Equate(4)
+driver:PrimaryKey           Equate(5)    ! PK
+driver:UniqueConstraint     Equate(6)    ! UQ
+driver:ForeignKeyConstraint Equate(7)    ! F
+driver:DefaultConstraint    Equate(8)    ! D
+driver:ScalarFunction       Equate(9)    ! FN
+driver:TableValuedFunction  Equate(10)   ! TF
+driver:View                 Equate(11)   ! V
+
+Driver:In                   Equate(1)
+Driver:Out                  Equate(2)
 
 !EndRegion: Equates
 
@@ -58,7 +74,9 @@ Driver:Triggers         Equate(32)
       BindField(VIEW pView,String pName, *Real pReal),name('BINDrealV')
       BindField(VIEW pView,String pName, *String pString),name('BINDstringV')
       BindField(VIEW pView,String pName, *Cstring pCstring),name('BINDcstringV')
-      Bytes64(FILE pFile),BIGINT,name('BYTES64') 
+      Bytes64(FILE pFile),BIGINT,name('BYTES64')       
+      CallOut(FILE pFile,String pStoredProcedure,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),name('CALLOUT')
+      Call(FILE pFile,String pStoredProcedure,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),name('CALLspVal')
       ClearProps(FILE pFile),name('CLEARPROPSfile')
       ClearProps(VIEW pView),name('CLEARPROPSview')
       Commit(FILE pFile),name('COMMITconn')
@@ -76,8 +94,10 @@ Driver:Triggers         Equate(32)
       Disconnect(FILE pFile),name('DISCONNECT')
       Except(FILE pFile,<String pFilter>),name('EXCEPT')  
       Exists(FILE pFile),LONG,name('EXISTS')  
-      Exists(FILE pFile,STRING pTableName),LONG,name('EXISTSname')  
+      Exists(FILE pFile,STRING pTableName),LONG,name('EXISTSname')        
       ExistsDB(FILE pFile,STRING pDatabaseName),LONG,name('EXISTSdbname')  
+      Exists(FILE pFile,Long pWhat, STRING pName),LONG,name('EXISTSwhat')  
+      
       Export(FILE pFile,STRING pFileName, Long pOptions=0,Long pFormat=driver:csv),name('EXPORTfile')  
       !Export(VIEW pFile,STRING pFileName,Long pFormat,Long pAppend),name('EXPORTview')  
       GetRow(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>),Name('GETkeyvalue')
@@ -257,5 +277,6 @@ FieldMismatchError      Equate(133)   !  "The returned SQL data type cannot be m
 MissingFilterErr        Equate(134)   !  "Missing Filter"
 BadExpressionErr        Equate(135)   !  "Bad Expression"
 MissingPrimaryKeyErr    Equate(136)   !  "Table Does Not Have A Primary Key"
+ObjectExistsErr         Equate(137)   !  "There is already an object named '...' in the database."
 !EndRegion: Errors
 !------------------------------------------------------------------------------------------------

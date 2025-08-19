@@ -143,8 +143,35 @@ obj      &DriverFileClass
   End                      
   If obj._logClarion then obj.Log('[CLAR]BYTES64()').
   Return obj.BYTES()
-               
+              
 !------------------------------------------------------------------------------------------------
+! This form of the procedure takes all parameters by reference. This is necessary so that the CALL method can get the addresses, and compare them to the BindQueue
+CALLOUT                  Procedure(FILE pFile,String pStoredProcedure,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>)
+obj      &DriverFileClass
+  Code 
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CALLOUT('& clip(pStoredProcedure)&')').
+  obj.Call(pStoredProcedure,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20)
+  Return
+
+!------------------------------------------------------------------------------------------------
+CALL                    Procedure (FILE pFile,String pStoredProcedure,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>)
+obj      &DriverFileClass
+  Code 
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CALL('& clip(pStoredProcedure)&',,)').
+  obj.Call(pStoredProcedure,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20)
+  Return
+  
+!-----------------------------------------------------------------------------------------------
 CLEARPROPS              Procedure(FILE pFile)
 obj      &DriverFileClass
   Code 
@@ -414,6 +441,29 @@ obj      &DriverFileClass
   If obj._logClarion then obj.Log('[CLAR]EXISTS()').
   Return obj.Exists('')
 
+!------------------------------------------------------------------------------------------------
+EXISTS            Procedure(FILE pFile,Long pWhat, STRING pName)
+obj      &DriverFileClass
+  code
+  obj &= pFile{prop:object}
+  If obj &= null 
+    ClaSetError(NoDriverSupport)
+    Return false
+  End
+  If obj._logClarion 
+    case pWhat
+    of driver:table
+      obj.Log('[CLAR]EXISTS(table,' &  clip(pName) & ')')
+    of driver:storedprocedure
+      obj.Log('[CLAR]EXISTS(stored procedure,' & clip(pName) & ')')
+    of driver:trigger
+      obj.Log('[CLAR]EXISTS(trigger,' & clip(pName) & ')')
+    of driver:index
+      obj.Log('[CLAR]EXISTS(index,' & clip(pName) & ')')
+    End
+  End  
+  Return obj.Exists(pWhat,pName)
+  
 !------------------------------------------------------------------------------------------------
 EXISTSDB          Procedure(FILE pFile, String pDatabaseName)  
 obj      &DriverFileClass

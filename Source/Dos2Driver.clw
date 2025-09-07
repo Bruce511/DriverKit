@@ -5,29 +5,29 @@
 !------------------------------------------------------------------------------------------------
 !
 !------------------------------------------------------------------------------------------------
-! This module is the main module for a driver along with the accompaning ClaDnd.Exp file 
+! This module is the main module for a driver along with the accompaning ClaDnd.Exp file
 ! Note the Conditional Compile Symbols in the Project are set;   DRVLM=>1;DRVDM=>0;DRVDNDLM=>1;DRVDNDDM=>0
 ! This module is sometimes known as the "thunking" module as it's basically a thunk between the compiler call and the class.
 !------------------------------------------------------------------------------------------------
 ! To build a new driver based on this file;
-! 1. Clone this file to your own CLW name   
+! 1. Clone this file to your own CLW name
 ! 2. Adjust the set of equates in block below
-! 3. Your Driver Class Name should be used in place of Dos2Driver 
-! 4. ShortName should be set to your DriverPrefix. Suggest keep it as 3 or 4 letters. 
+! 3. Your Driver Class Name should be used in place of Dos2Driver
+! 4. ShortName should be set to your DriverPrefix. Suggest keep it as 3 or 4 letters.
 ! 5. The DRIVER_HAS equates can be set to YES or NO. HOWEVER the chr lines in the TypeDescription must be piped in or out to match
 ! 6. The Dos2DriverGroup fields should be set as desired by your driver. Care should be taken with this group not to change any sizes.
 ! 7. ClaDos2.Exp should cloned to match your DLL Name, and the functions in there named to match your LongName
 ! 8. The project should have appropriate "Condiional Compilation Symbols". In this case DRVLM=>1;DRVDM=>0;DRVDOS2LM=>1;DRVDOS2DM=>0
 !------------------------------------------------------------------------------------------------
-! [1] Unsafe to change: If you have used the driver in a dict, then changing this value will make that dict very difficult to open or edit. 
+! [1] Unsafe to change: If you have used the driver in a dict, then changing this value will make that dict very difficult to open or edit.
 !------------------------------------------------------------------------------------------------
 
   PROGRAM
 
   Omit('***',_C100_)
   PRAGMA('link(winex.lib)')
-  !***  
-  
+  !***
+
 ! When you change LongName, to be unique for your driver, then adjust it in the EXP file as well.
 
 ! Shortname is used in code, and in dict when table(driver)
@@ -40,43 +40,43 @@ Copyright      Equate('(c) 2025 by CapeSoft<0>{20}')                            
 DriverDesc     Equate('DOS2 (Binary) {17}')                                            ! Maintain length as exactly 30 characters. Space padded
 DLLName        Equate('CLA'&ShortName&'.DLL<0>')                                       ! Maintain length as exactly 12 characters
 DSIDLLNAME     Equate('CLA'&ShortName&'S.DLL')                                         ! Maintain length as exactly 12 characters
-TDescAddress   Equate(00a073ech)       !00854BB4h
+TDescAddress   Equate(00a083fch)       !00854BB4h
 
   MAP
-    Dos2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)   
+    Dos2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)
     Dos2DriverPipeView(Long pOpCode, Long pClaVCB, long pVarList),long
     Dos2DriverSetObject(Long pOpCode, Long pClaFCB, long pVarList),Long
     Dos2DriverSetViewObject(Long pOpCode, Long pClaVCB, long pVarList),Long
     !Dos2DriverCreateIFace(),*IDrvMetaWindow,NAME('DOS2_META_CREATE')
-    
+
     module('windows')
       ods(*cstring msg), raw, pascal, name('OutputDebugStringA')
-    end    
-  END             
-  
+    end
+  END
+
   include('Driver.inc'),once
   include('Dos2DriverClass.Inc'),once
-  
-dbg  cstring(255)        
+
+dbg  cstring(255)
 YES                                 Equate(1)
 NO                                  Equate(0)
 BOTH                                Equate(3)
 
 ! these are convenience equates which are used as "defaults" for the features.
 ! setting them here can be a quick way of seeing ones below. However the driver
-! can still set any feature to YES or NO if desired. 
-! If you change values here then multiple items must be changed in the Type Descriptor section below.                  
+! can still set any feature to YES or NO if desired.
+! If you change values here then multiple items must be changed in the Type Descriptor section below.
 DRIVER_HAS_KEYS                     Equate(NO)
-DRIVER_HAS_BLOBS                    Equate(NO)   ! memos and blobs are treated as equivalent. 
+DRIVER_HAS_BLOBS                    Equate(NO)   ! memos and blobs are treated as equivalent.
 DRIVER_HAS_VIEWS                    Equate(NO)
 DRIVER_HAS_TRANSACTIONS             Equate(NO)
-DRIVER_HAS_SQL                      Equate(NO)   
+DRIVER_HAS_SQL                      Equate(NO)
 DRIVER_HAS_NULLS                    Equate(NO)
 DRIVER_HAS_STATE                    Equate(YES)
 
 ! These are capabilities of the driver. Some use the defaults declared above, but they are
-! just defaults. Any driver is free to support any subset of features they like.                         
-! If you change values here they must be changed in the Type Descriptor section below.                  
+! just defaults. Any driver is free to support any subset of features they like.
+! If you change values here they must be changed in the Type Descriptor section below.
 DRIVER_HAS_ADD                      Equate(YES)
 DRIVER_HAS_ADDfilelen               Equate(YES)
 DRIVER_HAS_APPEND                   Equate(YES)
@@ -93,14 +93,14 @@ DRIVER_HAS_BUILDdyn                 Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_BUILDdynfilter           Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_BUILDfile                Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_BUILDkey                 Equate(DRIVER_HAS_KEYS)
-DRIVER_HAS_BULK_READ_ON             Equate(YES) 
-DRIVER_HAS_BULK_READ_OFF            Equate(YES)  
+DRIVER_HAS_BULK_READ_ON             Equate(YES)
+DRIVER_HAS_BULK_READ_OFF            Equate(YES)
 DRIVER_HAS_BYTES                    Equate(YES)
-DRIVER_HAS_CALLBACK                 Equate(YES)    
+DRIVER_HAS_CALLBACK                 Equate(YES)
 DRIVER_HAS_CLEARfile                Equate(YES)
 DRIVER_HAS_CLOSE                    Equate(YES)
 DRIVER_HAS_COMMITdrv                Equate(DRIVER_HAS_TRANSACTIONS)
-DRIVER_HAS_CONNECT                  Equate(DRIVER_HAS_SQL) 
+DRIVER_HAS_CONNECT                  Equate(DRIVER_HAS_SQL)
 DRIVER_HAS_COPY                     Equate(YES)
 DRIVER_HAS_CREATE                   Equate(YES)
 DRIVER_HAS_DELETE                   Equate(NO)
@@ -111,7 +111,7 @@ DRIVER_HAS_DUPLICATEkey             Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_EMPTY                    Equate(YES)
 DRIVER_HAS_ENDTRAN                  Equate(DRIVER_HAS_TRANSACTIONS)
 DRIVER_HAS_EOF                      Equate(YES)
-DRIVER_HAS_EXCEEDS_RECS             Equate(NO) 
+DRIVER_HAS_EXCEEDS_RECS             Equate(NO)
 DRIVER_HAS_FIXFORMAT                Equate(NO)
 DRIVER_HAS_FLUSH                    Equate(YES)
 DRIVER_HAS_FREESTATE                Equate(DRIVER_HAS_STATE)
@@ -150,7 +150,7 @@ DRIVER_HAS_RECORDSfile              Equate(YES)
 DRIVER_HAS_RECORDSkey               Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_REGETfile                Equate(YES)
 DRIVER_HAS_REGETkey                 Equate(DRIVER_HAS_KEYS)
-DRIVER_HAS_REGISTER                 Equate(YES)    
+DRIVER_HAS_REGISTER                 Equate(YES)
 DRIVER_HAS_RELEASE                  Equate(YES)
 DRIVER_HAS_REMOVE                   Equate(YES)
 DRIVER_HAS_RENAME                   Equate(YES)
@@ -167,7 +167,7 @@ DRIVER_HAS_SETkey                   Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_SETkeykeyptr             Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_SETkeykey                Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_SETkeyptr                Equate(DRIVER_HAS_KEYS)
-DRIVER_HAS_SETviewfields						Equate(DRIVER_HAS_VIEWS)
+DRIVER_HAS_SETviewfields                                                Equate(DRIVER_HAS_VIEWS)
 DRIVER_HAS_SETNULL                  Equate(DRIVER_HAS_NULLS)
 DRIVER_HAS_SETNULLS                 Equate(DRIVER_HAS_NULLS)
 DRIVER_HAS_SETNONNULL               Equate(DRIVER_HAS_NULLS)
@@ -175,21 +175,21 @@ DRIVER_HAS_SET_PROPERTY             Equate(YES)
 DRIVER_HAS_SHARE                    Equate(YES)
 DRIVER_HAS_SKIP                     Equate(YES)
 DRIVER_HAS_SQL_CALLBACK             Equate(DRIVER_HAS_SQL)
-DRIVER_HAS_START_BUILD              Equate(DRIVER_HAS_KEYS)    
+DRIVER_HAS_START_BUILD              Equate(DRIVER_HAS_KEYS)
 DRIVER_HAS_STARTTRAN                Equate(DRIVER_HAS_TRANSACTIONS)
 DRIVER_HAS_STREAM                   Equate(NO)
 DRIVER_HAS_UNFIXFORMAT              Equate(NO)
 DRIVER_HAS_UNLOCK                   Equate(YES)
 DRIVER_HAS_WATCH                    Equate(NO)
-DRIVER_HAS_WHO_ARE_YOU              Equate(YES) 
-                  
-! These are the data types for the driver. The driver is free to support any number 
-! of data types. If you change values here they must be changed in the Type Descriptor 
-! section below.                  
-! These are the data types for the driver. The driver is free to support any number 
-! of data types. If you change values here they must be changed in the Type Descriptor 
-! section below.                  
-DRIVER_HAS_ANY              Equate(NO)  ! 
+DRIVER_HAS_WHO_ARE_YOU              Equate(YES)
+
+! These are the data types for the driver. The driver is free to support any number
+! of data types. If you change values here they must be changed in the Type Descriptor
+! section below.
+! These are the data types for the driver. The driver is free to support any number
+! of data types. If you change values here they must be changed in the Type Descriptor
+! section below.
+DRIVER_HAS_ANY              Equate(NO)  !
 DRIVER_HAS_BFLOAT4          Equate(YES) !  /* IBM Basic 4 byte float             */
 DRIVER_HAS_BFLOAT8          Equate(YES) !  /* IBM Basic 8 byte float             */
 DRIVER_HAS_BLOB             Equate(NO)  !  /* Blob                               */
@@ -197,23 +197,23 @@ DRIVER_HAS_BYTE             Equate(YES) !  /* Signed 1 byte binary              
 DRIVER_HAS_CSTRING          Equate(YES) !  /* C string (trailing null)           */
 DRIVER_HAS_DATE             Equate(YES) !  /* 4 Byte Binary YYMD                 */
 DRIVER_HAS_DECIMAL          Equate(YES) !  /* Clarion packed decimal             */
-DRIVER_HAS_GROUP            Equate(YES) ! 
+DRIVER_HAS_GROUP            Equate(YES) !
 DRIVER_HAS_LONG             Equate(YES) !  /* Signed 4 byte binary               */
 DRIVER_HAS_MEMO             Equate(NO)  !  /* Memo                               */
 DRIVER_HAS_PDECIMAL         Equate(YES) !  /* IBM Packed Decimal                 */
 DRIVER_HAS_PSTRING          Equate(YES) !  /* Pascal string (leading len ind)    */
 DRIVER_HAS_REAL             Equate(YES) !  /* Signed 8 byte float                */
 DRIVER_HAS_SHORT            Equate(YES) !  /* Signed 2 byte binary               */
-DRIVER_HAS_SIGNED           Equate(NO)  ! 
+DRIVER_HAS_SIGNED           Equate(NO)  !
 DRIVER_HAS_SREAL            Equate(YES) !  /* Signed 4 byte float                */
 DRIVER_HAS_STRING           Equate(YES) !  /* ASCII sequence of characters       */   Adds PICTURE as well.
 DRIVER_HAS_TIME             Equate(YES) !  /* 4 Byte Binary HMSH                 */
-DRIVER_HAS_TYPE             Equate(NO)  ! 
+DRIVER_HAS_TYPE             Equate(NO)  !
 DRIVER_HAS_ULONG            Equate(YES) !  /* Unsigned 4 byte binary             */
 DRIVER_HAS_USHORT           Equate(YES) !  /* Unsigned 2 byte binary             */
 DRIVER_HAS_USIGNED          Equate(NO)  !
 
-! These features make up the Attribute value in the DRVREG structure.  
+! These features make up the Attribute value in the DRVREG structure.
 ! Some of them are inherited from settings above, however any can be set any way the driver supports.
 DRIVER_HAS_createfile Equate(00000001h * DRIVER_HAS_CREATE) ! :1; // supports create attribute
 DRIVER_HAS_owner     Equate(00000002h * YES) ! :1; // owner attribute ?
@@ -240,7 +240,7 @@ DRIVER_HAS_iseq  equate(0)       ! only asc
 DRIVER_HAS_icase     Equate(00002000h * YES * DRIVER_HAS_KEYS) ! :1; // index case sensative support ?
 DRIVER_HAS_ixnulls   Equate(00004000h * YES * DRIVER_HAS_KEYS) ! :1; // index exclude nulls supported ?
 DRIVER_HAS_dynind    Equate(00008000h * YES * DRIVER_HAS_KEYS) ! :1; // dynamic indexes supported ?
-                                     
+
 ! uncomment 1, and only 1, of these 3. If driver does not support keys, then uncomment the first.
 !DRIVER_HAS_dseq  equate(0)       ! only asc
 DRIVER_HAS_dseq  equate(00010000h)     ! can be asc/des mixed
@@ -258,9 +258,9 @@ DRIVER_HAS_import    Equate(04000000h * NO) ! :1; // can do an import
 DRIVER_HAS_locale    Equate(08000000h * NO) ! :1; // supports locale attribute
 
 
-                  
-! this equate just counts how many operations have been turned on. It does not need to be changed, 
-! unless new opcodes are added.                    
+
+! this equate just counts how many operations have been turned on. It does not need to be changed,
+! unless new opcodes are added.
 NUM_DRIVER_OPS          Equate(|
                         + DRIVER_HAS_ADD                     |
                         + DRIVER_HAS_ADDfilelen              |
@@ -281,7 +281,7 @@ NUM_DRIVER_OPS          Equate(|
                         + DRIVER_HAS_BULK_READ_ON            |
                         + DRIVER_HAS_BULK_READ_OFF           |
                         + DRIVER_HAS_BYTES                   |
-                        + DRIVER_HAS_CALLBACK                |  
+                        + DRIVER_HAS_CALLBACK                |
                         + DRIVER_HAS_CLEARfile               |
                         + DRIVER_HAS_CLOSE                   |
                         + DRIVER_HAS_COMMITdrv               |
@@ -307,7 +307,7 @@ NUM_DRIVER_OPS          Equate(|
                         + DRIVER_HAS_GETNULLS                |
                         + DRIVER_HAS_GET_PROPERTY            |
                         + DRIVER_HAS_GETSTATE                |
-                        + DRIVER_HAS_KEY_DOPROPERTY          |                        
+                        + DRIVER_HAS_KEY_DOPROPERTY          |
                         + DRIVER_HAS_KEY_SETPROPERTY         |
                         + DRIVER_HAS_KEY_GETPROPERTY         |
                         + DRIVER_HAS_HOLDfile                |
@@ -320,18 +320,18 @@ NUM_DRIVER_OPS          Equate(|
                         + DRIVER_HAS_NOMEMO                  |
                         + DRIVER_HAS_NULL                    |
                         + DRIVER_HAS_OPEN                    |
-                        + DRIVER_HAS_PACK                    | 
+                        + DRIVER_HAS_PACK                    |
                         + DRIVER_HAS_POINTERfile             |
                         + DRIVER_HAS_POINTERkey              |
-                        + DRIVER_HAS_POSITIONfile            | 
-                        + DRIVER_HAS_POSITIONkey             | 
+                        + DRIVER_HAS_POSITIONfile            |
+                        + DRIVER_HAS_POSITIONkey             |
                         + DRIVER_HAS_PREV                    |
                         + DRIVER_HAS_PUT                     |
-                        + DRIVER_HAS_PUTfileptr              | 
+                        + DRIVER_HAS_PUTfileptr              |
                         + DRIVER_HAS_PUTfileptrlen           |
-                        + DRIVER_HAS_QUERYKEY                | 
-                        + DRIVER_HAS_QUERYVIEW               | 
-                        + DRIVER_HAS_RECORDSfile             | 
+                        + DRIVER_HAS_QUERYKEY                |
+                        + DRIVER_HAS_QUERYVIEW               |
+                        + DRIVER_HAS_RECORDSfile             |
                         + DRIVER_HAS_RECORDSkey              |
                         + DRIVER_HAS_REGETfile               |
                         + DRIVER_HAS_REGETkey                |
@@ -344,15 +344,15 @@ NUM_DRIVER_OPS          Equate(|
                         + DRIVER_HAS_RESETviewf              |
                         + DRIVER_HAS_RESTORESTATE            |
                         + DRIVER_HAS_ROLLBACKdrv             |
-                        + DRIVER_HAS_SEND                    | 
-                        + DRIVER_HAS_SETfile                 | 
+                        + DRIVER_HAS_SEND                    |
+                        + DRIVER_HAS_SETfile                 |
                         + DRIVER_HAS_SETfilekey              |
                         + DRIVER_HAS_SETfileptr              |
                         + DRIVER_HAS_SETkey                  |
                         + DRIVER_HAS_SETkeykeyptr            |
                         + DRIVER_HAS_SETkeykey               |
                         + DRIVER_HAS_SETkeyptr               |
-                        + DRIVER_HAS_SETviewfields					 |
+                        + DRIVER_HAS_SETviewfields                                       |
                         + DRIVER_HAS_SETNULL                 |
                         + DRIVER_HAS_SETNULLS                |
                         + DRIVER_HAS_SETNONNULL              |
@@ -360,71 +360,71 @@ NUM_DRIVER_OPS          Equate(|
                         + DRIVER_HAS_SHARE                   |
                         + DRIVER_HAS_SKIP                    |
                         + DRIVER_HAS_SQL_CALLBACK            |
-                        + DRIVER_HAS_START_BUILD             |  
+                        + DRIVER_HAS_START_BUILD             |
                         + DRIVER_HAS_STARTTRAN               |
                         + DRIVER_HAS_STREAM                  |
                         + DRIVER_HAS_UNFIXFORMAT             |
                         + DRIVER_HAS_UNLOCK                  |
-                        + DRIVER_HAS_WATCH                   | 
+                        + DRIVER_HAS_WATCH                   |
                         + DRIVER_HAS_WHO_ARE_YOU             |
-                        )                             
+                        )
 
-! this equate just counts how many types have been turned on. It does not need to be changed, 
-! unless new types are added.                    
+! this equate just counts how many types have been turned on. It does not need to be changed,
+! unless new types are added.
 NUM_DRIVER_TYPES        Equate(|
-                        + DRIVER_HAS_ANY           |  
-                        + DRIVER_HAS_BFLOAT4       | 
-                        + DRIVER_HAS_BFLOAT8       |   
-                        + DRIVER_HAS_BLOB          |  
+                        + DRIVER_HAS_ANY           |
+                        + DRIVER_HAS_BFLOAT4       |
+                        + DRIVER_HAS_BFLOAT8       |
+                        + DRIVER_HAS_BLOB          |
                         + DRIVER_HAS_BYTE          |
-                        + DRIVER_HAS_CSTRING       |  
+                        + DRIVER_HAS_CSTRING       |
                         + DRIVER_HAS_DATE          |
-                        + DRIVER_HAS_DECIMAL       |  
+                        + DRIVER_HAS_DECIMAL       |
                         + DRIVER_HAS_GROUP         |
-                        + DRIVER_HAS_LONG          |  
-                        + DRIVER_HAS_MEMO          |  
-                        + DRIVER_HAS_PDECIMAL      |  
-                        + DRIVER_HAS_PSTRING       |  
-                        + DRIVER_HAS_REAL          |  
-                        + DRIVER_HAS_SHORT         |  
-                        + DRIVER_HAS_SIGNED        | 
-                        + DRIVER_HAS_SREAL         |  
-                        + DRIVER_HAS_STRING        |  
-                        + DRIVER_HAS_TIME          | 
-                        + DRIVER_HAS_TYPE          | 
-                        + DRIVER_HAS_ULONG         |   
-                        + DRIVER_HAS_USHORT        |   
-                        + DRIVER_HAS_USIGNED       |  
+                        + DRIVER_HAS_LONG          |
+                        + DRIVER_HAS_MEMO          |
+                        + DRIVER_HAS_PDECIMAL      |
+                        + DRIVER_HAS_PSTRING       |
+                        + DRIVER_HAS_REAL          |
+                        + DRIVER_HAS_SHORT         |
+                        + DRIVER_HAS_SIGNED        |
+                        + DRIVER_HAS_SREAL         |
+                        + DRIVER_HAS_STRING        |
+                        + DRIVER_HAS_TIME          |
+                        + DRIVER_HAS_TYPE          |
+                        + DRIVER_HAS_ULONG         |
+                        + DRIVER_HAS_USHORT        |
+                        + DRIVER_HAS_USIGNED       |
                         )
 
 ! The TypeDescriptor is very important to get correct as it is used by the IDE as well as your
 ! program. Things that are turned ON are left "as is". Things that are turned OFF have a PIPE (|)
 ! character at the front of the line. These pipes MUST match the equates set above.
-! Because the address of the type descriptor has to be hard-coded into the DLL code itself, 
+! Because the address of the type descriptor has to be hard-coded into the DLL code itself,
 ! two boundaries are added here to facilitate utilities to locate the address. They shoud remain
-! unchanged. 
+! unchanged.
 ! The structure of the type descriptor is [number of opcodes],<opcodes>,[number of types],<types>,0
-boundary1       string('CAP3S0FT')        
-TypeDescriptor  String( '' |  
+boundary1       string('CAP3S0FT')
+TypeDescriptor  String( '' |
                  & chr(NUM_DRIVER_OPS)         |
-                 & chr(Opcode:ADD)             |  
-                 & chr(Opcode:ADDfilelen)      |                    
-                 & chr(Opcode:APPEND)          |   
-                 & chr(Opcode:APPENDlen)       |   
-                 |& chr(Opcode:BLOB_DOPROPERTY) |  
-                 |& chr(Opcode:_BLOB_SETPROPERTY) |   
-                 |& chr(Opcode:_BLOB_GETPROPERTY) |   
-                 |& chr(Opcode:_BLOB_SIZE)      |     
-                 |& chr(Opcode:_BLOB_TAKE)      |     
-                 |& chr(Opcode:_BLOB_YIELD)     |                      
-                 |& chr(Opcode:BOF)             |   
-                 & chr(Opcode:BUFFER)          |  
-                 |& chr(Opcode:BUILDdyn)        |   
+                 & chr(Opcode:ADD)             |
+                 & chr(Opcode:ADDfilelen)      |
+                 & chr(Opcode:APPEND)          |
+                 & chr(Opcode:APPENDlen)       |
+                 |& chr(Opcode:BLOB_DOPROPERTY) |
+                 |& chr(Opcode:_BLOB_SETPROPERTY) |
+                 |& chr(Opcode:_BLOB_GETPROPERTY) |
+                 |& chr(Opcode:_BLOB_SIZE)      |
+                 |& chr(Opcode:_BLOB_TAKE)      |
+                 |& chr(Opcode:_BLOB_YIELD)     |
+                 |& chr(Opcode:BOF)             |
+                 & chr(Opcode:BUFFER)          |
+                 |& chr(Opcode:BUILDdyn)        |
                  |& chr(Opcode:BUILDdynfilter)  |
                  |& chr(Opcode:BUILDfile)       |
                  |& chr(Opcode:BUILDkey)        |
                  & chr(Opcode:BULK_READ_ON)    |
-                 & chr(Opcode:BULK_READ_OFF)   |                  
+                 & chr(Opcode:BULK_READ_OFF)   |
                  & chr(Opcode:BYTES)           |
                  & chr(Opcode:CALLBACK)        |
                  & chr(Opcode:CLEARfile)       |
@@ -435,36 +435,36 @@ TypeDescriptor  String( '' |
                  & chr(Opcode:CREATE)          |
                  |& chr(Opcode:DELETE)          |
                  & chr(Opcode:DESTROYf)        |
-                 & chr(Opcode:DO_PROPERTY)     |   
+                 & chr(Opcode:DO_PROPERTY)     |
                  |& chr(Opcode:DUPLICATE)       |
                  |& chr(Opcode:DUPLICATEkey)    |
                  & chr(Opcode:EMPTY)           |
-                 |& chr(Opcode:ENDTRAN)         | 
-                 & chr(Opcode:EOF)            |                 
+                 |& chr(Opcode:ENDTRAN)         |
+                 & chr(Opcode:EOF)            |
                  |& chr(Opcode:EXCEEDS_RECS)    |
-                 |& chr(Opcode:FIXFORMAT)       |                 
+                 |& chr(Opcode:FIXFORMAT)       |
                  & chr(Opcode:FLUSH)           |
-                 & chr(Opcode:FREESTATE)       |  
+                 & chr(Opcode:FREESTATE)       |
                  |& chr(Opcode:GETfilekey)      |
                  & chr(Opcode:GETfileptrlen)   |
                  & chr(Opcode:GETfileptr)      |
-                 |& chr(Opcode:GETkeyptr)       | 
-                 |& chr(Opcode:GETNULLS)       | 
-                 & chr(Opcode:GET_PROPERTY)    |     
-                 & chr(Opcode:GETSTATE)        |  
-                 |& chr(Opcode:KEY_DOPROPERTY)  |   
-                 |& chr(Opcode:KEY_GETPROPERTY) |    
-                 |& chr(Opcode:KEY_SETPROPERTY) |    
+                 |& chr(Opcode:GETkeyptr)       |
+                 |& chr(Opcode:GETNULLS)       |
+                 & chr(Opcode:GET_PROPERTY)    |
+                 & chr(Opcode:GETSTATE)        |
+                 |& chr(Opcode:KEY_DOPROPERTY)  |
+                 |& chr(Opcode:KEY_GETPROPERTY) |
+                 |& chr(Opcode:KEY_SETPROPERTY) |
                  |& chr(Opcode:HOLDfile)        |
                  |& chr(Opcode:HOLDfilesec)     |
                  & chr(Opcode:LOCKfile)        |
                  & chr(Opcode:LOCKfilesec)     |
                  |& chr(Opcode:LOGOUTdrv)       |
                  & chr(Opcode:NAME)            |
-                 & chr(Opcode:NEXT)            | 
-                 |& chr(Opcode:NOMEMO)          | 
-                 |& chr(Opcode:NULL)            |                    
-                 & chr(Opcode:OPEN)            |                   
+                 & chr(Opcode:NEXT)            |
+                 |& chr(Opcode:NOMEMO)          |
+                 |& chr(Opcode:NULL)            |
+                 & chr(Opcode:OPEN)            |
                  |& chr(Opcode:PACK)            |
                  & chr(Opcode:POINTERfile)     |
                  |& chr(Opcode:POINTERkey)      |
@@ -473,44 +473,44 @@ TypeDescriptor  String( '' |
                  & chr(Opcode:PREVIOUS)        |
                  & chr(Opcode:PUT)             |
                  & chr(Opcode:PUTfileptr)      |
-                 & chr(Opcode:PUTfileptrlen)   |   
+                 & chr(Opcode:PUTfileptrlen)   |
                  |& chr(Opcode:QUERY_KEY)       |
-                 |& chr(Opcode:QUERY_VIEW)      |                 
+                 |& chr(Opcode:QUERY_VIEW)      |
                  & chr(Opcode:RECORDSfile)     |
                  |& chr(Opcode:RECORDSkey)      |
-                 & chr(Opcode:REGETfile)       |   
-                 |& chr(Opcode:REGETkey)        |   
-                 & chr(Opcode:REGISTER)        |                 
-                 & chr(Opcode:RELEASE)         | 
+                 & chr(Opcode:REGETfile)       |
+                 |& chr(Opcode:REGETkey)        |
+                 & chr(Opcode:REGISTER)        |
+                 & chr(Opcode:RELEASE)         |
                  & chr(Opcode:REMOVE)          |
-                 & chr(Opcode:RENAME)          | 
+                 & chr(Opcode:RENAME)          |
                  & chr(Opcode:RESETfile)       |
-                 |& chr(Opcode:RESETkey)        |   
+                 |& chr(Opcode:RESETkey)        |
                  |& chr(Opcode:RESETviewf)      |
-                 & chr(Opcode:RESTORESTATE)    |                  
-                 |& chr(Opcode:ROLLBACKdrv)     |                 
+                 & chr(Opcode:RESTORESTATE)    |
+                 |& chr(Opcode:ROLLBACKdrv)     |
                  & chr(Opcode:SEND)            |
                  & chr(Opcode:SETfile)         |
-                 |& chr(Opcode:SETfilekey)      | 
+                 |& chr(Opcode:SETfilekey)      |
                  & chr(Opcode:SETfileptr)      |
                  |& chr(Opcode:SETkey)          |
                  |& chr(Opcode:SETkeykeyptr)    |
                  |& chr(Opcode:SETkeykey)       |
-                 |& chr(Opcode:SETkeyptr)       |   
+                 |& chr(Opcode:SETkeyptr)       |
                  |& chr(Opcode:SETviewfields)   |
-                 |& chr(Opcode:SETNULL)         |    
-                 |& chr(Opcode:SETNULLS)        |   
-                 |& chr(Opcode:SETNONNULL)      |    
-                 & chr(Opcode:SET_PROPERTY)    |                    
+                 |& chr(Opcode:SETNULL)         |
+                 |& chr(Opcode:SETNULLS)        |
+                 |& chr(Opcode:SETNONNULL)      |
+                 & chr(Opcode:SET_PROPERTY)    |
                  & chr(Opcode:SHARE)           |
                  & chr(Opcode:SKIP)            |
-                 |& chr(Opcode:SQLCALLBACK)     |  
+                 |& chr(Opcode:SQLCALLBACK)     |
                  |& chr(Opcode:START_BUILD)     |
-                 |& chr(Opcode:STARTTRAN)       |                 
+                 |& chr(Opcode:STARTTRAN)       |
                  |& chr(Opcode:STREAM)          |
                  |& chr(Opcode:UNFIXFORMAT)     |
                  & chr(Opcode:UNLOCK)          |
-                 |& chr(Opcode:WATCH)           |   
+                 |& chr(Opcode:WATCH)           |
                  & chr(Opcode:WHO_ARE_YOU)     |
                  |
                 & chr(NUM_DRIVER_TYPES) |
@@ -530,7 +530,7 @@ TypeDescriptor  String( '' |
                 & chr(ClaREAL)          |
                 |& chr(ClaSIGNED)       |
                 & chr(ClaSHORT)         |
-                & chr(ClaSREAL)         |                
+                & chr(ClaSREAL)         |
                 & chr(ClaSTRING)        |
                 & chr(ClaTIME)          |
                 |& chr(ClaTYPE)         |
@@ -540,9 +540,9 @@ TypeDescriptor  String( '' |
                 & '<0>' )
 boundary2       string('CAPESOF2')
 
-! this is a combination of the driver attributes. It does not need to be changed.                                      
+! this is a combination of the driver attributes. It does not need to be changed.
 DRIVER_ATTRIBUTES    Equate(DRIVER_HAS_createfile + DRIVER_HAS_owner + DRIVER_HAS_encrypt + DRIVER_HAS_reclaim |
-                          + DRIVER_HAS_keys_ + DRIVER_HAS_kseq + DRIVER_HAS_kunique | 
+                          + DRIVER_HAS_keys_ + DRIVER_HAS_kseq + DRIVER_HAS_kunique |
                           + DRIVER_HAS_kcase + DRIVER_HAS_kxnulls + DRIVER_HAS_indexes + DRIVER_HAS_iseq |
                           + DRIVER_HAS_icase + DRIVER_HAS_ixnulls + DRIVER_HAS_dynind |
                           + DRIVER_HAS_dseq + DRIVER_HAS_dcase + DRIVER_HAS_dxnulls |
@@ -550,13 +550,13 @@ DRIVER_ATTRIBUTES    Equate(DRIVER_HAS_createfile + DRIVER_HAS_owner + DRIVER_HA
                           + DRIVER_HAS_logalias + DRIVER_HAS_dsi + DRIVER_HAS_import + DRIVER_HAS_locale )
 
 ! The name of this grop is unique to your driver. The external name should be left as-is. (It is
-! used in the EXP file) 
+! used in the EXP file)
 Dos2DriverGroup  Group,name(LongName & '$DrvReg')
 raw_name                cstring(DriverName)    ! cstring(21)    ! changing this name after you've got tables using this driver is not a good idea.
 dll_name                cstring(DLLName)       ! cstring(13)
 copywrite               cstring(Copyright)  ! cstring(41)
 desc                    cstring(DriverDesc)   ! cstring(31)  ! this appears in Driver Registry list
-pipeFunctionAddress     long(0)      !  Cla_PIPE_FUNC 
+pipeFunctionAddress     long(0)      !  Cla_PIPE_FUNC
 drvattr                 Group
 attrval                   long(DRIVER_ATTRIBUTES)
 reserved                  byte(0)
@@ -568,7 +568,7 @@ clastrlen32             ulong(07fffffffh)   ! if supported, max clarion string l
 cstrlen32               ulong(07ffffffeh)   ! max cstring length for 32bit apps
 reclen32                ulong(07ffffffeh)   ! total record length for 32bit apps
 maxdims                 byte(0FFh)          ! total number of dimensions
-maxkeys                 byte(255 * DRIVER_HAS_KEYS) ! max total keys and indexes 
+maxkeys                 byte(255 * DRIVER_HAS_KEYS) ! max total keys and indexes
 maxmemos                byte(255 * DRIVER_HAS_BLOBS)! total memos - 255 max
 memosize                short(65534)        ! maximum memo size
 memosize32              ulong(07ffffffeh)   ! maximum memo size for 32bit apps
@@ -576,13 +576,13 @@ fldsize                 ulong(32)           ! size of the Drv_FLD structure
 kcbsize                 ulong(21)           ! size of the Drv_KCB structure
 mcbsize                 ulong(020h)         ! size of the Drv_MCB structure
 fcbsize                 ulong(0e4h)         ! size of the Drv_FCB structure
-reserved1               byte,dim(12)        ! reserved allowing for sizes     
-tdesc                   ulong(TDescAddress) ! pointer to type descriptor for functions and data types supported 
+reserved1               byte,dim(12)        ! reserved allowing for sizes
+tdesc                   ulong(TDescAddress) ! pointer to type descriptor for functions and data types supported
 dsi_name                cstring(DsiDllName) !cstring(13)  !  dsi dll name
 driverMeta              ulong(0)            ! DRV_META_FUNC
                      End
 
-! The constructor in this class runs when the DLL loads. This is useful for setting addresses. 
+! The constructor in this class runs when the DLL loads. This is useful for setting addresses.
 Dos2DriverOnLoadDll  Class
 Construct              Procedure()
                      End
@@ -591,105 +591,105 @@ Construct              Procedure()
 
 Dos2DriverOnLoadDll.Construct  procedure()
   CODE
-! these two lines prevent the linker from excluding the TypeDescriptor structure. 
+! these two lines prevent the linker from excluding the TypeDescriptor structure.
   x# = boundary1 & TypeDescriptor & boundary2      !TypeDescriptor
   Assert(x#=0)  ! x# has to be used :)
 ! ---
-  
+
 ?  dbg = '['&ShortName&']['&x#&'] [' & clip(DriverDesc) & '] DLL Loaded. NUM_DRIVER_OPS=' & NUM_DRIVER_OPS & ' NUM_DRIVER_TYPES=' & NUM_DRIVER_TYPES & ' DRIVER_ATTRIBUTES=' & DRIVER_ATTRIBUTES ; ods(dbg)
-! this assert attempts to catch any mistakes when setting the opcode, and type lists  
-  Assert(Size(TypeDescriptor) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptor) & ' <> Ops=' & NUM_DRIVER_OPS & ' + Types=' & NUM_DRIVER_TYPES & ' + 3')  
+! this assert attempts to catch any mistakes when setting the opcode, and type lists
+  Assert(Size(TypeDescriptor) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptor) & ' <> Ops=' & NUM_DRIVER_OPS & ' + Types=' & NUM_DRIVER_TYPES & ' + 3')
   Dos2DriverGroup.pipeFunctionAddress = address(Dos2DriverPipe)  ! sets the address for the pipe function below.
   Dos2DriverGroup.tdesc = address(TypeDescriptor) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
-  
-!---------------------------------------------------------------------------------  
+
+!---------------------------------------------------------------------------------
 Dos2DriverPipe  Procedure(Long pOpCode, long pClaFCB, long pVarList)
 ClaFCB        &Cla_FCBBLK,auto
 DriverObject  &DriverFileDos2Class,auto
 Result        Long
-  code   
-  ClaFCB &= (pClaFCB)  
-  !dbg = '[' & clip(ShortName) & '] Driver Pipe: [' & pOpCode & '] ' & ' pClaFCB=' & pClaFCB & ' pVarList = ' & pVarList ; ods(dbg)  
-  
-  Case pOpCode 
+  code
+  ClaFCB &= (pClaFCB)
+  !dbg = '[' & clip(ShortName) & '] Driver Pipe: [' & pOpCode & '] ' & ' pClaFCB=' & pClaFCB & ' pVarList = ' & pVarList ; ods(dbg)
+
+  Case pOpCode
   of Opcode:WHO_ARE_YOU
     ! doing this special case here, because the address is in scope here, but not in scope in the object.
     Return Address(DOS2DriverGroup.raw_name)
-  of Opcode:QUERY_VIEW  
+  of Opcode:QUERY_VIEW
     ! doing this special case here, because the address is in scope here, but not in scope in the object.
-    !dbg = '[' & clip(ShortName) & '] Driver Pipe: [Opcode:QUERY_VIEW] ' ; ods(dbg) 
+    !dbg = '[' & clip(ShortName) & '] Driver Pipe: [Opcode:QUERY_VIEW] ' ; ods(dbg)
     Return Address(Dos2DriverPipeView)
   of Opcode:DESTROYf
     ! if the object has not been initialized, then do a quick exit here
-    If ClaFCB.rblock = 0     
+    If ClaFCB.rblock = 0
       Return Result
-    End      
-  end  
+    End
+  end
   DriverObject &= (Dos2DriverSetObject(pOpCode,pClaFcb,pVarList))
   If not DriverObject &= null
     Result = DriverObject.Pipe(pOpCode,pClaFCB,pVarList)
-    Case pOpCode 
+    Case pOpCode
     of Opcode:DESTROYf
-       ClaFCB.rblock = 0     
-    End  
-  End              
-  Return Result 
+       ClaFCB.rblock = 0
+    End
+  End
+  Return Result
 
-!---------------------------------------------------------------------------------  
+!---------------------------------------------------------------------------------
 Dos2DriverPipeView  Procedure(Long pOpCode, Long pClaVCB, long pVarList)
 ViewObject  &DriverViewDos2Class,auto
-  code       
-  dbg = '[' & ShortName & '] Driver View Pipe: [' & pOpCode & '] ' & ' pClaVCB=' & pClaVCB & ' pVarList = ' & pVarList ; ods(dbg)  
+  code
+  dbg = '[' & ShortName & '] Driver View Pipe: [' & pOpCode & '] ' & ' pClaVCB=' & pClaVCB & ' pVarList = ' & pVarList ; ods(dbg)
   ViewObject &= (Dos2DriverSetViewObject(pOpCode,pClaVCB,pVarList))
   If not ViewObject &= null
     return ViewObject.Pipe(pOpCode,pClaVCB,pVarList)
   End
   Return 0
-    
-!---------------------------------------------------------------------------------  
+
+!---------------------------------------------------------------------------------
 ! if this is the first sight of this structure, set the rblock to point to a new driver object.
 ! The program can fetch a handle to this object using whatever &= file{prop:object}
 ! the program can replace this object using file{prop:object} = whatever
 ! the program object must be derived from the object type below.
 Dos2DriverSetObject  Procedure(Long pOpCode, Long pClaFCB, long pVarList)
-ClaFCB        &Cla_FCBBLK,auto  
-DriverObject  &DriverFileDos2Class,auto 
-f             &File,auto     
+ClaFCB        &Cla_FCBBLK,auto
+DriverObject  &DriverFileDos2Class,auto
+f             &File,auto
   Code
   ClaFCB &= (pClaFCB)
-  If ClaFCB.rblock = 0    
+  If ClaFCB.rblock = 0
     DriverObject &= new DriverFileDos2Class
-    ClaFCB.rblock = address(DriverObject)  
-    f &= (pClaFCB)  
-    DriverObject.Init(f)                           
+    ClaFCB.rblock = address(DriverObject)
+    f &= (pClaFCB)
+    DriverObject.Init(f)
   Else
     DriverObject &= (ClaFCB.rblock)
-  End 
+  End
   If DriverObject.TypeDescriptorAddress = 0
     DriverObject.TypeDescriptorAddress = address(TypeDescriptor)
-  End  
+  End
   Return ClaFCB.rblock
-!---------------------------------------------------------------------------------  
+!---------------------------------------------------------------------------------
 ! if this is the first sight of this structure, set the rblock to point to a new driver object.
 ! The program can fetch a handle to this object using whatever &= file{prop:object}
 ! the program can replace this object using file{prop:object} = whatever
 ! the program object must be derived from the object type below.
 Dos2DriverSetViewObject  Procedure(Long pOpCode, Long pClaVCB, long pVarList)
-ClaVCB        &Cla_VCBBLK,auto  
-ViewObject    &DriverViewDos2Class,auto 
+ClaVCB        &Cla_VCBBLK,auto
+ViewObject    &DriverViewDos2Class,auto
   Code
   ClaVCB &= (pClaVCB)
-  If ClaVCB.rblock = 0    
+  If ClaVCB.rblock = 0
     ViewObject &= new DriverViewDos2Class
-    ClaVCB.rblock = address(ViewObject)  
+    ClaVCB.rblock = address(ViewObject)
   Else
     ViewObject &= (ClaVCB.rblock)
-  End 
+  End
   Return ClaVCB.rblock
-!!---------------------------------------------------------------------------------  
+!!---------------------------------------------------------------------------------
 !! Instantiates a new Dos2MetaData Object, and returns a pointer to the interface to the IDE
 !Dos2DriverCreateIFace    Procedure()!,*IDrvMetaWindow
 !metaData &Dos2MetaData,auto
 !  CODE
 !  metaData &= NEW Dos2MetaData
-!  RETURN metaData.IDrvMetaWindow  
+!  RETURN metaData.IDrvMetaWindow

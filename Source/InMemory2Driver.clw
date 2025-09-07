@@ -28,7 +28,7 @@ Copyright   Equate('(c) 2025 by CapeSoft<0>{20}')                               
 DriverDesc  Equate('In-Memory2 {20}')                                             ! Maintain length as exactly 30 characters
 DLLName     Equate('CLA'&ShortName&'.DLL<0>')                                     ! Maintain length as exactly 12 characters
 DSIDLLNAME  Equate('CLA'&ShortName&'S.DLL')                                       ! Maintain length as exactly 12 characters
-TDescAddress Equate(00a25748h)
+TDescAddress Equate(00a26768h)
 
   MAP
     InMemory2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)
@@ -688,12 +688,12 @@ Result        Long
     End
   end
   DriverObject &= (InMemory2DriverSetObject(pOpCode,pClaFcb,pVarList))
-  If not DriverObject &= null 
+  If not DriverObject &= null
     Result = DriverObject.Pipe(pOpCode,pClaFCB,pVarList)
-    Case pOpCode 
+    Case pOpCode
     of Opcode:DESTROYf
-       ClaFCB.rblock = 0     
-    End    
+       ClaFCB.rblock = 0
+    End
   End
   Return Result
 

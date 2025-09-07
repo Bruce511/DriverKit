@@ -3,7 +3,7 @@
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
-BIGINT                  Equate(REAL)    
+BIGINT                  Equate(REAL)
 
 !==================================================================================================
 ! Declares the interface for Custom Driver Fields.
@@ -11,9 +11,9 @@ BIGINT                  Equate(REAL)
 iDriverField        INTERFACE
 ToRecordField         Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pSrcType, Long pSrcAddr, Long pSrcSize),LONG ,PROC,VIRTUAL
 FromRecordField       Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize),LONG ,PROC,VIRTUAL
-ClearRecordField      Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,String pValue),LONG,PROC,VIRTUAL  
+ClearRecordField      Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,String pValue),LONG,PROC,VIRTUAL
 GetSourceSize         Procedure(),LONG,VIRTUAL   ! source size is the "disk" record size. Not the Clarion Record size. Multiplied if array.
-GetFieldType          Procedure(),STRING,VIRTUAL ! return a unique text identifier for the field type 
+GetFieldType          Procedure(),STRING,VIRTUAL ! return a unique text identifier for the field type
 GetSQLType            Procedure(),STRING,VIRTUAL ! SQL Data type to use in CREATE statements
                     End
 !==================================================================================================
@@ -101,7 +101,7 @@ QueryInterface    PROCEDURE(STRING name, <STRING opt>),*IInterface          ! ob
 !QueryCommand            PROCEDURE(STRING command), *IInterfaceCommandLineElement
 !GetCommand              PROCEDURE(STRING command), *IInterfaceCommandLineElement
 !QueryCommandLine        PROCEDURE(),CSTRING
-!                      END 
+!                      END
 
 ! Equates used in IDrvMetaData.HasOperation
 META_IMPORT            EQUATE(1)
@@ -137,4 +137,4 @@ ExtensionName     PROCEDURE(),*CSTRING
 
 !==================================================================================================
 
- 
+

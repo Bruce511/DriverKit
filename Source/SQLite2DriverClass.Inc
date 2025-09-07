@@ -203,6 +203,7 @@ __SQLiteSTATEEND            Byte
 ! -------
 CONSTRUCT                   Procedure()
 DESTRUCT                    Procedure(),Virtual
+LoadLogging                 Procedure(),Derived
 _parseFields                Procedure(Long pAddr),Derived
 InterpretSQLType            Procedure(Long pType),String,Virtual
 SetErrorSqlite              Procedure(Long pSQLiteErrorCode,String pRef),Virtual
@@ -260,7 +261,7 @@ _AppendOrderQueueToWhere    Procedure(),Virtual
 SetOrderByFromQueue         Procedure(),Derived
 SetDriverOption             Procedure(String pOption, String pValue),STRING,Derived
 _ConstructKey               Procedure(Long pPrimary),Virtual
-_Morph                      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pDbType, Long pDbAddress, Long pDbLength, Long pSqlTimeStamp),Derived
+_Morph                      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pDbType, Long pDbAddress, Long pDbLength, Long pSqlTimeStamp, Byte pSetFieldNull),Derived
 _UpdateFileStrings          Procedure(),DERIVED
 
 ! File Procedures

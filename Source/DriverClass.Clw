@@ -300,7 +300,7 @@ tm    time
     End
   code
   gr = pStr
-  Return self.FormatDate(gr.dt) & 'T' & self.FormatTime(gr.tm)
+  Return self.FormatDate(gr.dt) & self.DateTimeSeparator & self.FormatTime(gr.tm)
 
 !-----------------------------------------------------------------
 DriverBaseClass._FreeSubset         Procedure()
@@ -460,156 +460,120 @@ x     Long
   End
   Return Ans
 
-
-!-----------------------------------------------------------------
-DriverBaseClass._DecToString             Procedure(Long pMem, Long pLength, Long pDecSize, Long pDecPlaces, Byte pType)
-bin     String(255)
-binb    Byte,dim(36),over(bin)
-ans     String(255)
-dec     Long,Auto
-x       Long,Auto
-y       Long,Auto
-z       Long
-nib     Byte,Auto
-nonzero Byte
+!---------------------------------------------------------------------------------------------
+DriverBaseClass._i64ToCString         Procedure(String pI64,*CString pClaString)
+bigi    group,over(pI64)
+lo        ulong
+hi        long
+        end
+neg     Byte
+bigd    Decimal(20) ! 19 digits plus sign
   code
-  dec = pDecSize - pDecPlaces
-  memcpy(address(bin),pMem,pLength)
-  y = 1
-  loop x = 1 to pLength
-    nib = bshift(binb[x],-4)    ! high nibble
-    If x = 1 and pType = ClaDECIMAL  ! first nibble is the sign or nothing
-      Case nib
-      of 0Fh
-        ans[y] = '-'
-        y += 1
-      end
+  If band(bigi.hi,10000000h) then neg = true.
+  If Neg
+    ! convert the number to positive, by inverting all the bits, and adding 1
+    BigI.hi = BXOR(BigI.hi,0FFFFFFFFh)
+    BigI.lo = BXOR(BigI.lo,0FFFFFFFFh)
+    If BigI.lo = 0FFFFFFFFh
+      BigI.lo = 0
+      BigI.hi += 1
     else
-      do addnibble
-    end
-    nib = band(binb[x],0Fh)     ! low nibble
-    if x = pLength and pType = ClaPDECIMAL  ! last nibble is the sign or nothing
-      Case nib
-      of 0Dh
-        ans = '-' & ans
-        y += 1
-      end
-    else
-      do addnibble
+      BigI.lo += 1
     End
-  end
-  if y = 1 then ans[y] = '0'.
-  return clip(ans)
-
-addnibble  routine
-  !self.trace('adding nibble nib=' & nib & ' y=' & y & ' z=' & z & ' nonzero=' & nonzero & ' ans=' & ans)
-  If nonzero = false and nib = 0
-  else
-    ans[y] = chr(nib+48)
-    y += 1
-    nonzero = true
-  end
-  z += 1
-  if z = dec
-    if nonzero = false
-      ans[y] = '0'
-      y += 1
-      nonzero = true
-    End
-    ans[y] = '.'
-    y += 1
   End
+  bigd = (bigi.hi * 0FFFFFFFFh) + bigi.lo
+  If neg then Bigd = BigD * -1.
+  pClaString = bigd
+  Return Len(pClaString)
+
+!---------------------------------------------------------------------------------------------
+DriverBaseClass._i64Fit              Procedure(String pI64,Byte pClaType,Long pLength)
+bigi    group,over(pI64)
+lo        ulong
+hi        long
+        end
+neg     Byte
+  Code
+  If band(bigi.hi,10000000h) then neg = true.
+  !self.trace('_i64Fit neg=' & neg)
+  Case pClaType
+  Of ClaByte
+  orOf ClaUShort
+  OrOf ClaULong
+    If neg then return driver:notok.  ! negative number
+  End
+  If Neg
+    ! convert the number to positive, by inverting all the bits, and adding 1
+    BigI.hi = BXOR(BigI.hi,0FFFFFFFFh)
+    BigI.lo = BXOR(BigI.lo,0FFFFFFFFh)
+    If BigI.lo = 0FFFFFFFFh
+      BigI.lo = 0
+      BigI.hi += 1
+    else
+      BigI.lo += 1
+    End
+  End
+  ! at this point BigI is the ABS(BigI) so only need to test positive values.
+  Case pClaType
+  of ClaBYTE
+    If BigI.hi <> 0 or BigI.lo > 255 then Return driver:NotOk.
+  of ClaSHORT
+    If BigI.hi <> 0 or BigI.lo > 32767 + neg then Return driver:NotOk.
+  of ClaUSHORT
+    If BigI.hi <> 0 or BigI.lo > 65535 then Return driver:NotOk.
+  of ClaLONG
+    If BigI.hi <> 0 or bigI.lo > 2147483647 + neg then Return driver:NotOk.
+  of ClaULONG
+    If BigI.hi <> 0 then Return driver:NotOk.
+  of ClaSREAL
+    If BigI.hi <> 0 or BigI.lo > 16777216 + neg then Return driver:NotOk.
+  of ClaREAL
+    If band(BigI.hi , 0FFE00000h ) then Return driver:NotOk.
+  of ClaSTRING
+  orof ClaPSTRING
+    if pLength < 20 then return driver:notok.
+  of ClaCSTRING
+    if pLength < 21 then return driver:notok.
+  of ClaDECIMAL
+  orof ClaPDECIMAL
+    if pLength < 20 then return driver:notok.
+  End
+  Return driver:Ok
+
+!---------------------------------------------------------------------------------------------
+DriverBaseClass._DecToString         Procedure(Long pStrAddr, Long pLength, Long pDecSize, Long pDecPlaces, Byte pClaType, *String rString)
+DDec       Decimal(pDecSize,pDecPlaces),AUTO
+PDec       Pdecimal(pDecSize,pDecPlaces),AUTO
+  code
+  Case pClaType
+  Of ClaDECIMAL
+    MemCpy(address(DDec),pStrAddr,pLength)
+    rString = DDec
+  Of ClaPDECIMAL
+    MemCpy(address(PDec),pStrAddr,pLength)
+    rString = PDec
+  End
+  Return
 
 !-----------------------------------------------------------------
 ! string is of form +cccc.dddd
-! Return value is a string (encoded memory) which is encoded using the decimal nibble form.
-DriverBaseClass._StringToDec       Procedure(String pStr, Long pDecSize, Long pDecPlaces, Byte pType)
-NextIsLowNibble   Equate(1)
-NextIsHighNibble  Equate(2)
-i                 Long,Auto
-j                 Long,Auto
-decpart           Cstring(32)
-intpart           Cstring(32)
-intlen            Byte,Auto
-sign              String(1),Auto
-ans               String(16)
-ansb              Byte,dim(16),over(ans)
-anslen            Long ,Auto
-nib               Byte
-
-x                 Long
-y                 Long
-
+DriverBaseClass._StringToDec         Procedure(*String pStr, Byte pClaType, Long rDecimalAddress, Long rDecSize, Long rDecPlaces)
+DDec       Decimal(rDecSize,rDecPlaces),AUTO
+PDec       Pdecimal(rDecSize,rDecPlaces),AUTO
   code
-  !self.trace('pStr=[' & pStr & '] len=' & len(pStr) & ' decsize=' & pDecSize & ' pDecPlaces=' & pDecPlaces & ' pType=' & pType)
-  If pDecSize % 2 = 0   ! Decimals are always an odd-size.
-    pDecSize += 1
-  End
-  anslen = (pDecsize+1) / 2
-  if pStr = '' then return all('<0>',anslen).
-  intlen = pDecSize - pDecPlaces
-  if pStr[1] = '-'
-    sign = '-'
-    j = 2
-  else
-    sign = '+'
-    j = 1
-  end
-  i = instring('.',pStr,1,1)
-  If i
-    decpart = clip(sub(pStr,i+1,pDecPlaces)) & all('0',pDecPlaces) ! truncates extra decimals, pads with 0
-    intpart = pStr [j : i-1]
-  Else
-    decpart = all('0',pDecPlaces)
-    intpart = sub(pStr,j,len(clip(pStr)))
-  End
-  intpart = right(all('0',intlen) & intpart,intlen)
-
-  ! now we have the 3 parts. time to write into the answer.
-  Clear(ansb)
-  ! sign
-  Case pType
+  Case pClaType
   Of ClaDECIMAL
-    If sign = '-'
-      ansb[1] = 0F0h
-    End
-    j = NextIsLowNibble
+    DDec = pStr
+    MemCpy(rDecimalAddress,address(DDec),Size(DDec))
   Of ClaPDECIMAL
-    if sign = '-'
-      ansb[anslen] = 0Fh
-    End
-    j = NextIsHighNibble
+    PDec = pStr
+    MemCpy(rDecimalAddress,address(PDec),Size(PDec))
   End
-  ! intpart
-  intpart = intpart & decpart
-  intlen =  pDecSize
-
-  x = 1
-  Loop i = 1 to intlen
-    Case intpart[i]
-    of '0' to '9'
-      nib = val(intpart[i]) - 48
-      if j = NextIsHighNibble
-        nib = bshift(nib,4)
-      End
-    else
-      nib = 0
-    end
-    case j
-    of NextIsLowNibble
-      ansb[x] += nib
-      x += 1
-      j = NextIsHighNibble
-    of NextIsHighNibble
-      ansb[x] += nib
-      j = NextIsLowNibble
-    End
-  End
-  Return ans
+  Return
 
 !-----------------------------------------------------------------
 !!! DERIVE
-DriverBaseClass._Morph      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull)
+DriverBaseClass._Morph      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength)
   code
 
 !-----------------------------------------------------------------
@@ -735,6 +699,8 @@ DriverBaseClass.InterpretProperty  Procedure(long pProperty)
     return 'PROP:Database'
   of Prop:DatabaseName
     return 'PROP:DatabaseName'
+  of Prop:DateTimeSeparator
+    return 'PROP:DateTimeSeparator'
   of Prop:DbVersionMajor
     return 'PROP:DbVersionMajor'
   of Prop:DbVersionMinor
@@ -759,6 +725,8 @@ DriverBaseClass.InterpretProperty  Procedure(long pProperty)
     return 'PROP:DriverLogsoutAlias'
   of PROP:DriverString
     return 'PROP:DriverString'
+  of Prop:DriverVersion
+    return 'PROP:DriverVersion'
   of prop:OBD
     return 'PROP:OBD'
   of Prop:NotDistinct
@@ -3257,6 +3225,21 @@ DriverBaseClass._SetParameterField          Procedure(Long pCount, *FieldGroupTy
 x   long,auto
 tx  string(10)
   code
+!  If pNode.SQLType
+!    tx = format(clock(),@t04)
+!    case lower(sub(pNode.SQLType,1,4))
+!    of 'time'
+!      Case pNode.Type
+!      of ClaLONG
+!        self._SetParameterString(pCount,tx)
+!      of ClaSTRING
+!      orof ClaSTRING
+!        self._SetParameterString(pCount,tx)
+!      of ClaDECIMAL
+!        self._SetParameterString(pCount,tx)
+!      End
+!    End
+!  End
   self._SetParameterNode(pCount,pNode,pSource,pOffset)
   Return
 
@@ -3450,6 +3433,8 @@ DriverBaseClass.GETPROPERTY                        Procedure(String pProperty,Lo
     return self.GetPROP:ClientVersionBuild()
   of PROP:ClientVer
     return self.GetProp:ClientVer()
+  of Prop:DateTimeSeparator
+    return self.GetProp:DateTimeSeparator()
   of Prop:DbVersionMajor
     return self.GetPROP:DbVersionMajor()
   of Prop:DbVersionMinor
@@ -3463,6 +3448,8 @@ DriverBaseClass.GETPROPERTY                        Procedure(String pProperty,Lo
     Return self.GetPROP:Distinct()
   of PROP:Driver
     Return self.GetPROP:Driver()
+  of PROP:DriverVersion
+    Return self.GetProp:DriverVersion()
   of PROP:Database
     Return self.GetPROP:Database()
   of PROP:DatabaseName
@@ -3613,6 +3600,7 @@ DriverBaseClass.ClearProps            PROCEDURE()
   self.SetProp:LineEndings('<13,10>')
   self.SetProp:AlwaysQuote(false)
   self.SetProp:NullString('\N')  ! null:null
+  self.SetProp:DateTimeSeparator(' ')
 
   self.SearchFilter         = ''
   self._SearchOrderClause   = ''
@@ -3897,6 +3885,8 @@ DriverBaseClass.SETPROPERTY              Procedure(String pProperty,Long pIndex,
     self.ClearProps()
   of Prop:Codepage
     self.SetProp:Codepage(pValue)
+  of Prop:DateTimeSeparator
+    self.SetProp:DateTimeSeparator(pValue)
   of PROP:Distinct
     self.SetPROP:Distinct(pValue)
   of PROP:NotDistinct
@@ -4074,6 +4064,16 @@ DriverBaseClass.GetProp:DbVersionBuild            PROCEDURE()
   Return self.DbVersionBuild
 
 !-----------------------------------------------------------------
+DriverBaseClass.GetProp:DateTimeSeparator         PROCEDURE()
+  code
+  Return self.DateTimeSeparator
+
+!-----------------------------------------------------------------
+DriverBaseClass.SetProp:DateTimeSeparator         PROCEDURE(String pValue)
+  code
+  self.DateTimeSeparator = pValue
+
+!-----------------------------------------------------------------
 ! DbVersionMajor et al are set with a call to _ParseVersion when the Connection is made to the database.
 ! In other words inside the CONNECT method in the derived class.
 DriverBaseClass.GetProp:DBMSVer            PROCEDURE()
@@ -4095,9 +4095,16 @@ DriverBaseClass.SetPROP:Distinct           PROCEDURE(BYTE pDistinct)
   End
   Return
 
-  !-----------------------------------------------------------------
+!-----------------------------------------------------------------
 !!! DERIVE
 DriverBaseClass.GetProp:Driver             PROCEDURE()!,STRING,VIRTUAL ! Get name of file driver
+  code
+  Return ''
+
+!-----------------------------------------------------------------
+! This seems like it should be set here, but that would only version the CLAOBD file.
+! Since we want to version the actual driver file, this is derived in the drivers.
+DriverBaseClass.GetProp:DriverVersion      PROCEDURE()
   code
   Return ''
 
@@ -5410,7 +5417,7 @@ lgGroupDef      Long
 
   Loop index = 1 to self.SharedProperties.FieldList.nodes - 3
     node &= self._withFieldNode(index)
-    node.SqlTimeStamp = false
+    !node.SqlTimeStamp = false
     ! check for magic Clarion OVER DateTime
     If node.Type <> ClaSTRING or node.Length <> 8 or node.Over then cycle.
     node &= self._withFieldNode(index+1)
@@ -5420,7 +5427,7 @@ lgGroupDef      Long
     node &= self._withFieldNode(index+3)
     If node.Type <> ClaTIME then cycle.
     node &= self._withFieldNode(index)
-    node.SqlTimeStamp = true
+    node.SqlTimeStamp = driver:GroupOverTimeStamp
   End
   self._AfterParseFields()
   Return
@@ -5451,7 +5458,7 @@ InOveredGroup   Long
     pNode.Index = pIndex
     pNode.Level = pLevel
     pNode.InOverGroup = pInOveredGroup
-    !str.peekram(pAddr,48,st:hex)
+    pNode.SqlTimeStamp = false
     peek(pAddr,pNode.type)
     pAddr += 1
     peek(pAddr,pNode.Attribute)
@@ -5829,10 +5836,12 @@ str          StringTheory
       of 'SQLTYPE'
         If ThisTypeSet = false
           pNode.SqlType = val
+          self._ParseFieldSQLType(pNode)
         End
       of self._ThisSqlType
         ThisTypeSet = true
         pNode.SqlType = val
+        self._ParseFieldSQLType(pNode)
       of 'COLLATE'
         pNode.collate = val
       of 'UUID4'
@@ -5880,6 +5889,10 @@ str          StringTheory
     End
   End
   Return
+
+!-----------------------------------------------------------------
+DriverFileClass._ParseFieldSQLType   Procedure(FieldGroupType pNode)
+  Code
 
 !-----------------------------------------------------------------
 ! find common mistakes in table declarations and provide warnings of same.
@@ -8668,6 +8681,10 @@ DriverFileClass.GET              PROCEDURE(KEY pKey, BIGINT pKeyPointer)
   Return
 
 !-----------------------------------------------------------------
+DriverFileClass.GETROW           PROCEDURE(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>)
+  Code
+
+!-----------------------------------------------------------------
 DriverFileClass.HOLD             PROCEDURE()
   Code
   self.SetError(NoDriverSupport)
@@ -9028,12 +9045,13 @@ DriverFileClass.ResultToBlob  Procedure(iResultSet pResult, Long pRow, Long pCol
 CellType      long
 CellLen       BIGINT,auto
 CellAddr      BIGINT,auto
+rTextLen      Long ! do not ,Auto
   code
   self.result.GetCell(pRow,pColumn,CellType,CellAddr,CellLen)
   If self.blobs.Memo
-    self._Morph(self.blobs.label,ClaMEMO,address(self.blobs.memostring),self.blobs.memosize,CellType,CellAddr,CellLen,0,false)
+    self._Morph(self.blobs.label,ClaMEMO,address(self.blobs.memostring),self.blobs.memosize,CellType,CellAddr,CellLen,0,false,rTextLen)
   else
-    self._Morph(self.blobs.label,ClaBLOB,self.blobs.index,self.blobs.handlesize,CellType,CellAddr,CellLen,0,false)
+    self._Morph(self.blobs.label,ClaBLOB,self.blobs.index,self.blobs.handlesize,CellType,CellAddr,CellLen,0,false,rTextLen)
   End
   Return
 
@@ -9055,20 +9073,21 @@ DriverBaseClass.ResultToBindField   Procedure(Long pRow, Long pCol)
 CellAddr   BIGINT,auto
 CellLen    BIGINT,auto
 CellType   Long,auto
+rTextLen   Long
   code
   self.result.GetCell(pRow,pCol,CellType,CellAddr,CellLen)
   If not self.BindQueue.lg &= null
     self.bindqueue.lg = 0
-    self._Morph(self.bindqueue.Name,ClaLONG,address(self.bindqueue.lg),4,CellType,CellAddr,CellLen,0,false)
+    self._Morph(self.bindqueue.Name,ClaLONG,address(self.bindqueue.lg),4,CellType,CellAddr,CellLen,0,false,rTextLen)
   ElsIf not self.bindqueue.rl &= null
     self.bindqueue.rl = 0
-    self._Morph(self.bindqueue.Name,ClaREAL,address(self.bindqueue.rl),8,CellType,CellAddr,CellLen,0,false)
+    self._Morph(self.bindqueue.Name,ClaREAL,address(self.bindqueue.rl),8,CellType,CellAddr,CellLen,0,false,rTextLen)
   Elsif not self.bindqueue.st &= null
     self.bindqueue.st = ''
-    self._Morph(self.bindqueue.Name,ClaSTRING,address(self.bindqueue.st),size(self.bindqueue.st),CellType,CellAddr,CellLen,0,false)
+    self._Morph(self.bindqueue.Name,ClaSTRING,address(self.bindqueue.st),size(self.bindqueue.st),CellType,CellAddr,CellLen,0,false,rTextLen)
   Elsif not self.bindqueue.cst &= null
     self.bindqueue.cst = ''
-    self._Morph(self.bindqueue.Name,ClaCSTRING,address(self.bindqueue.cst),size(self.bindqueue.cst),CellType,CellAddr,CellLen,0,false)
+    self._Morph(self.bindqueue.Name,ClaCSTRING,address(self.bindqueue.cst),size(self.bindqueue.cst),CellType,CellAddr,CellLen,0,false,rTextLen)
   End
   Return
 
@@ -9102,6 +9121,7 @@ str          &String,auto
 CellAddress  BIGINT,auto
 CellLen      BIGINT,auto
 Celltype     Long,Auto
+rTextLen     Long
   code
   pResult.GetCell(pRow,pColumn,CellType,CellAddress,CellLen)
   If not self.Fields.Interface &= NULL
@@ -9110,7 +9130,7 @@ Celltype     Long,Auto
     str &= CellAddress & ':' & CellLen
     self._LoadArray(str,self.Fields.index)
   Else
-    self._Morph(self.fields.Label,self.Fields.type,pAddr + self.Fields.Offset,self.Fields.Length,CellType,CellAddress,CellLen,self.fields.SqlTimeStamp,true)
+    self._Morph(self.fields.Label,self.Fields.type,pAddr + self.Fields.Offset,self.Fields.Length,CellType,CellAddress,CellLen,self.fields.SqlTimeStamp,true,rTextLen)
   End
   Return
 
@@ -9665,7 +9685,7 @@ x    long
 
 !-----------------------------------------------------------------
 ! given the ADDRESS of the field, and the size
-! set the _nullstring byte, and also clear the field
+! set the _nullstr byte, and also clear the field
 ! only works on the record buffer not the shadow buffer.
 ! This is the one called by the compiler when the code says NULL(field) or NULL(file,field)
 DriverFileClass.SETNULL_         PROCEDURE(Long pAddr, Long pSize)
@@ -9678,7 +9698,7 @@ DriverFileClass.SETNULL_         PROCEDURE(Long pAddr, Long pSize)
 
 !-----------------------------------------------------------------
 ! given the field index number
-! set the _nullstring byte, and also clear the field
+! set the _nullstr byte, and also clear the field
 ! only works on the record buffer not the shadow buffer.
 DriverFileClass.SETNULL_         PROCEDURE(*Long pIndex)
   Code
@@ -9690,7 +9710,7 @@ DriverFileClass.SETNULL_         PROCEDURE(*Long pIndex)
 
 !-----------------------------------------------------------------
 ! given the column name (ie external name of the column in the database)
-! set the _nullstring byte, and also clear the field
+! set the _nullstr byte, and also clear the field
 ! only works on the record buffer not the shadow buffer.
 DriverFileClass.SETNULL_         PROCEDURE(*Cstring pColumn)
   Code
@@ -11238,7 +11258,7 @@ str   string(36)
     return clip(str)
   of ClaDECIMAL
   orof ClaPDECIMAL
-    str = self._DecToString(addr,self.Fields.Size,self.Fields.DecimalSize,self.Fields.DecimalPlaces,self.Fields.Type)
+    self._DecToString(addr,self.Fields.Size,self.Fields.DecimalSize,self.Fields.DecimalPlaces,self.Fields.Type, str)
     return clip(str)
   End
   Return ''
@@ -11984,7 +12004,12 @@ DriverFileSQLClass.GET              PROCEDURE(KEY pKey, BIGINT pKeyPointer)
 
 !-----------------------------------------------------------------
 !!! Derive
-DriverFileSQLClass._ExecuteSelect     Procedure()
+DriverFileSQLClass._ExecuteSelect   Procedure()
+  Code
+
+!-----------------------------------------------------------------
+!!! Derive
+DriverFileSQLClass._BindOffset      Procedure()
   Code
 
 !-----------------------------------------------------------------
@@ -12076,7 +12101,7 @@ decString  string(36)
         If pHighLow = driver:low
           decstring = '-' & decstring
         End
-        decstring = self._StringToDec(decString,self.Fields.DecimalSize,self.Fields.DecimalPlaces,self.Fields.Type)
+        self._StringToDec(decString,self.Fields.Type,address(decstring),self.Fields.DecimalSize,self.Fields.DecimalPlaces)
         memcpy(pAddr + self.Fields.Offset,address(Decstring),self.Fields.Size)
       of ClaSTRING
         If pHighLow = driver:high
@@ -13493,11 +13518,11 @@ inner     cstring(7)
 ! we need a _morph method here so that result.GetCell can call it.
 ! However the actual morph is likely to depend on node.fields, so this method can't be used for all data types
 ! or data type conversions. It's limited to paths that don't make use of fields.
-DriverViewClass._Morph                        Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull)
+DriverViewClass._Morph                        Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength)
 obj  &DriverFileClass
   code
   obj &= (self.FileObject[1])
-  obj._Morph(pFieldLabel,pClarionType,pClarionAddress,pClarionLength,pCellType,pCellAddress,pCellLength,pSqlTimeStamp,pSetFieldNull)
+  obj._Morph(pFieldLabel,pClarionType,pClarionAddress,pClarionLength,pCellType,pCellAddress,pCellLength,pSqlTimeStamp,pSetFieldNull,rTextLength)
   Return
 
 !-----------------------------------------------------------------
@@ -15570,6 +15595,11 @@ DriverViewSQLClass.NEXT             PROCEDURE()
 
 !-----------------------------------------------------------------
 !!! Derive
+DriverViewSQLClass._BindOffset      Procedure()
+  Code
+
+!-----------------------------------------------------------------
+!!! Derive
 DriverViewSQLClass._ExecuteSelect     PROCEDURE()
   Code
 
@@ -16372,7 +16402,7 @@ x    Long,Auto
 DriverResultSetClass.iResultSet.SetCell               Procedure(Long pRow, Long pColumn, Long pType, *BigInt rAddress, *BigInt rLength)
 strmem      &string!,auto
   code
-  !self.trace('1 DriverResultSetClass.iResultSet.SetCell pType=' & pType)
+  !self.trace('1 DriverResultSetClass.iResultSet.SetCell pType=' & pType & ' row=' & pRow & ' col=' & pColumn & ' addr=' & rAddress & ' len=' & rLength)
   If pColumn > self.NumColumns then self.NumColumns = pColumn.
   If self._WithCell(pRow,pColumn) = driver:ok
     self.CellPages.Cells.Type[self._CellInPage] = pType
@@ -16430,6 +16460,7 @@ CellAddr    BIGINT
 CellLen     BIGINT
 CellType    Long
 strx        string(100000)
+rTextLen    Long
   code
   If self._WithCell(pRow,pColumn) = driver:ok
     self.iResultSet.GetCell(pRow,pColumn,CellType,CellAddr,CellLen)
@@ -16439,8 +16470,11 @@ strx        string(100000)
       Return ''
     else
       rNull = false
-      self.obj._morph('',ClaString, address(strx), size(strx), CellType, CellAddr, CellLen,0,false)
-      Return clip(Strx)
+      rTextLen = 1
+      self.obj._morph('',ClaString, address(strx), size(strx), CellType, CellAddr, CellLen,0,false,rTextLen)
+      If rTextLen < 1 then Return ''.
+      If rTextLen > size(strx) then rTextLen = size(strx).
+      Return Strx[1 : rTextLen]
     End
   End
   rNull = NoRecErr

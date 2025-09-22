@@ -674,6 +674,7 @@ tm       Time ,Auto
 sdt      string(4),over(dt)
 stm      string(4),over(tm)
 i        long,Auto
+j        long,Auto
 gr       Group,Auto
 dt1        Date
 tm1        Time
@@ -683,9 +684,15 @@ tm1        Time
     self.Deformat &= new StringDeformat
   End
   If self.fields.SqlTimeStamp
-    i = instring('T',pText,1,1)
-    gr.dt1 = self.Deformat.DeformatDate(sub(pText,1,i-1),'@d10-')
-    gr.tm1 = self.Deformat.DeformatTime(sub(pText,i+1,len(pText)),'@t93')
+    j = len(self.DateTimeSeparator)
+    i = instring(self.DateTimeSeparator,pText,1,1)
+    if i = 0 then i = instring(' T ',pText,1,1) ; j = 3.
+    if i = 0 then i = instring(' ',pText,1,1) ; j = 1.
+    if i = 0 then i = instring('T',pText,1,1) ; j = 1.
+    if i
+      gr.dt1 = self.Deformat.DeformatDate(sub(pText,1,i-1),'@d10-')
+      gr.tm1 = self.Deformat.DeformatTime(sub(pText,i+j,len(pText)),'@t93')
+    end
     Return gr
   End
   Case self.Fields.Type
@@ -697,7 +704,7 @@ tm1        Time
       return stm
   of ClaDECIMAL
   orof ClaPDECIMAL
-     strmem = self._StringToDec(pText, self.Fields.DecimalSize, self.Fields.DecimalPlaces,self.Fields.Type)
+     self._StringToDec(pText,self.Fields.Type, address(strmem), self.Fields.DecimalSize, self.Fields.DecimalPlaces)
      return strmem
   end
   return pText
@@ -1042,7 +1049,7 @@ tail          long
 ! is not good.
 DriverFileSQLite2Class._GetDBVersion   Procedure
   Code
-  If self.GETPROP:DBMSVer() = ''
+  If self.GetProp:DBMSVer() = ''
     self.SqlCode.SetValue('select sqlite_version();')
     self._ParameterOpcode = 0
     If self._ExecuteSql() = Driver:ok and self.result.Rows()
@@ -1510,13 +1517,10 @@ addr    Long,Auto
         case self.ParameterQueue.ParameterArray[x].Source
         of driver:FromBuffer
           addr = self.ClaFCB.rec_buf + self.Fields.Offset
-          !self.trace('file record buffer')
         of driver:FromShadow
           addr = address(self.ShadowBuffer) + self.Fields.Offset
-          !self.trace('shadow buffer')
         of driver:FromPrimaryKeyPosition
           addr = address(self.PrimaryKeyPosition) + self.ParameterQueue.ParameterArray[x].Offset
-          !self.trace('primary key pos')
         End
         self._BindField(pStmt,self.ParameterQueue.ParameterArray[x].Count,addr)
       ElsIf self.ParameterQueue.ParameterArray[x].BlobIndex <> 0
@@ -1588,6 +1592,10 @@ rl      real,over(sx)
 srl     sreal,over(sx)
 dt      date,over(sx)
 tm      time,over(sx)
+i64     Group,pre()
+lo        ulong
+hi        Long
+        End
 
   code
   If not self.Fields.Interface &= null
@@ -1738,7 +1746,7 @@ tm      time,over(sx)
     of ClaDecimal
     orof ClaPDecimal
       ! binding them as strings to preserve the numeric. SQLite will treat them as numerics though.
-      sx = self._DecToString(address(sx),self.Fields.length, self.Fields.DecimalSize,self.Fields.DecimalPlaces,self.Fields.Type)
+      self._DecToString(address(sx),self.Fields.length, self.Fields.DecimalSize,self.Fields.DecimalPlaces,self.Fields.Type,sx)
       len = len(clip(sx))
       If self._logBind then self.Log('[BIND][sb33]' & pCount & ' (decimal)' & sx).
       result = sqlite3_bind_text(pStmt,pCount,address(sx), len ,SQLITE_TRANSIENT)
@@ -1784,6 +1792,7 @@ dbLength      Long
 dbText        Byte
 dbNull        Byte
 canNull       Byte
+rTextLen      Long
   code
   Case pBuffer
   of 0
@@ -1804,6 +1813,7 @@ canNull       Byte
       ! Get the address and length for the SQL data
       dbNull = false
       dbText = false
+      rTextLen = 0
       Case SQLFieldType
       Of SQLITE_INTEGER
         lg =  sqlite3_column_int(pStmt,x)
@@ -1836,15 +1846,15 @@ canNull       Byte
              self._ClearField()
            End
         Else
-          self._Morph(self.fields.label,self.Fields.type,Buffer + self.Fields.Offset,self.Fields.Length,SQLFieldType,dbAddress,dbLength,self.fields.SqlTimeStamp,true * canNull)
+          self._Morph(self.fields.label,self.Fields.type,Buffer + self.Fields.Offset,self.Fields.Length,SQLFieldType,dbAddress,dbLength,self.fields.SqlTimeStamp,true * canNull,rTextLen)
         End
       ElsIf self._WithBlobNamed(colname) = driver:ok   ! not a FILE field, so check for MEMO and BLOB
         If dbNull
-          self.SETBLOBPROP:Value(self.blobs.index,'')
+          self.SetBlobProp:Value(self.blobs.index,'')
         ElsIf self.blobs.Memo
-          self._Morph(self.blobs.label,ClaMemo,address(self.blobs.memostring),self.blobs.memosize,SQLFieldType,dbAddress,dbLength,0,false)
+          self._Morph(self.blobs.label,ClaMemo,address(self.blobs.memostring),self.blobs.memosize,SQLFieldType,dbAddress,dbLength,0,false,rTextLen)
         else
-          self._Morph(self.blobs.label,ClaBlob,self.blobs.index,self.blobs.handlesize,SQLFieldType,dbAddress,dbLength,0,false)
+          self._Morph(self.blobs.label,ClaBlob,self.blobs.index,self.blobs.handlesize,SQLFieldType,dbAddress,dbLength,0,false,rTextLen)
         End
         self.SetBlobCrc()
         Put(self.blobs)
@@ -1854,13 +1864,13 @@ canNull       Byte
         Get(self.BindQueue,self.BindQueue.Name)
         If Errorcode() = 0
           If not self.bindqueue.lg &= null
-            self._Morph(self.BindQueue.Name,ClaLONG,address(self.bindqueue.lg),4,SQLFieldType,dbAddress,dbLength,0,false)
+            self._Morph(self.BindQueue.Name,ClaLONG,address(self.bindqueue.lg),4,SQLFieldType,dbAddress,dbLength,0,false,rTextLen)
           ElsIf not self.bindqueue.rl &= null
-            self._Morph(self.BindQueue.Name,ClaREAL,address(self.bindqueue.rl),8,SQLFieldType,dbAddress,dbLength,0,false)
+            self._Morph(self.BindQueue.Name,ClaREAL,address(self.bindqueue.rl),8,SQLFieldType,dbAddress,dbLength,0,false,rTextLen)
           Elsif not self.bindqueue.st &= null
-            self._Morph(self.BindQueue.Name,ClaSTRING,address(self.bindqueue.st),size(self.bindqueue.st),SQLFieldType,dbAddress,dbLength,0,false)
+            self._Morph(self.BindQueue.Name,ClaSTRING,address(self.bindqueue.st),size(self.bindqueue.st),SQLFieldType,dbAddress,dbLength,0,false,rTextLen)
           Elsif not self.bindqueue.cst &= null
-            self._Morph(self.BindQueue.Name,ClaCSTRING,address(self.bindqueue.cst),size(self.bindqueue.cst),SQLFieldType,dbAddress,dbLength,0,false)
+            self._Morph(self.BindQueue.Name,ClaCSTRING,address(self.bindqueue.cst),size(self.bindqueue.cst),SQLFieldType,dbAddress,dbLength,0,false,rTextLen)
           End
         End
         PopErrors()
@@ -1883,7 +1893,7 @@ canNull       Byte
 ! if the pClarionType is ClaBlob then pClarionAddress is the blob index (as a neg number)
 ! if the pClarionType is a ClaMEMO then the pClarionAddress and pClarionLength are set as normal
 ! if the pClarionType is a CLADECIMAL or CLAPDECIMAL then the Fields node has to be loaded. Otherwise fields is not used.
-DriverFileSQLite2Class._Morph      Procedure(String pFieldLabel, Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull)
+DriverFileSQLite2Class._Morph      Procedure(String pFieldLabel, Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength)
 lg      long,Auto
 sr      Sreal,Auto
 rl      Real,Auto
@@ -1894,10 +1904,14 @@ strmem  String(36),Auto
 str     &string
 StrLen  Long,Auto
   Code
+  !self.trace('DriverFileSQLite2Class._Morph pFieldLabel=' & clip(pFieldLabel) & ' pClarionType=' & pClarionType & ' ' & self.InterpretType(pClarionType) & ' rTextLength=' & rTextLength & ' pCellType=' & pCellType & ' ' & self.InterpretSQLType(pCellType) & ' pCellLength=' & pCellLength)
   Case pCellType
+!region - SQLITE_INTEGER
+!------------------------------------------------
   Of SQLITE_INTEGER
-    memcpy(address(lg),pCellAddress,4)
+    memcpy(address(lg),pCellAddress,4)   !!!todo limited to 32 bit integers for now
     Case pClarionType
+!region -     ClaBYTE
     of ClaBYTE
       If band(lg,0FFFFFF00h) > 0 and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
@@ -1905,35 +1919,42 @@ StrLen  Long,Auto
         Return
       End
       memcpy(pClarionAddress,pCellAddress,1)
-
+!endregion
+!region -     ClaLONG
     of ClaLONG orof ClaSIGNED
       memcpy(pClarionAddress,pCellAddress,4)
 
+!endregion
+!region -     ClaSHORT
     of ClaSHORT
-      If band(lg,0FFFF0000h) > 0 and self.opt:ignoretruncation = false
+      If (lg < -32768 or lg > 32767) and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 2 & ')' & ' value: ' & lg)
         Return
       End
       memcpy(pClarionAddress,pCellAddress,2)
 
+!endregion
+!region -     ClaUSHORT
     of ClaUSHORT
-      if (lg < 0 or lg > 65535) and self.opt:ignoretruncation = false
+      If band(lg,0FFFF0000h) > 0 and self.opt:ignoretruncation = false
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 2 & ')' & ' value: ' & lg)
         self.SetError(DataTruncatedError)
         Return
       End
       ush = lg
       memcpy(pClarionAddress,address(ush),2)
-
+!endregion
+!region -     ClaULONG
     of ClaULONG orof ClaUNSIGNED
       memcpy(pClarionAddress,pCellAddress,4)
 
     ! integers from the db can be stored in real fields in clarion.
     !!!todo support integers past long up to 15 digits
+!endregion
+!region -     ClaSREAL
     of ClaSREAL
-      memcpy(address(lg),pCellAddress,4)
-      If lg > 07fffffh  and self.opt:ignoretruncation = false     ! sReal has 23 bits of integer space
+      If (lg < -16777216 or lg > 16777216 )  and self.opt:ignoretruncation = false     ! sReal has 23 bits of integer space
         self.SetError(DataTruncatedError)
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 4 & ')' & ' value: ' & lg)
         Return
@@ -1941,27 +1962,32 @@ StrLen  Long,Auto
       sr = lg
       memcpy(pClarionAddress,address(sr),4)
 
+!endregion
+!region -     ClaREAL
     of ClaREAL
       !!!todo support integers past long up to 15 digits
-      memcpy(address(lg),pCellAddress,4)
       rl = lg
       memcpy(pClarionAddress,address(rl),8)
 
+!endregion
+!region -     ClaDATE , ClaTIME
     of ClaDATE
     orof ClaTIME
       self.SetError(FieldMismatchError)
       self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
-
+!endregion
+!region -     ClaDECIMAL, ClaPDECIMAL
     of ClaDECIMAL
     orof ClaPDECIMAL
       !!!todo support integers past long
-      memcpy(address(lg),pCellAddress,4)
-      strmem = self._StringToDec(lg, self.Fields.DecimalSize, self.Fields.DecimalPlaces,self.Fields.Type)
+      strmem = lg
+      self._StringToDec(strmem,self.Fields.Type, address(strmem), self.Fields.DecimalSize, self.Fields.DecimalPlaces)
       memcpy(pClarionAddress,address(strmem),pClarionLength)
 
+!endregion
+!region -     ClaSTRING ClaMEMO
     of ClaSTRING orof ClaMEMO
       !!! todo handle integers longer than a long
-      memcpy(address(lg),pCellAddress,4)
       cst = lg
       len = len(cst)
       If len > pClarionLength and self.opt:ignoretruncation = false
@@ -1969,10 +1995,14 @@ StrLen  Long,Auto
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
         Return
       End
+      If len > pClarionLength then len = pClarionLength.
       memcpy(pClarionAddress,address(cst),len)
       StrLen = len
-      do PadString
+      If rTextLength = 0 then do PadString.
+      rTextLength = Len
 
+!endregion
+!region -     ClaCSTRING
     of ClaCSTRING
       !!! todo handle integers longer than a long
       If pCellLength > 4 and self.opt:ignoretruncation = false
@@ -1980,17 +2010,19 @@ StrLen  Long,Auto
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
         Return
       End
-      memcpy(address(lg),pCellAddress,4)
       cst = lg
       len = len(cst)
       If len > pClarionLength and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
         Return
       End
+      If len > pClarionLength-1 then len = pClarionLength-1.
       memcpy(pClarionAddress,address(cst),len+1)
-      StrLen = len+1
+      StrLen = len
       do PadString
 
+!endregion
+!region -     ClaPSTRING
     of ClaPSTRING
       !!! todo handle integers longer than a long
       If pCellLength > 4 and self.opt:ignoretruncation = false
@@ -1998,30 +2030,36 @@ StrLen  Long,Auto
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
         Return
       End
-      memcpy(address(lg),pCellAddress,4)
       cst = lg
       len = len(cst)
       If len + 1 > pClarionLength and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
         Return
       End
+      If len > pClarionLength-1 then len = pClarionLength-1.
       memcpy(pClarionAddress+1,address(cst),len)
       memset(pClarionAddress,len,1)
       StrLen = len
       do PadString
+!endregion
+!region -     Else
     else
       self.SetError(FieldMismatchError)
       self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
-
+!endregion
     End
-
+!endregion
+!region - SQLITE_FLOAT
+!------------------------------------------------
   Of SQLITE_FLOAT
     case pClarionType
-
+!region -     ClaREAL
     of ClaREAL
       memcpy(pClarionAddress,pCellAddress,8)
-
+!endregion
+!region -     ClaSREAL
     of ClaSREAL
+      !!!todo, REAL into SREAL needs work to see if a) the integer part will fit, b) the exponent part will fit.  Using SREAL in the file declaration is thus not recommended.
       memcpy(address(rl),pCellAddress,8)
       If rl > 07fffffh and self.opt:ignoretruncation = false  ! sReal has 23 bits of integer space
         self.SetError(DataTruncatedError)
@@ -2031,12 +2069,18 @@ StrLen  Long,Auto
       sr = rl
       memcpy(pClarionAddress,address(sr),4)
 
+!endregion
+!region -     ClaDECIMAL , ClaPDECIMAL
     of ClaDECIMAL
     orof ClaPDECIMAL
       memcpy(address(rl),pCellAddress,8)
-      strmem = self._StringToDec(rl, self.Fields.DecimalSize, self.Fields.DecimalPlaces,self.Fields.Type)
+      !!!todo - some sort of range check to see if the real "fit" into the declared decimal field. Note that decimal field may have fewer decimal places. That's not neceessarily a truncation.
+      strmem = rl
+      self._StringToDec(strmem,self.Fields.Type, address(strmem), self.Fields.DecimalSize, self.Fields.DecimalPlaces)
       memcpy(pClarionAddress,address(strmem),pClarionLength)
 
+!endregion
+!region -     ClaSTRING , ClaMEMO
     of ClaSTRING orof ClaMEMO
       memcpy(address(rl),pCellAddress,8)
       cst = rl
@@ -2046,10 +2090,14 @@ StrLen  Long,Auto
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
         Return
       End
+      If len > pClarionLength then len = pClarionLength.
       memcpy(pClarionAddress,address(cst),len)
       StrLen = len
-      do PadString
+      If rTextLength = 0 then do PadString.
+      rTextLength = Len
 
+!endregion
+!region -     ClaCSTRING
     of ClaCSTRING
       memcpy(address(rl),pCellAddress,8)
       cst = rl
@@ -2059,9 +2107,13 @@ StrLen  Long,Auto
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
         Return
       End
+      If len > pClarionLength-1 then len = pClarionLength-1.
+      StrLen = len
       memcpy(pClarionAddress,address(cst),len+1)
       do PadString
 
+!endregion
+!region -     ClaPSTRING
     of ClaPSTRING
       memcpy(address(rl),pCellAddress,8)
       cst = rl
@@ -2071,18 +2123,22 @@ StrLen  Long,Auto
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
         Return
       End
+      If len > pClarionLength-1 then len = pClarionLength-1.
       memcpy(pClarionAddress+1,address(cst),len)
       memset(pClarionAddress,len,1)
       StrLen = len
       do PadString
-
+!endregion
+!region -     Else
     else
       memcpy(address(rl),pCellAddress,8)
       self.SetError(FieldMismatchError)
       self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
-
+!endregion
     End
-
+!endregion
+!region - SQLITE_TEXT
+!------------------------------------------------
   Of SQLITE_TEXT
     If pClarionType = ClaSTRING and pSqlTimeStamp   ! Special Case
       str &= pCellAddress & ':' & pCellLength
@@ -2095,104 +2151,137 @@ StrLen  Long,Auto
       memcpy(pClarionAddress,address(strmem),8)
     Else
       Case pClarionType
+!region -     ClaDATE
       of ClaDATE
           str &= pCellAddress & ':' & pCellLength
           strmem = self.DeformatText(str)
           memcpy(pClarionAddress,address(strmem),4)
-
+!endregion
+!region -     ClaTIME
       of ClaTIME
           str &= pCellAddress & ':' & pCellLength
           strmem = self.DeformatText(str)
           memcpy(pClarionAddress,address(strmem),4)
-
+!endregion
+!region -     ClaCSTRING
       of ClaCSTRING
-          If pClarionLength < pCellLength + 1 and self.opt:ignoretruncation = false
+          len = pCellLength
+          If pClarionLength < len + 1 and self.opt:ignoretruncation = false
             str &= pCellAddress & ':' & pCellLength
             self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
             self.SetError(DataTruncatedError)
             Return
           End
-          memcpy(pClarionAddress,pCellAddress,pCellLength)
-          memset(pClarionAddress+pCellLength,0,1)
-          StrLen = pCellLength
+          If len > pClarionLength-1 then len = pClarionLength-1.
+          memcpy(pClarionAddress,pCellAddress,len)
+          memset(pClarionAddress+len,0,1)
+          StrLen = Len
           do PadString
-
+!endregion
+!region -     ClaSTRING , CLAMEMO
       of ClaSTRING
       orof ClaMEMO
-          If pClarionLength < pCellLength and self.opt:ignoretruncation = false
+          len = pCellLength
+          If pClarionLength < len and self.opt:ignoretruncation = false
             str &= pCellAddress & ':' & pCellLength
             self.SetError(DataTruncatedError)
             self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
             Return
           End
-          memcpy(pClarionAddress,pCellAddress,pCellLength)
-          StrLen = pCellLength
-          do PadString
+          If len > pClarionLength then len = pClarionLength.
+          memcpy(pClarionAddress,pCellAddress,Len)
+          StrLen = len
+          If rTextLength = 0 then do PadString.
+          rTextLength = pCellLength
 
+!endregion
+!region -     ClaPSTRING
       of ClaPSTRING
-          If pClarionLength < pCellLength + 1 and self.opt:ignoretruncation = false
+          len = pCellLength
+          If pClarionLength < len + 1 and self.opt:ignoretruncation = false
             str &= pCellAddress & ':' & pCellLength
             self.SetError(DataTruncatedError)
             self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
             Return
           End
+          If len > pClarionLength-1 then len = pClarionLength-1.
           memcpy(pClarionAddress+1,pCellAddress,pCellLength)
           memset(pClarionAddress,pCellLength,1)
-          StrLen = pCellLength
+          StrLen = len
           do PadString
 
+!endregion
+!region -     ClaBLOB
       of ClaBLOB
         self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
-
+!endregion
+!region -     else
       else
         str &= pCellAddress & ':' & pCellLength
         self.SetError(FieldMismatchError)
         self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & str)
-
+!endregion
       End
     End
 
+!endregion
+!region - SQLITE_BLOB
+!------------------------------------------------
   Of SQLITE_BLOB
     Case pClarionType
+!region -     ClaBLOB
     of ClaBLOB
       self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
-
+!endregion
+!region -     ClaSTRING , ClaMEMO
     of ClaSTRING
     orof ClaMEMO
+      len = pCellLength
       str &= pCellAddress & ':' & pCellLength
-      If pClarionLength < pCellLength and self.opt:ignoretruncation = false
+      If pClarionLength < len and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
-      memcpy(pClarionAddress,pCellAddress,pCellLength)
-      StrLen = pCellLength
-      do PadString
+      If len > pClarionLength then len = pClarionLength.
+      memcpy(pClarionAddress,pCellAddress,len)
+      StrLen = len
+      If rTextLength = 0 then do PadString.
+      rTextLength = pCellLength
 
+!endregion
+!region -     ClaCSTRING
     of ClaCSTRING
+      len = pCellLength
       str &= pCellAddress & ':' & pCellLength
-      If pClarionLength < pCellLength + 1 and self.opt:ignoretruncation = false
+      If pClarionLength < len + 1 and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
+      If len > pClarionLength-1 then len = pClarionLength-1.
       memcpy(pClarionAddress,pCellAddress,pCellLength)
       memset(pClarionAddress+pCellLength+1,0,1)
-      StrLen = pCellLength
+      StrLen = len
       do PadString
 
+!endregion
+!region -     ClaPSTRING
     of ClaPSTRING
+      len = pCellLength
       str &= pCellAddress & ':' & pCellLength
-      If pClarionLength < pCellLength + 1 and self.opt:ignoretruncation = false
+      If pClarionLength < len + 1 and self.opt:ignoretruncation = false
         self.SetError(DataTruncatedError)
         self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
+      If len > pClarionLength-1 then len = pClarionLength-1.
       memcpy(pClarionAddress+1,pCellAddress,pCellLength)
       memset(pClarionAddress,pCellLength,1)
-      StrLen = pCellLength
+      StrLen = len
       do PadString
-
+!endregion
+!region -     else
     else
       str &= pCellAddress & ':' & pCellLength
       If pClarionLength < pCellLength and self.opt:ignoretruncation = false
@@ -2201,29 +2290,40 @@ StrLen  Long,Auto
         Return
       End
       memcpy(pClarionAddress,pCellAddress,pCellLength)
+!endregion
     End
-
+!endregion
+!region - SQLITE_NULL
+!------------------------------------------------
   Of SQLITE_NULL
     case pClarionType
+!region -     ClaBLOB
     of ClaBLOB
       self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
+!endregion
+!region -     ClaMEMO
     of ClaMEMO
       StrLen = 0
       do PadString
+!endregion
+!region -     Else
     Else
       If pSetFieldNull
         self._SetFieldNull()
       End
+!endregion
     End
+!endregion
   End
 
+! StrLen is the length of the incoming sql string (not including the terminating 0) - which may be less than the clarion string.
 PadString  routine
-  If pClarionLength > StrLen
+  If pClarionLength > StrLen and StrLen >= 0
     Case pClarionType
     of ClaSTRING  orof ClaMEMO
-       memset(pClarionAddress + StrLen ,32, pClarionLength - StrLen)               ! pad with spaces
+       memset(pClarionAddress + StrLen ,32, pClarionLength - StrLen)             ! pad with spaces
     of ClaCSTRING
-       memset(pClarionAddress + StrLen ,0, pClarionLength - StrLen)               ! pad with zeros
+       memset(pClarionAddress + StrLen ,0, pClarionLength - StrLen)              ! pad with zeros
     of ClaPSTRING
       If pClarionLength-1 > StrLen
         memset(pClarionAddress + StrLen + 1,32, pClarionLength - StrLen - 1)     ! pad with spaces
@@ -2956,6 +3056,7 @@ Len       Long,Auto
             val.Prepend('base64:')
           else
             val.ToHex(st:upper)
+            val.Prepend('hex:')
           end
           If self.AlwaysQuote
             val.Prepend('"')
@@ -2966,9 +3067,9 @@ Len       Long,Auto
         str.Append(val)
       End
       str.Append(self.LineEndings)
-    else
+    Else
       self.SetErrorSqlite(result,'[p201]')
-      break
+      Break
     End
     result = sqlite3_step(Stmt)  ! next row, and cycle.
   End
@@ -3017,6 +3118,7 @@ y           Long,auto
 recs        Long,auto
 stmt        Long,Auto
 result      Long,Auto
+count       Long,Auto
   code
   ! read the SQL table to see what columns exist
   self.sqlcode.SetValue('SELECT * FROM pragma_table_info(''' & self._sanitize(self.FullPathName,driver:sqlTable) & ''') ORDER BY cid;')
@@ -3048,12 +3150,13 @@ result      Long,Auto
 
   If Band(pOptions,driver:header)
     Header = 1
-    Loop i = 1 to self.Result.Rows()
+    count = 0
+    Loop i = 1 to self.Result.Rows()                                   ! i is the column number in the database record
       sqlColumnName = self.result.GetCell(i,2)
       sqlColumnNameSafe = self.TranslateReserved(sqlColumnName)
-      Loop y = 1 to lne.records()
+      Loop y = 1 to lne.records()                                      ! y is the column number in the csv file
         If upper(lne.GetLine(y)) = upper(sqlColumnName)
-          mapColumns[y] = i
+          mapColumns[y] = i                                            ! mapcolumns[csv column] = db column
           sqlColumnNotNull[y] = self.result.GetCell(i,4)
           case self.result.GetCell(i,3)
           of 'INTEGER'
@@ -3078,13 +3181,15 @@ result      Long,Auto
       End
       If mapColumns[y]
         FieldsList.Append(sqlColumnNameSafe,,',')
-        ValuesList.Append(self._GenParm(i),,',')
+        count += 1
+        ValuesList.Append(self._GenParm(count),,',')
         If self.Result.GetCell(y,6) = 0  ! not in the primary key
           excluded.Append( sqlColumnNameSafe & '= excluded.' & sqlColumnNameSafe ,st:NoClip,',')
         End
       End
     End
   Else
+    Count = 0
     Loop y = 1 to lne.records()
       mapColumns[y] = y
       sqlColumnNotNull[y] = self.result.GetCell(i,4)
@@ -3107,7 +3212,8 @@ result      Long,Auto
         sqlColumnType[y] = SQLITE_FLOAT   ! for other numerics
       end
       FieldsList.Append(sqlColumnNameSafe,,',')
-      ValuesList.Append(self._GenParm(i),,',')
+      count += 1
+      ValuesList.Append(self._GenParm(count),,',')
       If self.Result.GetCell(y,6) = 0  ! not in the primary key
         excluded.append( sqlColumnNameSafe & '= excluded.' & sqlColumnNameSafe ,st:NoClip,',')
       End
@@ -3160,8 +3266,10 @@ ImportPage  Routine
     Lne.SetValue(str.GetLine(x))
     Lne.Split(self.Separator,'"','"')
     result = sqlite3_reset(stmt)
-    Loop y = 1 to lne.Records()
-      If mapColumns[y] = 0 then cycle.  ! some items in the CSV can be excluded, if they are not in the Project List.
+    count = 0
+    Loop y = 1 to lne.Records()                                                                                                    ! y is the column number in the csv file
+      If mapColumns[y] = 0 then cycle.  ! some items in the CSV can be excluded, if they are not in the Project List.              ! mapcolumns[csv column] = db column
+      count += 1
       CsvCell.SetValue(lne.Getline(y))
       If CsvCell.GetValue() = self.NullString
         If sqlColumnNotNull[y]
@@ -3170,20 +3278,20 @@ ImportPage  Routine
           Of SQLITE_INTEGER
             i = 0
             If self._logBind then self.Log('[BIND][sb36]' & mapColumns[y] & ' (int)' & i).
-            result = sqlite3_bind_int(Stmt,mapColumns[y],i)
+            result = sqlite3_bind_int(Stmt,count,i)
           Of SQLITE_FLOAT
             r = 0
             If self._logBind then self.Log('[BIND][sb37]' & mapColumns[y] & ' (real)' & r).
-            result = sqlite3_bind_double(Stmt,mapColumns[y],r)
+            result = sqlite3_bind_double(Stmt,count,r)
           Else
             !of SQLITE_TEXT
             !orof SQLITE_BLOB
             If self._logBind then self.Log('[BIND][sb38]' & mapColumns[y] & ' (string)' & s).   ! null not allowed, so setting the column to a blank string.
-            result = sqlite3_bind_textA(stmt,mapColumns[y],s, 0 ,SQLITE_TRANSIENT)
+            result = sqlite3_bind_textA(stmt,count,s, 0 ,SQLITE_TRANSIENT)
           End
         Else
           If self._logBind then self.Log('[BIND][sb39]' & mapColumns[y] & ' (null)').           ! null in the csv, null in the database allowed
-          result = sqlite3_bind_null(stmt,mapColumns[y])
+          result = sqlite3_bind_null(stmt,count)
         End
       Else ! text in CSV is not a "null"
         CsvCell.CSVDecode()
@@ -3191,22 +3299,21 @@ ImportPage  Routine
           CsvCell.Top(7)
           CsvCell.Base64Decode()
           If self._logBind then self.Log('[BIND][sb42]' & mapColumns[y] & ' (blob)' & CsvCell.GetValue()).
-          result = sqlite3_bind_blob(stmt,mapColumns[y],CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
+          result = sqlite3_bind_blob(stmt,count,CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
           cycle
         End
         Case(sqlColumnType[y])
         of SQLITE_BLOB
-          csvcell.trace()
           CsvCell.FromHex()
           If self._logBind then self.Log('[BIND][sb43]' & mapColumns[y] & ' (blob)' & CsvCell.GetValue()).
-          result = sqlite3_bind_blob(stmt,mapColumns[y],CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
+          result = sqlite3_bind_blob(stmt,count,CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
           cycle
 
         of SQLITE_INTEGER
           If CsvCell.IsAllDigits()
             i = CsvCell.GetValue()
             If self._logBind then self.Log('[BIND][sb40]' & mapColumns[y] & ' (int)' & i).
-            result = sqlite3_bind_int(Stmt,mapColumns[y],i)
+            result = sqlite3_bind_int(Stmt,count,i)
             cycle
           End
 
@@ -3214,12 +3321,12 @@ ImportPage  Routine
           If numeric(CsvCell.GetValue())
             r = CsvCell.GetValue()
             If self._logBind then self.Log('[BIND][sb41]' & mapColumns[y] & ' (real)' & r).
-            result = sqlite3_bind_double(Stmt,mapColumns[y],r)
+            result = sqlite3_bind_double(Stmt,count,r)
             cycle
           End
         end
         If self._logBind then self.Log('[BIND][sb44]' & mapColumns[y] & ' (string)' & CsvCell.GetValue()).
-        result = sqlite3_bind_textA(stmt,mapColumns[y],CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
+        result = sqlite3_bind_textA(stmt,count,CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
       End
     End
     ! execute SQL
@@ -4050,6 +4157,7 @@ result   Long,Auto
 rType    Long,Auto
 rAddress BIGINT,Auto
 rLength  BIGINT,Auto
+rTextLen Long
   Code
   If self.CheckConnect() = driver:notok then Return.
   ! Parent MUST be called first for UPSERT. Abort if Errorcode set.
@@ -4064,7 +4172,7 @@ rLength  BIGINT,Auto
           self.Fields &= self._WithFieldNode(x)
           If self.Fields.ReadOnly or self.Fields.IsIdentity
             self.result.GetCell(1,x,rType,rAddress,rLength)
-            self._morph(self.fields.label,self.Fields.type,self.ClaFCB.rec_buf + self.Fields.offset, self.Fields.length,rType,rAddress,rLength,self.fields.SqlTimeStamp,true)
+            self._morph(self.fields.label,self.Fields.type,self.ClaFCB.rec_buf + self.Fields.offset, self.Fields.length,rType,rAddress,rLength,self.fields.SqlTimeStamp,true,rTextLen)
            End
         End
       End
@@ -4351,6 +4459,11 @@ DriverFileSQLite2Class.GetPROP:DatabaseName   PROCEDURE() ! Get name of database
 DriverFileSQLite2Class.GETPROP:Driver         PROCEDURE() ! Get the clarion name of the driver - like SQLite2
   code
   Return 'SQLite2'
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class.GETPROP:DriverVersion  PROCEDURE()
+  code
+  Return driver:version
 
 !-----------------------------------------------------------------
 ! SQLite is embeded so there is no "user"

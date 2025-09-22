@@ -460,6 +460,7 @@ ChildrenAffected           Long                        ! set after a relational 
 Separator                  cstring(11)
 LineEndings                cstring(11)
 AlwaysQuote                byte
+DateTimeSeparator          cstring(4)
 NullString                 cstring(11)
 
 PrimaryKeyPosition         String(DRIVER:MAX_PRIMARY_KEY_SIZE)        ! the position of the current record buffer in the file
@@ -510,8 +511,10 @@ _GetString                 Procedure(*Cla_StrDesc pStr),String,Virtual
 _LongToHex                 Procedure(LONG pX),String,Virtual
 _HexToLong                 Procedure(String pHex),Long,Virtual
 _BinToLong                 Procedure(String pHex),Long,Virtual
-_DecToString               Procedure(Long pMem, Long pLength, Long pDecSize, Long pDecPlaces, Byte pType),String,Virtual
-_StringToDec               Procedure(String pStr, Long pDecSize, Long pDecPlaces, Byte pType),String,Virtual
+_i64Fit                    Procedure(String pI64,Byte pClaType,Long pLength),Long,Virtual
+_i64ToCString              Procedure(String pI64,*CString pClaString),Long,Virtual
+_DecToString               Procedure(Long pStrAddr, Long pLength, Long pDecSize, Long pDecPlaces, Byte pClaType, *String rString),Virtual
+_StringToDec               Procedure(*String pStr, Byte pClaType, Long rDecimalAddress, Long rDecSize, Long rDecPlaces),Virtual
 _parseVersionDb            Procedure(String pVersion),Virtual
 _parseVersionClient        Procedure(String pVersion),Virtual
 _parseOrderByField         Procedure(String pClause,*Byte pDescending,*Byte pNoCase),String,Virtual
@@ -521,7 +524,7 @@ _GenParm                   Procedure(Long pCount),String,Virtual
 CheckVersion               Procedure(Long pMajorRqd, Long pMinorRqd, Long pBuildRqd),Long,Virtual
 ExplainStart               Procedure(),String,Virtual
 ExplainEnd                 Procedure(),String,Virtual
-_Morph                     Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull),Virtual
+_Morph                     Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength),Virtual
 
 SeedRandom                 Procedure(),Virtual
 GetElapsedTimeUTC          Procedure(),Real,Virtual
@@ -622,7 +625,7 @@ SEND                       Procedure(STRING pMessage),STRING,PROC,VIRTUAL
 SetDriverOption            Procedure(String pOption, String pValue),STRING,VIRTUAL
 SQL                        Procedure(String pSql,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),VIRTUAL
 STATUS                     Procedure(),LONG,VIRTUAL
-SUBSET                     Procedure(FILE pFile,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),VIRTUAL
+SUBSET                     Procedure(FILE pFile,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),VIRTUAL 
 _AddSubsetCommand          Procedure(Byte pOperation, File pFile,<String pFilter>),VIRTUAL
 BuildSubsetCTE             Procedure(StringTheory pCTE),VIRTUAL
 BuildSubsetWhere           Procedure(StringTheory pWhere, String pAlias),VIRTUAL
@@ -634,20 +637,23 @@ SetProp:AlwaysQuote        Procedure(Byte pValue),VIRTUAL
 GetPROP:ChildrenAffected   Procedure(),STRING,VIRTUAL
 GetPROP:CodePage           Procedure(),STRING,VIRTUAL
 SetPROP:CodePage           Procedure(Long pCodePage),VIRTUAL
+GetProp:ClientVersionBuild Procedure(),STRING,VIRTUAL
+GetProp:ClientVersionMajor Procedure(),STRING,VIRTUAL
+GetProp:ClientVersionMinor Procedure(),STRING,VIRTUAL
+GetPROP:ClientVer          Procedure(),STRING,VIRTUAL  ! returns a character string indicating the version of the client DLL or ODBC DLL accessed by the driver
 
 GetPROP:Database           Procedure(),STRING,VIRTUAL             ! Get name of the database from the connect string
 GetPROP:DatabaseName       Procedure(),STRING,VIRTUAL             ! Get database name - ie SQLITE, PostgreSQL etc.
 GetProp:DbVersionMajor     Procedure(),STRING,VIRTUAL
 GetProp:DbVersionMinor     Procedure(),STRING,VIRTUAL
-GetProp:ClientVersionBuild Procedure(),STRING,VIRTUAL
-GetProp:ClientVersionMajor Procedure(),STRING,VIRTUAL
-GetProp:ClientVersionMinor Procedure(),STRING,VIRTUAL
+GetProp:DateTimeSeparator  Procedure(),STRING,VIRTUAL
+SetProp:DateTimeSeparator  Procedure(String pValue),VIRTUAL
 GetProp:DbVersionBuild     Procedure(),STRING,VIRTUAL
 GetPROP:DBMSVer            Procedure(),STRING,VIRTUAL  ! returns a character string indicating the version of the DBMS accessed by the driver.
-GetPROP:ClientVer          Procedure(),STRING,VIRTUAL  ! returns a character string indicating the version of the client DLL or ODBC DLL accessed by the driver
 GetPROP:Distinct           Procedure(),STRING,VIRTUAL
 SetPROP:Distinct           Procedure(BYTE pDistinct),VIRTUAL
 GetPROP:Driver             Procedure(),STRING,VIRTUAL             ! Get name of file driver
+GetPROP:DriverVersion      Procedure(),STRING,VIRTUAL
 GetPROP:Fields             Procedure(Long pIndex),STRING,VIRTUAL
 GetPROP:FetchSize          Procedure(),STRING,VIRTUAL  ! Get the pagesize parameter for the last BUFFER statement executed
 SetPROP:FetchSize          Procedure(Long pValue),VIRTUAL  ! Set the pagesize parameter
@@ -843,6 +849,7 @@ _parseKeys               Procedure(Byte pIndex),VIRTUAL
 _parseKeyNameAttributes  Procedure(),VIRTUAL
 _parseBlobNameAttributes Procedure(),VIRTUAL
 _parseFieldNameAttributes Procedure(FieldGroupType pNode),VIRTUAL
+_ParseFieldSQLType       Procedure(FieldGroupType pNode),VIRTUAL
 _Optimize                Procedure(),VIRTUAL
 _writeHandle             Procedure(),VIRTUAL
 _newMemoMemory           Procedure(Long pNewSize),VIRTUAL
@@ -1050,6 +1057,7 @@ GET                        Procedure(BIGINT pFilePointer),VIRTUAL
 GET                        Procedure(BIGINT pFilePointer, LONG pLength),VIRTUAL
 GET                        Procedure(KEY pKey),VIRTUAL
 GET                        Procedure(KEY pKey, BIGINT pKeyPointer),VIRTUAL
+GETROW                     Procedure(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>),Virtual
 HOLD                       Procedure(),VIRTUAL
 HOLD                       Procedure(LONG pSeconds),VIRTUAL
 MERGE                      Procedure(FILE pDestination, LONG pOptions),VIRTUAL
@@ -1281,6 +1289,7 @@ INIT                      Procedure(FILE pFile, Long pForce=false),DERIVED
 
 SetDriverOption           Procedure(String pOption, String pValue),STRING,Derived
 _ExecuteSelect            Procedure(),VIRTUAL
+_BindOffset               Procedure(),VIRTUAL
 
 _ClearOrderFieldsInShadowBuffer Procedure(Long pOpCode, Long pFromField),Virtual
 _ClearOrderFieldInShadowBuffer  Procedure(Long pOpCode, Long pDirection, Long pIndex),Virtual
@@ -1439,7 +1448,7 @@ _SetViewFieldWalker             Procedure(ViewTreeType pNode,String pLabel, Stri
 _ForceAutoProjectNow            Procedure(ViewTreeType pNode),Virtual
 _IsProjected                    Procedure(ViewTreeType pNode,Long pIndex),Long,Virtual  ! returns i in pNode.Field[i]
 _ProjectField                   Procedure(ViewTreeType pNode,Long pIndex,String pExpression),Long,Proc,Virtual  ! returns i in pNode.Field[i]
-_Morph                          Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull),Derived
+_Morph                          Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength),Derived
 
 
 Walk                            Procedure(),VIRTUAL
@@ -1547,6 +1556,7 @@ BuildOrderByUnique              Procedure(),Virtual
 _BuildOrderByUniqueWalker       Procedure(ViewTreeType pNode),Virtual
 SetOrderByFromQueue             Procedure(),Virtual
 _ClearOrderFieldsInShadowBuffer Procedure(Long pOpCode),Virtual
+_BindOffset                     Procedure(),Virtual
 _ExecuteSelect                  Procedure(),VIRTUAL
 _CalcLimitAndOffset             Procedure(*Long rLimit, *Long rOffset),VIRTUAL
 _PrependFixedToWhere            Procedure(Long pIndex),VIRTUAL

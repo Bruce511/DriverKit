@@ -3,17 +3,17 @@
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
-! Object based drivers introduces new FILE and VIEW commands. This module acts as a simple
+! Object based drivers introduces new FILE and VIEW commands. This module acts as a simple 
 ! bridge so those commands can be called just like any other FILE or VIEW command.
 !------------------------------------------------------------------------------------------------
   Member()
   Include('errors.clw'),once
   Include('cwdriver.inc'),once
-  Include('driverclass.inc'),once
+  Include('driverclass.inc'),once      
   Map
     Module('rtl')
       ClaSetError(Long pError),name('Cla$seterror')
-    End
+    End  
   End
 
 !------------------------------------------------------------------------------------------------
@@ -21,12 +21,12 @@ ADDRELATION            Procedure(File pChildFile, File pParentFile, Long pOnUpda
 obj      &DriverFileClass
   code
   obj &= pChildFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]ADDRELATION(' & name(pParentFile) & ',' & pOnUpdate & ',' & pOnDelete & ')').
-  obj.AddRelation(pParentFile,pOnUpdate,pOnDelete,pChildField1,pParentField1,pChildField2,pParentField2,pChildField3,pParentField3,pChildField4,pParentField4,pChildField5,pParentField5,pChildField6,pParentField6,pChildField7,pParentField7,pChildField8,pParentField8,pChildField9,pParentField9,pChildField10,pParentField10)
+  obj.AddRelation(pParentFile,pOnUpdate,pOnDelete,pChildField1,pParentField1,pChildField2,pParentField2,pChildField3,pParentField3,pChildField4,pParentField4,pChildField5,pParentField5,pChildField6,pParentField6,pChildField7,pParentField7,pChildField8,pParentField8,pChildField9,pParentField9,pChildField10,pParentField10)  
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', long)').
   obj.BindField(pName,pLong)
@@ -49,12 +49,12 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', real)').
   obj.BindField(pName,pReal)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 BINDFIELD                 Procedure(FILE pFile,String pName, *String pString)
 obj      &DriverFileClass
@@ -62,8 +62,8 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End                           
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', string)').
   obj.BindField(pName,pString)
   Return
@@ -75,7 +75,7 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', cstring)').
   obj.BindField(pName,pCstring)
@@ -88,9 +88,9 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', long)').
+    Return 
+  End             
+  If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', long)').  
   obj.BindField(pName,pLong)
   Return
 
@@ -101,12 +101,12 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', real)').
   obj.BindField(pName,pReal)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 BINDFIELD                 Procedure(VIEW pView,String pName, *String pString)
 obj      &DriverViewClass
@@ -114,7 +114,7 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', string)').
   obj.BindField(pName,pString)
@@ -127,28 +127,28 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', cstring)').
   obj.BindField(pName,pCstring)
   Return
 
 !------------------------------------------------------------------------------------------------
-BYTES64                   Procedure(FILE pFile)
+BYTES64                   Procedure(FILE pFile)  
 obj      &DriverFileClass
-  Code
+  Code 
   obj &= pFile{prop:object}
   If obj &= null
     Return BYTES(pFile)
-  End
+  End                      
   If obj._logClarion then obj.Log('[CLAR]BYTES64()').
   Return obj.BYTES()
-
+              
 !------------------------------------------------------------------------------------------------
 ! This form of the procedure takes all parameters by reference. This is necessary so that the CALL method can get the addresses, and compare them to the BindQueue
 CALLOUT                  Procedure(FILE pFile,String pStoredProcedure,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>)
 obj      &DriverFileClass
-  Code
+  Code 
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
@@ -161,7 +161,7 @@ obj      &DriverFileClass
 !------------------------------------------------------------------------------------------------
 CALL                    Procedure (FILE pFile,String pStoredProcedure,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>)
 obj      &DriverFileClass
-  Code
+  Code 
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
@@ -170,11 +170,11 @@ obj      &DriverFileClass
   If obj._logClarion then obj.Log('[CLAR]CALL('& clip(pStoredProcedure)&',,)').
   obj.Call(pStoredProcedure,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20)
   Return
-
+  
 !-----------------------------------------------------------------------------------------------
 CLEARPROPS              Procedure(FILE pFile)
 obj      &DriverFileClass
-  Code
+  Code 
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
@@ -202,25 +202,25 @@ COMMIT              Procedure (FILE pFile)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]COMMIT()').
-  obj.Commit()
-  Return
-
+  obj.Commit()             
+  Return 
+  
 !------------------------------------------------------------------------------------------------
 COPY                 Procedure(FILE pFile, String pFileName, Long pOptions)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End                     
   If obj._logClarion then obj.Log('[CLAR]COPY('&clip(pFileName)&',' & pOptions & ')').
-  obj.Copy(pFileName,pOptions)
+  obj.Copy(pFileName,pOptions)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -228,12 +228,12 @@ CONNECT              Procedure(FILE pFile,Long pOptions=0)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End                     
   If obj._logClarion then obj.Log('[CLAR]CONNECT()').
-  obj.Connect(pOptions)
+  obj.Connect(pOptions)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -241,38 +241,38 @@ CREATEDB                Procedure(FILE pFile)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   If obj._logClarion then obj.Log('[CLAR]CREATEDB()').
   obj.CreateDB('')
-  Return
-
+  Return             
+  
 !------------------------------------------------------------------------------------------------
 CREATEDB                Procedure(FILE pFile,String pDatabaseName)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   If obj._logClarion then obj.Log('[CLAR]CREATEDB(''' & clip(pDatabaseName) & ''')').
   obj.CreateDB(pDatabaseName)
-  Return
-
+  Return  
+  
 !------------------------------------------------------------------------------------------------
 CREATEFIELD             Procedure(FILE pFile,*? pField1)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]CREATEFIELD(field)').
-  obj.CreateField(pField1)
+  obj.CreateField(pField1)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -280,12 +280,12 @@ CREATEFIELD             Procedure(FILE pFile,String pName, String pType, String 
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End                    
   If obj._logClarion then obj.Log('[CLAR]CREATEFIELD('&clip(pName)& ',' & clip(pType) & ',' & clip(pConstraint) & ' )').
-  obj.CreateField(pName,pType,pConstraint)
+  obj.CreateField(pName,pType,pConstraint)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -293,12 +293,12 @@ CREATEKEY               Procedure(KEY pKey)
 obj      &DriverFileClass
   code
   obj &= pKey{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
-  If obj._logClarion then obj.Log('[CLAR]CREATEKEY(key)').
-  obj.CreateKey(pKey)
+  If obj._logClarion then obj.Log('[CLAR]CREATEKEY(key)').  
+  obj.CreateKey(pKey)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -306,12 +306,12 @@ CREATEKEY               Procedure(File pFile,String pName, Long pOptions, *? pFi
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End                   
   If obj._logClarion then obj.Log('[CLAR]CREATEKEY('&clip(pName)& ',' & clip(pOptions)  & ' )').
-  obj.CreateKey(pOptions, pField1, pField2, pField3, pField4, pField5, pField6, pField7, pField8, pField9, pField10 )
+  obj.CreateKey(pOptions, pField1, pField2, pField3, pField4, pField5, pField6, pField7, pField8, pField9, pField10 )             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -320,25 +320,25 @@ CREATERELATIONS        Procedure(File pFile)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
-  If obj._logClarion then obj.Log('[CLAR]CREATERELATIONS()').
-  obj.CreateRelations()
+  If obj._logClarion then obj.Log('[CLAR]CREATERELATIONS()').  
+  obj.CreateRelations()             
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 REMOVEFIELD               Procedure(FILE pFile,String pName)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End      
   If obj._logClarion then obj.Log('[CLAR]REMOVEFIELD(' & clip(pName) & ')').
-  obj.RemoveField(pName)
+  obj.RemoveField(pName)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -346,12 +346,12 @@ REMOVEKEY               Procedure(KEY pKey)
 obj      &DriverFileClass
   code
   obj &= pKey{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]REMOVEKEY(key)').
-  obj.RemoveKey(pKey)
+  obj.RemoveKey(pKey)             
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -359,50 +359,50 @@ REMOVEKEY               Procedure(FILE pFile,String pName)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End               
   If obj._logClarion then obj.Log('[CLAR]REMOVEKEY(' & clip(pName) & ')').
-  obj.RemoveKey(pName)
+  obj.RemoveKey(pName)             
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 DECLARATION          Procedure(FILE pFile,Long pOptions=0)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return ''
-  End
+  End                    
   If obj._logClarion then obj.Log('[CLAR]DECLARATION(' & pOptions & ')').
-  Return obj.Declaration(pOptions)
+  Return obj.Declaration(pOptions)             
 
 !------------------------------------------------------------------------------------------------
 DECLARATION      Procedure(KEY pKey,Long pOptions=0)
 obj      &DriverFileClass
   code
   obj &= pKey{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return ''
   End
   If obj._logClarion then obj.Log('[CLAR]DECLARATION(key,' & pOptions & ')').
-  Return obj.Declaration(pKey, pOptions)
-
+  Return obj.Declaration(pKey, pOptions)             
+           
 !------------------------------------------------------------------------------------------------
 DELETE              Procedure (FILE pFile,String pFilter)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End              
   If obj._logClarion then obj.Log('[CLAR]DELETE(' & clip(pFilter) & ')').
-  obj.Delete(pFilter)
-  Return
+  obj.Delete(pFilter)             
+  Return 
 
 !------------------------------------------------------------------------------------------------
 ! resist the urge to call prop:disconnect here. That call is deprecated.
@@ -410,33 +410,33 @@ DISCONNECT           Procedure(FILE pFile)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End             
   If obj._logClarion then obj.Log('[CLAR]DISCONNECT()').
-  obj.Disconnect()
-  Return
-
+  obj.Disconnect()             
+  Return 
+      
 !------------------------------------------------------------------------------------------------
 EXCEPT              Procedure (FILE pFile,<String pFilter>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End                   
   If obj._logClarion then obj.Log('[CLAR]EXCEPT(' & clip(pFilter) & ')').
-  obj.Except(pFilter)
-  Return
-
+  obj.Except(pFilter)             
+  Return                 
+  
 !------------------------------------------------------------------------------------------------
-EXISTS            Procedure(FILE pFile, String pTableName)
+EXISTS            Procedure(FILE pFile, String pTableName)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return false
   End
@@ -444,11 +444,11 @@ obj      &DriverFileClass
   Return obj.Exists(pTableName)
 
 !------------------------------------------------------------------------------------------------
-EXISTS             Procedure(FILE pFile)
+EXISTS             Procedure(FILE pFile)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return false
   End
@@ -460,11 +460,11 @@ EXISTS            Procedure(FILE pFile,Long pWhat, STRING pName)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return false
   End
-  If obj._logClarion
+  If obj._logClarion 
     case pWhat
     of driver:table
       obj.Log('[CLAR]EXISTS(table,' &  clip(pName) & ')')
@@ -475,30 +475,30 @@ obj      &DriverFileClass
     of driver:index
       obj.Log('[CLAR]EXISTS(index,' & clip(pName) & ')')
     End
-  End
+  End  
   Return obj.Exists(pWhat,pName)
-
+  
 !------------------------------------------------------------------------------------------------
-EXISTSDB          Procedure(FILE pFile, String pDatabaseName)
+EXISTSDB          Procedure(FILE pFile, String pDatabaseName)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return false
   End
   If obj._logClarion then obj.Log('[CLAR]EXISTSDB(' & clip(pDatabaseName) & ')').
   Return obj.ExistsDB(pDatabaseName)
-
+  
 !------------------------------------------------------------------------------------------------
-EXPORT            Procedure(FILE pFile, String pFileName, Long pOptions=0,Long pFormat=driver:csv)
+EXPORT            Procedure(FILE pFile, String pFileName, Long pOptions=0,Long pFormat=driver:csv)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End                
   If obj._logClarion then obj.Log('[CLAR]EXPORT(' & clip(pFileName) & ',' & pFormat & ',' & pOptions & ')').
   obj.Export(pFileName,pOptions,pFormat)
   Return
@@ -508,40 +508,57 @@ GET64             Procedure(FILE pFile,BIGINT pFilePointer)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]GET64(' & pFilePointer & ')').
   obj.Get(pFilePointer)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
-GET64             Procedure(FILE pFile,BIGINT pFilePointer, LONG pLength)
+GETROW            Procedure(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
+  End
+  If obj._logClarion then obj.Log('[CLAR]GET(File,field,value,...)').
+  obj.GetRow(pFile,pField1,pValue1,pField2,pValue2,pField3,pValue3,pField4,pValue4,pField5,pValue5,pField6,pValue6,pField7,pValue7,pField8,pValue8,pField9,pValue9,pField10,pValue10)
+  Return
+
+!------------------------------------------------------------------------------------------------
+GETROW            Procedure(Key pKey,*? pField1, <*? pField2>,<*? pField3>,<*? pField4>,<*? pField5>,<*? pField6>,<*? pField7>,<*? pField8>,<*? pField9>,<*? pField10>)
+  code
+
+!------------------------------------------------------------------------------------------------
+GET64             Procedure(FILE pFile,BIGINT pFilePointer, LONG pLength) 
+obj      &DriverFileClass
+  code
+  obj &= pFile{prop:object}
+  If obj &= null 
+    ClaSetError(NoDriverSupport)
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]GET64(' & pFilePointer & ',' & pLength & ')').
   obj.Get(pFilePointer,pLength)
   Return
-
+                                         
 !------------------------------------------------------------------------------------------------
 GETRANDOM         Procedure(FILE pFile)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]GETRANDOM()').
   obj.GetRandom('')
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 GETRANDOM         Procedure(FILE pFile,String pFilter)
 obj      &DriverFileClass
@@ -556,31 +573,31 @@ obj      &DriverFileClass
   Return
 
 !------------------------------------------------------------------------------------------------
-IMPORT            Procedure(FILE pFile, String pFileName, Long pOptions=0,Long pFormat=driver:csv)
+IMPORT            Procedure(FILE pFile, String pFileName, Long pOptions=0,Long pFormat=driver:csv)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]IMPORT(' & clip(pFileName) & ',' & pFormat & ',' & pOptions & ')').
   obj.Import(pFileName,pOptions,pFormat)
   Return
-
+           
 !------------------------------------------------------------------------------------------------
 INTERSECT              Procedure (FILE pFile,<String pFilter>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]INTERSECT(' & clip(pFilter) & ')') .
-  obj.Intersect(pFilter)
-  Return
-
+  obj.Intersect(pFilter)             
+  Return                 
+           
 !------------------------------------------------------------------------------------------------
 JOINTABLE               Procedure(VIEW pView, FILE pParentFile, *FILE pJoinFile, Byte pJoinType, String pExpression)
 obj      &DriverViewClass
@@ -593,15 +610,15 @@ obj      &DriverViewClass
   If pParentFile &= null or pParentFile{prop:object} = ''
     ClaSetError(NoDriverSupport)
     Return
-  End
-  If pJoinFile{prop:object} = ''
+  End  
+  If pJoinFile{prop:object} = ''   
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End                   
   If obj._logClarion then obj.Log('[CLAR]JOINTABLE()') .
   obj.JoinTable(pParentFile,pJoinFile,pJoinType,pExpression)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 JOINTABLE               Procedure(VIEW pView, FILE pParentFile, *KEY pKey, Byte pJoinType, *? pField1) !, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>)
 obj      &DriverViewClass
@@ -614,7 +631,7 @@ obj      &DriverViewClass
   If pParentFile &= null or pParentFile{prop:object} = ''
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   If obj._logClarion then obj.Log('[CLAR]JOINTABLE()') .
   obj.JoinTable(pParentFile,pKey,pJoinType,pField1)
   Return
@@ -624,7 +641,7 @@ JOINTABLE               Procedure(VIEW pView, FILE pParentFile, *KEY pKey, Byte 
 obj      &DriverViewClass
   code
   !!!todo
-
+  
 !------------------------------------------------------------------------------------------------
 LOGOUTCONNECTION        Procedure(FILE pFile)
 obj      &DriverFileClass
@@ -632,13 +649,13 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End  
   obj._transactionPrimary = true
-  If obj._logClarion then obj.Log('[CLAR]LOGOUTCONNECTION()') .
-  obj.LogoutConnection()
-  Return
-
+  If obj._logClarion then obj.Log('[CLAR]LOGOUTCONNECTION()') . 
+  obj.LogoutConnection()   
+  Return               
+  
 !------------------------------------------------------------------------------------------------
 LOG                 Procedure(FILE pFile,String pText)
 obj      &DriverFileClass
@@ -646,10 +663,10 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)   ! don't change the error code when logging
-    Return
-  End
+    Return 
+  End  
   obj.Log(pText)
-  Return
+  Return               
 
 !------------------------------------------------------------------------------------------------
 LOGBUFFER             Procedure(FILE pFile)
@@ -658,10 +675,10 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)  ! don't change the error code when logging
-    Return
-  End
+    Return 
+  End  
   obj.LogBuffer()
-  Return
+  Return               
 
 !------------------------------------------------------------------------------------------------
 LOGBUFFER             Procedure(VIEW pView)
@@ -670,10 +687,10 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)   ! don't change the error code when logging
-    Return
-  End
+    Return 
+  End  
   obj.LogBuffer()
-  Return
+  Return                       
 
 !------------------------------------------------------------------------------------------------
 LOGGINGON           Procedure(FILE pFile,<String pFileName>,Long pOptions=0)
@@ -682,10 +699,10 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)   ! don't change the error code when logging
-    Return
-  End
-  obj.LoggingOn(pFileName,pOptions)
-  Return
+    Return 
+  End  
+  obj.LoggingOn(pFileName,pOptions)   
+  Return               
 
 !------------------------------------------------------------------------------------------------
 LOGGINGON           Procedure(VIEW pView,<String pFileName>,Long pOptions=0)
@@ -694,10 +711,10 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)   ! don't change the error code when logging
-    Return
-  End
-  obj.LoggingOn(pFileName,pOptions)
-  Return
+    Return 
+  End  
+  obj.LoggingOn(pFileName,pOptions)   
+  Return     
 
 !------------------------------------------------------------------------------------------------
 LOGGINGOFF          Procedure(FILE pFile)
@@ -706,10 +723,10 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)   ! don't change the error code when logging
-    Return
-  End
-  obj.LoggingOff()
-  Return
+    Return 
+  End  
+  obj.LoggingOff()   
+  Return               
 
 !------------------------------------------------------------------------------------------------
 LOGGINGOFF          Procedure(VIEW pView)
@@ -718,13 +735,26 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     !ClaSetError(NoDriverSupport)   ! don't change the error code when logging
+    Return 
+  End  
+  obj.LoggingOff()   
+  Return               
+
+!------------------------------------------------------------------------------------------------
+MERGE              Procedure(FILE pFile,FILE pDestination, Long pOptions=0)  
+obj      &DriverFileClass
+  code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
     Return
-  End
-  obj.LoggingOff()
+  End                   
+  If obj._logClarion then obj.Log('[CLAR]MERGE(' & name(pDestination) & ')') . 
+  obj.Merge(pDestination,pOptions)
   Return
 
 !------------------------------------------------------------------------------------------------
-MERGE              Procedure(FILE pFile,FILE pDestination, Long pOptions=0)
+MERGE              Procedure(FILE pFile,STRING pDestination, Long pOptions=0)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
@@ -732,34 +762,21 @@ obj      &DriverFileClass
     ClaSetError(NoDriverSupport)
     Return
   End
-  If obj._logClarion then obj.Log('[CLAR]MERGE(' & name(pDestination) & ')') .
+  If obj._logClarion then obj.Log('[CLAR]MERGE(' & clip(pDestination) & ')') . 
   obj.Merge(pDestination,pOptions)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
-MERGE              Procedure(FILE pFile,STRING pDestination, Long pOptions=0)
-obj      &DriverFileClass
-  code
-  obj &= pFile{prop:object}
-  If obj &= null
-    ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]MERGE(' & clip(pDestination) & ')') .
-  obj.Merge(pDestination,pOptions)
-  Return
-
-!------------------------------------------------------------------------------------------------
-POINTER64          Procedure(FILE pFile)
+POINTER64          Procedure(FILE pFile)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
   If obj &= null
     Return Pointer(pFile)
-  End
-  If obj._logClarion then obj.Log('[CLAR]POINTER64()') .
-  Return obj.Pointer()
-
+  End  
+  If obj._logClarion then obj.Log('[CLAR]POINTER64()') . 
+  Return obj.Pointer() 
+  
 !------------------------------------------------------------------------------------------------
 PROJECTFIELD       Procedure(VIEW pView,String pExpression,String pAs)
 obj      &DriverViewClass
@@ -767,9 +784,9 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
-  If obj._logClarion then obj.Log('[CLAR]PROJECTFIELD(' & clip(pExpression) & ',''' & clip(pAs) & ''')') .
+  If obj._logClarion then obj.Log('[CLAR]PROJECTFIELD(' & clip(pExpression) & ',''' & clip(pAs) & ''')') . 
   obj.ProjectField(pExpression,pAs)
   Return
 
@@ -780,9 +797,9 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
-  If obj._logClarion then obj.Log('[CLAR]PROJECTFIELD(' & name(pFile) & ',' & pIndex & ')') .
+  If obj._logClarion then obj.Log('[CLAR]PROJECTFIELD(' & name(pFile) & ',' & pIndex & ')') . 
   obj.ProjectField(pFile,pIndex)
   Return
 
@@ -793,7 +810,7 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]PROJECTFIELD(field)')  .
   obj.ProjectField(pField)
@@ -804,27 +821,27 @@ PUT64             Procedure(FILE pFile,BIGINT pFilePointer)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]PUT64(' & pFilePointer & ')') .
+    Return 
+  End      
+  If obj._logClarion then obj.Log('[CLAR]PUT64(' & pFilePointer & ')') . 
   obj.Put(pFilePointer)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
-PUT64             Procedure(FILE pFile,BIGINT pFilePointer, LONG pLength)
+PUT64             Procedure(FILE pFile,BIGINT pFilePointer, LONG pLength) 
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
-  If obj._logClarion then obj.Log('[CLAR]PUT64(' & pFilePointer &',' & pLength & ')') .
+  If obj._logClarion then obj.Log('[CLAR]PUT64(' & pFilePointer &',' & pLength & ')') . 
   obj.Put(pFilePointer,pLength)
   Return
-
+    
 !------------------------------------------------------------------------------------------------
 RECORDS            Procedure(FILE pFile,String pFilter)
 obj      &DriverFileClass
@@ -834,90 +851,90 @@ obj      &DriverFileClass
     ClaSetError(NoDriverSupport)
     Return 0
   End
-  If obj._logClarion then obj.Log('[CLAR]RECORDS(' & clip(pFilter) & ')') .
+  If obj._logClarion then obj.Log('[CLAR]RECORDS(' & clip(pFilter) & ')') .   
   Return obj.RecordsFilter(pFilter)
 
 !------------------------------------------------------------------------------------------------
 RECORDS            Procedure(FILE pFile,*? pField1, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>)
 obj      &DriverFileClass
-  Code
+  Code       
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
     Return 0
   End
-  If obj._logClarion then obj.Log('[CLAR]RECORDS(field(s))') .
+  If obj._logClarion then obj.Log('[CLAR]RECORDS(field(s))') .   
   Return obj.Records(pField1,pField2,pField3,pField4,pField5)
-
+  
 !------------------------------------------------------------------------------------------------
 RECORDS            Procedure(VIEW pView, Long pNumber)
 obj      &DriverViewClass
-  Code
+  Code       
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
     Return 0
-  End
-  If obj._logClarion then obj.Log('[CLAR]RECORDS(' & pNumber & ')') .
+  End                          
+  If obj._logClarion then obj.Log('[CLAR]RECORDS(' & pNumber & ')') .     
   Return obj.Records(pNumber)
 
 !------------------------------------------------------------------------------------------------
-RECORDS64          Procedure(FILE pFile)
+RECORDS64          Procedure(FILE pFile)  
 obj      &DriverFileClass
-  Code
+  Code       
   obj &= pFile{prop:object}
   If obj &= null
     Return Records(pFile)
-  End
-  If obj._logClarion then obj.Log('[CLAR]RECORDS64()').
+  End  
+  If obj._logClarion then obj.Log('[CLAR]RECORDS64()').      
   Return obj.Records()
 
 !------------------------------------------------------------------------------------------------
-RECORDS64          Procedure(VIEW pView)
+RECORDS64          Procedure(VIEW pView)  
 obj      &DriverViewClass
-  Code
+  Code       
   obj &= pView{prop:object}
   If obj &= null
     Return Records(pView)
-  End
-  If obj._logClarion then obj.Log('[CLAR]RECORDS64()').
+  End  
+  If obj._logClarion then obj.Log('[CLAR]RECORDS64()').      
   Return obj.Records()
-
+ 
 !------------------------------------------------------------------------------------------------
-REOPEN             Procedure(FILE pFile,Long pNewMode)
+REOPEN             Procedure(FILE pFile,Long pNewMode)  
 obj      &DriverFileClass
-  Code
+  Code       
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
     Return
   End
-  If obj._logClarion then obj.Log('[CLAR]REOPEN(' & pNewMode & ')') .
+  If obj._logClarion then obj.Log('[CLAR]REOPEN(' & pNewMode & ')') .  
   obj.Reopen(pNewMode)
   Return
 
 !------------------------------------------------------------------------------------------------
 RESULTGET          Procedure(FILE pFile,BIGINT pRow)
   Code
-  If pFile{prop:object} = ''
+  If pFile{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End      
   pFile{prop:resultGet} = pRow         !!!todo
   Return
 
 !------------------------------------------------------------------------------------------------
 RESULTGET          Procedure(VIEW pView,BIGINT pRow)
   Code
-  If pView{prop:object} = ''
+  If pView{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End      
   pView{prop:resultGet} = pRow         !!!todo
   Return
 
 !------------------------------------------------------------------------------------------------
-ResultGet         Procedure(FILE pFile,BIGINT pRow,Long pColumn)
+ResultGet         Procedure(FILE pFile,BIGINT pRow,Long pColumn)                                  
 obj      &DriverFileClass
   Code
   obj &= pFile{prop:object}
@@ -927,10 +944,10 @@ obj      &DriverFileClass
   End
   If obj.Result &= NULL
     Return ''
-  End
-  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .
+  End  
+  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .  
   Return obj.Result.GetCell(pRow,pColumn)
-
+  
 !------------------------------------------------------------------------------------------------
 ResultGet         Procedure(VIEW pView,BIGINT pRow,Long pColumn)
 obj      &DriverViewClass
@@ -942,12 +959,12 @@ obj      &DriverViewClass
   End
   If obj.Result &= NULL
     Return ''
-  End
-  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .
+  End  
+  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .  
   Return obj.Result.GetCell(pRow,pColumn)
 
 !------------------------------------------------------------------------------------------------
-ResultGet         Procedure(FILE pFile,BIGINT pRow,Long pColumn,*Byte pNull)
+ResultGet         Procedure(FILE pFile,BIGINT pRow,Long pColumn,*Byte pNull)                                  
 obj      &DriverFileClass
   Code
   obj &= pFile{prop:object}
@@ -957,10 +974,10 @@ obj      &DriverFileClass
   End
   If obj.Result &= NULL
     Return ''
-  End
-  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .
+  End  
+  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .  
   Return obj.Result.GetCell(pRow,pColumn,pNull)
-
+  
 !------------------------------------------------------------------------------------------------
 ResultGet         Procedure(VIEW pView,BIGINT pRow,Long pColumn,*Byte pNull)
 obj      &DriverViewClass
@@ -972,14 +989,14 @@ obj      &DriverViewClass
   End
   If obj.Result &= NULL
     Return ''
-  End
-  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .
-  Return obj.Result.GetCell(pRow,pColumn,pNull)
-
+  End  
+  If obj._logClarion then obj.Log('[CLAR]RESULTGET(' & pRow & ',' & pColumn & ')') .  
+  Return obj.Result.GetCell(pRow,pColumn,pNull)      
+  
 !------------------------------------------------------------------------------------------------
 RESULTNEXT         Procedure(FILE pFile)
   Code
-  If pFile{prop:object} = ''
+  If pFile{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return
   End
@@ -989,7 +1006,7 @@ RESULTNEXT         Procedure(FILE pFile)
 !------------------------------------------------------------------------------------------------
 RESULTNEXT         Procedure(VIEW pView)
   Code
-  If pView{prop:object} = ''
+  If pView{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return
   End
@@ -999,27 +1016,27 @@ RESULTNEXT         Procedure(VIEW pView)
 !------------------------------------------------------------------------------------------------
 RESULTPREVIOUS     Procedure(FILE pFile)
   Code
-  If pFile{prop:object} = ''
+  If pFile{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End                           
   pFile{prop:resultPrevious}   !!!todo
   Return
 
 !------------------------------------------------------------------------------------------------
 RESULTPREVIOUS     Procedure(VIEW pView)
   Code
-  If pView{prop:object} = ''
+  If pView{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End                           
   pView{prop:resultPrevious}   !!!todo
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 RESULTROW         Procedure(FILE pFile)!,BIGINT
   Code
-  If pFile{prop:object} = ''
+  If pFile{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return 0
   End
@@ -1028,25 +1045,25 @@ RESULTROW         Procedure(FILE pFile)!,BIGINT
 !------------------------------------------------------------------------------------------------
 RESULTROW         Procedure(VIEW pView)!,BIGINT
   Code
-  If pView{prop:object} = ''
+  If pView{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return 0
   End
   Return pView{prop:resultRow}   !!!todo
 
 !------------------------------------------------------------------------------------------------
-RESULTRECORDS      Procedure(FILE pFile)!,BIGINT
+RESULTRECORDS      Procedure(FILE pFile)!,BIGINT 
   Code
-  If pFile{prop:object} = ''
+  If pFile{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return 0
   End
   Return pFile{prop:resultRecords} !!!todo
 
 !------------------------------------------------------------------------------------------------
-RESULTRECORDS      Procedure(VIEW pView)!,BIGINT
+RESULTRECORDS      Procedure(VIEW pView)!,BIGINT 
   Code
-  If pView{prop:object} = ''
+  If pView{prop:object} = '' 
     ClaSetError(NoDriverSupport)
     Return 0
   End
@@ -1060,8 +1077,8 @@ obj      &DriverFileClass
   If obj &= null
     ClaSetError(NoDriverSupport)
     Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]RESUMERELATIONS()') .
+  End              
+  If obj._logClarion then obj.Log('[CLAR]RESUMERELATIONS()') .  
   obj.ResumeRelations()
 
 !------------------------------------------------------------------------------------------------
@@ -1069,14 +1086,14 @@ ROLLBACK              Procedure (FILE pFile)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
-  If obj._logClarion then obj.Log('[CLAR]ROLLBACK()') .
-  obj.Rollback()
-  Return
-
+  If obj._logClarion then obj.Log('[CLAR]ROLLBACK()') .  
+  obj.Rollback()             
+  Return 
+  
 !------------------------------------------------------------------------------------------------
 ROLLBACK           Procedure(FILE pFile,String pSavePoint)
 obj      &DriverFileClass
@@ -1084,9 +1101,9 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]ROLLBACK(' & clip(pSavePoint) & ')') .
+    Return 
+  End  
+  If obj._logClarion then obj.Log('[CLAR]ROLLBACK(' & clip(pSavePoint) & ')') .  
   obj.Rollback(pSavePoint)
   Return
 
@@ -1097,12 +1114,12 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]SAVEPOINT(' & clip(pSavePoint) & ')') .
+    Return 
+  End                        
+  If obj._logClarion then obj.Log('[CLAR]SAVEPOINT(' & clip(pSavePoint) & ')') .  
   obj.SavePoint(pSavePoint)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 SEARCH             Procedure(FILE pFile,String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>)
 obj      &DriverFileClass
@@ -1110,11 +1127,11 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]SEARCH(' & clip(pSearchString) & ')') .
+    Return 
+  End                 
+  If obj._logClarion then obj.Log('[CLAR]SEARCH(' & clip(pSearchString) & ')') .    
   obj.Search(pSearchString,pField1,pField2,pField3,pField4,pField5,pField6,pField7,pField8,pField9,pField10,pField11,pField12,pField13,pField14,pField15)
-  Return
+  Return  
 
 !------------------------------------------------------------------------------------------------
 SEARCH             Procedure(VIEW pView,String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>)
@@ -1123,11 +1140,11 @@ obj      &DriverViewClass
   obj &= pView{prop:object}
   If obj &= null
     ClaSetError(NoDriverSupport)
-    Return
-  End
-  If obj._logClarion then obj.Log('[CLAR]SEARCH(' & clip(pSearchString) & ')') .
+    Return 
+  End          
+  If obj._logClarion then obj.Log('[CLAR]SEARCH(' & clip(pSearchString) & ')') .    
   obj.Search(pSearchString,pField1,pField2,pField3,pField4,pField5,pField6,pField7,pField8,pField9,pField10,pField11,pField12,pField13,pField14,pField15)
-  Return
+  Return  
 
 !------------------------------------------------------------------------------------------------
 SET                Procedure(FILE pFile,*BIGINT pPointer)
@@ -1138,7 +1155,7 @@ obj      &DriverFileClass
     SET(pFile,pPointer+0)
     Return
   End
-  If obj._logClarion then obj.Log('[CLAR]SET(' & pPointer & ')') .
+  If obj._logClarion then obj.Log('[CLAR]SET(' & pPointer & ')') .      
   obj.Set(pPointer)
   Return
 
@@ -1149,7 +1166,7 @@ obj      &DriverFileClass
   obj &= pFile{prop:object}
   if obj &= null
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]SET64(' & pPointer & ')') .
   obj.Set(pPointer)
@@ -1196,7 +1213,7 @@ obj      &DriverFileClass
   Else
     If obj._logClarion then obj.Log('[CLAR]SETCUSTOMTYPE(' & clip(pFieldLabel) & ',iCustom)') .
     obj.SetCustomType(pFieldLabel,pCustom)
-  End
+  End  
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -1204,10 +1221,10 @@ SKIP64           Procedure(FILE pFile,BIGINT pFilePointer)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
-  End
+    Return 
+  End            
   If obj._logClarion then obj.Log('[CLAR]SKIP(' & pFilePointer & ')') .
   obj.Skip(pFilePointer)
   Return
@@ -1217,26 +1234,26 @@ SQL              Procedure(FILE pFILE,String pSql,<? pParm1>,<? pParm2>,<? pParm
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]SQL(' & clip(pSQL) & ')') .
   obj.Sql(pSql,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20)
   Return
-
+                 
 !------------------------------------------------------------------------------------------------
 SUBSET              Procedure(FILE pFILE,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]SUBSET(parm(s))') .
-  obj.Subset(pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20)
-  Return
+  obj.Subset(pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20)  
+  Return  
 
 !------------------------------------------------------------------------------------------------
 SUSPENDRELATIONS        Procedure(FILE pFile)
@@ -1250,7 +1267,7 @@ obj      &DriverFileClass
   If obj._logClarion then obj.Log('[CLAR]SUSPENDRELATIONS()') .
   obj.SuspendRelations()
   Return
-
+                 
 !------------------------------------------------------------------------------------------------
 ToQueue           Procedure(FILE pFile,Queue pQueue)
 obj      &DriverFileClass
@@ -1263,7 +1280,7 @@ obj      &DriverFileClass
   If obj._logClarion then obj.Log('[CLAR]TOQUEUE(queue)') .
   obj.ToQueue(pQueue)
   Return
-
+  
 !------------------------------------------------------------------------------------------------
 FromQueue         Procedure(FILE pFile,Queue pQueue)
 obj      &DriverFileClass
@@ -1282,23 +1299,23 @@ UNION              Procedure (FILE pFile,<String pFilter>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
-    Return
+    Return 
   End
   If obj._logClarion then obj.Log('[CLAR]UNION(' & clip(pFilter) & ')') .
-  obj.Union(pFilter)
-  Return
-
+  obj.Union(pFilter)             
+  Return   
+  
 !------------------------------------------------------------------------------------------------
 UPDATE            Procedure(File pFile,String pFilter,*? pField1,String pValue1,<*? pField2>,<String pValue2>,<*? pField3>,<String pValue3>,<*? pField4>,<String pValue4>,<*? pField5>,<String pValue5>,<*? pField6>,<String pValue6>,<*? pField7>,<String pValue7>,<*? pField8>,<String pValue8>,<*? pField9>,<String pValue9>,<*? pField10>,<String pValue10>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   If obj._logClarion then obj.Log('[CLAR]UPDATE(' & clip(pFilter) & ')') .
   obj.Update(pFilter,pField1,pValue1,pField2,pValue2,pField3,pValue3,pField4,pValue4,pField5,pValue5,pField6,pValue6,pField7,pValue7,pField8,pValue8,pField9,pValue9,pField10,pValue10)
   Return
@@ -1307,32 +1324,32 @@ obj      &DriverFileClass
 UPDATE            Procedure(Key pKey,*? pField1,String pValue1,<*? pField2>,<String pValue2>,<*? pField3>,<String pValue3>,<*? pField4>,<String pValue4>,<*? pField5>,<String pValue5>,<*? pField6>,<String pValue6>,<*? pField7>,<String pValue7>,<*? pField8>,<String pValue8>,<*? pField9>,<String pValue9>,<*? pField10>,<String pValue10>)
 obj      &DriverFileClass
   code
-  If pKey &= null
+  If pKey &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   obj &= pKey{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   If obj._logClarion then obj.Log('[CLAR]UPDATE(key)') .
   obj.Update(pKey,pField1,pValue1,pField2,pValue2,pField3,pValue3,pField4,pValue4,pField5,pValue5,pField6,pValue6,pField7,pValue7,pField8,pValue8,pField9,pValue9,pField10,pValue10)
   Return
 
 !------------------------------------------------------------------------------------------------
-UPSERT            Procedure(FILE pFile)
+UPSERT            Procedure(FILE pFile)  
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
-  If obj &= null
+  If obj &= null 
     ClaSetError(NoDriverSupport)
     Return
-  End
+  End  
   If obj._logClarion then obj.Log('[CLAR]UPSERT()') .
   obj.Upsert()
   Return
-
+  
 !------------------------------------------------------------------------------------------------
-
-
+  
+                                                                                                                              

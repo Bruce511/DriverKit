@@ -10,23 +10,27 @@
 ! For new Opcodes and FieldTypes see Driver.Inc
 !------------------------------------------------------------------------------------------------
 
+Driver:Version  Equate('1.10')
+
 !Region ----------  Equates ----------
 ! BIGINT: use this for now as a 52 bit integer. In later clarion versions could become a int64
 BIGINT                  Equate(REAL)
 Driver:BufferWholeFile  Equate(-1)
 Driver:FreeBuffer       Equate(-2)
 
-Driver:HTML             Equate(4)
+Driver:HTML             Equate(4)    ! Export : Format parameter
 Driver:JSON             Equate(3)
 Driver:XML              Equate(2)
 Driver:CSV              Equate(1)
-Driver:Clipboard        Equate(128)
 
-Driver:Append           Equate(128)
+Driver:Clipboard        Equate(128)  ! Export:  used in place of file name
+
+Driver:Append           Equate(128)  ! Export : Options parameters
 Driver:Header           Equate(1)
 Driver:Upsert           Equate(2)
 Driver:Add              Equate(4)
 Driver:Bin2Base64       Equate(8)
+Driver:Base64           Equate(8)
 
 Driver:LogSql           Equate(1)
 Driver:LogClarion       Equate(2)
@@ -112,6 +116,8 @@ driver:RestrictDelete   Equate(3)
 
       Export(FILE pFile,STRING pFileName, Long pOptions=0,Long pFormat=driver:csv),name('EXPORTfile')
       !Export(VIEW pFile,STRING pFileName,Long pFormat,Long pAppend),name('EXPORTview')
+      GetRow(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>),Name('GETkeyvalue')
+      GetRow(Key pKey,*? pField1, <*? pField2>,<*? pField3>,<*? pField4>,<*? pField5>,<*? pField6>,<*? pField7>,<*? pField8>,<*? pField9>,<*? pField10>),Name('GETkeyvalue2')
       Get64(FILE pFile,BIGINT pFilePointer),name('GET64')
       Get64(FILE pFile,BIGINT pFilePointer, LONG pLength),name('GET64len')
       GetRandom(FILE pFile),name('GETRANDOMfile')
@@ -250,11 +256,12 @@ prop:Separator          Equate(7433h)    ! used in EXPORT command
 prop:LineEndings        Equate(7434h)    ! used in EXPORT command
 prop:AlwaysQuote        Equate(7435h)    ! used in EXPORT command
 prop:NullString         Equate(7436h)    ! used in EXPORT command
-prop:LogClarion         Equate(7437h)
-PROP:LogBind            Equate(7438H)    ! Log BINDing of SQL values
-PROP:LogExplain         Equate(7439H)    ! Log EXPLAIN of all SET/NEXT loops
-PROP:LogOptions         Equate(743AH)
-prop:LogConnections     Equate(743Bh)
+prop:DateTimeSeparator  Equate(7437h)    ! used in EXPORT command
+prop:LogClarion         Equate(7438h)
+PROP:LogBind            Equate(7439h)    ! Log BINDing of SQL values
+PROP:LogExplain         Equate(743Ah)    ! Log EXPLAIN of all SET/NEXT loops
+PROP:LogOptions         Equate(743Bh)
+prop:LogConnections     Equate(743Ch)
 
 Prop:ClientVersionMajor Equate(7440h)
 Prop:ClientVersionMinor Equate(7441h)
@@ -264,6 +271,7 @@ Prop:Locked             Equate(7444h)
 Prop:Search             Equate(7445h)
 prop:SearchRank         Equate(7446h)
 prop:TryConnectedAs     Equate(7447h)
+prop:DriverVersion      Equate(7448h)
 Prop:DbHandle           Equate(PROP:HDBC)
 
 !EndRegion: Properties

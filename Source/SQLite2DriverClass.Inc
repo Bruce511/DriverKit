@@ -144,10 +144,10 @@ DriverFileSQLite2Class   Class(DriverFileSQLClass), Type, MODULE('SQLite2DriverC
 
 ! driver options
 
-!opt:where                  &Cstring       ! Cstring(255) !/WHERE=dude ! sets prop:where
+!opt:where                  &CString       ! CString(255) !/WHERE=dude ! sets prop:where
 opt:autoInc                 Byte           ! /AUTOINC=FALSE | TRUE  ! SQLite does AutoIncrement If AUTOINC is set to TRUE and there is a
-                                                           ! primary key on the table that has only one component and that component is of type
-                                                           ! LONG, then the CREATE statement will create an AUTOINCREMENT PRIMARY KEY
+                                                           ! primary Key on the table that has only one component and that component is of type
+                                                           ! Long, then the CREATE statement will create an AUTOINCREMENT PRIMARY Key
                                                            ! constraint on that component and ADD will retrieve the value for that field as
                                                            ! set by SQLite.
 
@@ -171,7 +171,7 @@ _AddCache                   Byte   ! these store the value that was in propscach
 _AddMemoCache               Byte            ! the status of nomemo when the Add SQL was cached.
 _AddSqlCache                &StringTheory   ! the SQL for the ADD command. So that prop:sql is set after the call.
 
-_AppendCache                Byte   ! then the Stmt_ s are no longer valid, and need to be-compiled by the database engine.
+_AppendCache                Byte   ! then the Stmt_ s are no Longer valid, and need to be-compiled by the database engine.
 _AppendMemoCache            Byte            ! the status of nomemo when the Append SQL was cached.
 _AppendSqlCache             &StringTheory   ! the SQL for the APPEND command. So that prop:sql is set after the call.
 
@@ -212,26 +212,26 @@ AfterConnect                Procedure(),Virtual
 _SetDefaultPragmas          Procedure(),Virtual
 ReplaceObject               Procedure(Long pOldObjectAddress),Derived
 ValidateStructure           Procedure(),Long,Derived
-_ValidateSearchTable        Procedure(),LONG,VIRTUAL
-_CreateFTS                  Procedure(),LONG,VIRTUAL
+_ValidateSearchTable        Procedure(),Long,VIRTUAL
+_CreateFTS                  Procedure(),Long,VIRTUAL
 ExplainStart                Procedure(),String,Derived
-_ExecuteSql                 Procedure(),LONG,Derived
-_ExecuteSql                 Procedure(Long pStmt),LONG,Virtual
-_ExecuteSqlWork             Procedure(Long pStmt),LONG,Virtual
-_ExecuteSql                 Procedure(StringTheory pSQL, <? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),LONG,Derived
+_ExecuteSql                 Procedure(),Long,Derived
+_ExecuteSql                 Procedure(Long pStmt),Long,Virtual
+_ExecuteSqlWork             Procedure(Long pStmt),Long,Virtual
+_ExecuteSql                 Procedure(StringTheory pSQL, <? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),Long,Derived
 _ClearStmts                 Procedure(),Virtual
 _GetDBVersion               Procedure(),Virtual
 _GenParm                    Procedure(Long pCount),String,Derived
 _AddSQL                     Procedure(Long pOpcode),Long,Virtual
 _MergeSQL                   Procedure(DriverFileSQLClass pDestination,String pDestinationName),Virtual
-_Prepare                    Procedure(),LONG,Virtual
-_Prepare                    Procedure(StringTheory pSqlCode),LONG,Virtual
+_Prepare                    Procedure(),Long,Virtual
+_Prepare                    Procedure(StringTheory pSqlCode),Long,Virtual
 _PrepareAdd                 Procedure(Long pOpcode),Virtual
 _PrepareDelete              Procedure(),Long,Virtual
 _PrepareDelete              Procedure(String pFilter),Long,Virtual
-_PrepareGet                 Procedure(KEY pKey),LONG,Virtual
-_PreparePut                 Procedure(),LONG,Virtual
-_PrepareRandom              Procedure(String pFilter, BIGINT pOffset),LONG,Virtual
+_PrepareGet                 Procedure(Key pKey),Long,Virtual
+_PreparePut                 Procedure(),Long,Virtual
+_PrepareRandom              Procedure(String pFilter, BIGINT pOffset),Long,Virtual
 
 _GenerateSelect             Procedure(Long pOpcode),Derived
 _BindParameters             Procedure(Long pStmt),Long,Virtual
@@ -241,97 +241,98 @@ _ToRecord                   Procedure(Long pStmt,Long pBuffer),Virtual
 _ExecuteToRecord            Procedure(Long pStmt,Long pWhichBuffer,Byte pErrIfNoRecord,Long pOpCode),Virtual
 _ExecuteToResults           Procedure(Long pStmt,iResultSet pResult),Virtual
 _ToResult                   Procedure(Long pStmt, Long pColumns,iResultSet pResult),Virtual
-_ExecuteSelect              Procedure(),DERIVED
-_MergeWork                  Procedure(DriverFileSQLClass pObj, String pDestination, LONG pOptions),Virtual
+_ExecuteSelect              Procedure(),Derived
+_MergeWork                  Procedure(DriverFileSQLClass pObj, String pDestination, Long pOptions),Virtual
 DeformatText                Procedure(String pText),String,Derived
-ResultToExplain             Procedure(iResultSet pResult),DERIVED
+ResultToExplain             Procedure(iResultSet pResult),Derived
 OperatorsToFunction         Procedure(StringTheory pStr),Long,Proc,Derived
-_TranslateDateSql           Procedure(String pMonth, String pDay, String pYear, Byte pLabelType,*Cstring pCond),String,Derived
+_TranslateDateSql           Procedure(String pMonth, String pDay, String pYear, Byte pLabelType,*CString pCond),String,Derived
 _TranslateDatePartSQL       Procedure(*CString pField,String pPart),String,Virtual
 _TranslateDaySQL            Procedure(*CString pField),String,Derived
 _TranslateMonthSQL          Procedure(*CString pField),String,Derived
 _TranslateYearSQL           Procedure(*CString pField),String,Derived
 _TranslateLabelOverDateSQL  Procedure(FieldGroupType pNode),String,Derived
 _TranslateLabelOverTimeSQL  Procedure(FieldGroupType pNode),String,Derived
-TranslateReserved           Procedure(*cstring pColumn),String,Derived
+TranslateReserved           Procedure(*cString pColumn),String,Derived
 TranslateSearch             Procedure(String pSearchString),String,Derived
 TranslateRegularExpression  Procedure(*CString pExpr,*CString pColumn),String,Derived
 _LoadArray                  Procedure(*String pStr,Long pIndex),Derived
 _AppendOrderQueueToWhere    Procedure(),Virtual
 SetOrderByFromQueue         Procedure(),Derived
-SetDriverOption             Procedure(String pOption, String pValue),STRING,Derived
+SetDriverOption             Procedure(String pOption, String pValue),String,Derived
 _ConstructKey               Procedure(Long pPrimary),Virtual
-_Morph                      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pDbType, Long pDbAddress, Long pDbLength, Long pSqlTimeStamp, Byte pSetFieldNull),Derived
-_UpdateFileStrings          Procedure(),DERIVED
+_Morph                      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pDbType, Long pDbAddress, Long pDbLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength),Derived
+_UpdateFileStrings          Procedure(),Derived
 
 ! File Procedures
 BUILD                       Procedure(),Virtual
-BUILD                       Procedure(KEY pKey),Virtual
-CLOSE                       Procedure(),DERIVED
-COPY                        Procedure(STRING pNewFileName, Long pOptions),DERIVED
-_CREATETABLE                Procedure(),DERIVED
-CREATEFIELD                 Procedure(*? pField1),DERIVED
-CREATEFIELD                 Procedure(String pName, String pType, String pConstraint),DERIVED
-CREATEKEY                   Procedure(KEY pKey),DERIVED
-CREATEKEY                   Procedure(String pName, Long pOptions, *? pField1, *? pField2, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>),DERIVED
-DECLARATION                 Procedure(Long pOptions=0),STRING,DERIVED
-DECLARATION                 Procedure(Key pKey,Long pOptions=0),STRING,DERIVED
-DUPLICATE                   Procedure(KEY pKey),DERIVED,LONG
-EMPTY                       Procedure(),DERIVED
-EXISTS                      Procedure(String pTablename),LONG,PROC,DERIVED
-FLUSH                       Procedure(),DERIVED
-GETSTATE                    Procedure(Long pSaveBlob),LONG,DERIVED
-MERGEFast                   Procedure(FILE pDestination, LONG pOptions),Virtual                                        ! New Command (called via MERGE)
-MERGESlow                   Procedure(FILE pDestination, LONG pOptions),Virtual                                        ! New Command (called via MERGE)
-MERGEFast                   Procedure(String pDestination, LONG pOptions),Virtual                                      ! New Command (called via MERGE)
-OPEN                        Procedure(LONG pAccessMode=022h),DERIVED
-PACK                        Procedure(),DERIVED
-REMOVEFIELD                 Procedure(String pName),DERIVED
-REMOVEKEY                   Procedure(String pName),DERIVED
-REMOVEKEY                   Procedure(KEY pKey),DERIVED
-RENAME                      Procedure(STRING pNewFileName),DERIVED
-RESTORESTATE                Procedure(Long pState, Byte pBuffer),DERIVED
-RESUMERELATIONS             Procedure(),DERIVED
-STREAM                      Procedure(),DERIVED
-SUSPENDRELATIONS            Procedure(),DERIVED
+BUILD                       Procedure(Key pKey),Virtual
+CLOSE                       Procedure(),Derived
+COPY                        Procedure(String pNewFileName, Long pOptions),Derived
+_CREATETABLE                Procedure(),Derived
+CREATEFIELD                 Procedure(*? pField1),Derived
+CREATEFIELD                 Procedure(String pName, String pType, String pConstraint),Derived
+CREATEKey                   Procedure(Key pKey),Derived
+CREATEKey                   Procedure(String pName, Long pOptions, *? pField1, *? pField2, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>),Derived
+DECLARATION                 Procedure(Long pOptions=0),String,Derived
+DECLARATION                 Procedure(Key pKey,Long pOptions=0),String,Derived
+DUPLICATE                   Procedure(Key pKey),Derived,Long
+EMPTY                       Procedure(),Derived
+EXISTS                      Procedure(String pTablename),Long,PROC,Derived
+FLUSH                       Procedure(),Derived
+GETSTATE                    Procedure(Long pSaveBlob),Long,Derived
+MERGEFast                   Procedure(File pDestination, Long pOptions),Virtual                                        ! New Command (called via MERGE)
+MERGESlow                   Procedure(File pDestination, Long pOptions),Virtual                                        ! New Command (called via MERGE)
+MERGEFast                   Procedure(String pDestination, Long pOptions),Virtual                                      ! New Command (called via MERGE)
+OPEN                        Procedure(Long pAccessMode=022h),Derived
+PACK                        Procedure(),Derived
+REMOVEFIELD                 Procedure(String pName),Derived
+REMOVEKey                   Procedure(String pName),Derived
+REMOVEKey                   Procedure(Key pKey),Derived
+RENAME                      Procedure(String pNewFileName),Derived
+RESTORESTATE                Procedure(Long pState, Byte pBuffer),Derived
+RESUMERELATIONS             Procedure(),Derived
+STREAM                      Procedure(),Derived
+SUSPENDRELATIONS            Procedure(),Derived
 
 ! Record Access
-ADD                         Procedure(),DERIVED
-APPEND                      Procedure(),DERIVED
-DELETE                      Procedure(),DERIVED
-DELETE                      Procedure(String pFilter),DERIVED
-EXPORTCSV                   Procedure(String pDosFileName, Long pOptions=0),LONG,PROC,DERIVED
-GET                         Procedure(KEY pKey),DERIVED
-GETRANDOM                   Procedure(String pFilter),DERIVED
-IMPORTCSV                   Procedure(String pDosFileName, Long pOptions=0),LONG,PROC,DERIVED
-NEXT                        Procedure(),DERIVED
-PREVIOUS                    Procedure(),DERIVED
-PUT                         Procedure(),DERIVED
-UPSERT                      Procedure(),DERIVED
+ADD                         Procedure(),Derived
+APPEND                      Procedure(),Derived
+DELETE                      Procedure(),Derived
+DELETE                      Procedure(String pFilter),Derived
+EXPORTCSV                   Procedure(String pDosFileName, Long pOptions=0),Long,PROC,Derived
+GET                         Procedure(Key pKey),Derived
+GETRANDOM                   Procedure(String pFilter),Derived
+IMPORTCSV                   Procedure(String pDosFileName, Long pOptions=0),Long,PROC,Derived
+NEXT                        Procedure(),Derived
+PREVIOUS                    Procedure(),Derived
+PUT                         Procedure(),Derived
+UPSERT                      Procedure(),Derived
 SEARCH                      Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),Derived
-_SET                        Procedure(Byte pSetMethod, BigInt pPointer,Key pSetKey, Key pSetKeyKey),DERIVED
+_SET                        Procedure(Byte pSetMethod, BigInt pPointer,Key pSetKey, Key pSetKeyKey),Derived
 
 ! Transaction Processing
-LOGOUTCONNECTION           Procedure(),DERIVED
-COMMIT                     Procedure(),DERIVED
-ROLLBACK                   Procedure(),DERIVED
-ROLLBACK                   Procedure(String pSavePoint),DERIVED
-SAVEPOINT                  Procedure(String pSavePoint),DERIVED
+LOGOUTCONNECTION           Procedure(),Derived
+COMMIT                     Procedure(),Derived
+ROLLBACK                   Procedure(),Derived
+ROLLBACK                   Procedure(String pSavePoint),Derived
+SAVEPOINT                  Procedure(String pSavePoint),Derived
 
 
 !Properties that are really commands
-CONNECT                     Procedure(Long pOptions=0),DERIVED    ! prop:connect
-CREATEDB                    Procedure(String pDatabaseName),DERIVED                   ! prop:createdb
-DISCONNECT                  Procedure(),DERIVED                   ! prop:disconnect
+CONNECT                     Procedure(Long pOptions=0),Derived    ! prop:connect
+CREATEDB                    Procedure(String pDatabaseName),Derived                   ! prop:createdb
+DISCONNECT                  Procedure(),Derived                   ! prop:disconnect
 
 !Properties
-GetPROP:Arrays              Procedure(),STRING,DERIVED            ! Return 1 if the driver supports arrays
-GetPROP:Database            Procedure(),STRING,DERIVED            ! Get database name from connection string
-GetPROP:DatabaseName        Procedure(),STRING,DERIVED            ! Get database name - ie SQLITE, PostgreSQL etc.
-GETPROP:Driver              Procedure(),STRING,DERIVED            ! Get name of file driver !D
-GetProp:Hdbc                Procedure(),STRING,DERIVED
-GetPROP:Server              Procedure(),STRING,DERIVED            ! Get server name from connection string
-GetPROP:User                Procedure(),STRING,DERIVED            ! Get user name from connection string
+GetPROP:Arrays              Procedure(),String,Derived            ! Return 1 if the driver supports arrays
+GetPROP:Database            Procedure(),String,Derived            ! Get database name from connection String
+GetPROP:DatabaseName        Procedure(),String,Derived            ! Get database name - ie SQLITE, PostgreSQL etc.
+GETPROP:Driver              Procedure(),String,Derived            ! Get name of file driver !D
+GetPROP:DriverVersion       Procedure(),String,Derived
+GetProp:Hdbc                Procedure(),String,Derived
+GetPROP:Server              Procedure(),String,Derived            ! Get server name from connection String
+GetPROP:User                Procedure(),String,Derived            ! Get user name from connection String
                           End
 
 !============================================================================================================
@@ -345,19 +346,19 @@ _BindParameters             Procedure(Long pStmt),Long,Virtual
 _GenParm                    Procedure(Long pCount),String,Derived
 _ExecuteSelect              Procedure(),Derived
 CLOSE                       Procedure(),Derived
-SEARCH                      Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),DERIVED
+SEARCH                      Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),Derived
 SET                         Procedure(Long pIndex),Derived
 _Set                        Procedure(Long pOpcode),Derived
 SetOrderByFromQueue         Procedure(),Derived
 _AppendOrderQueueToWhere    Procedure(*Long pCount),Derived
 CheckConnect                Procedure(),Long,Derived
 _Prepare                    Procedure(),Long,Virtual
-_ExecuteSql                 Procedure(),LONG,Derived
-GetPROP:Database            Procedure(),STRING,DERIVED         ! Get database name from connection string
-GetPROP:DatabaseName        Procedure(),STRING,DERIVED         ! Get database name - ie SQLITE, PostgreSQL etc.
-GETPROP:Driver              Procedure(),STRING,DERIVED         ! Get name of file driver !D
-GetPROP:Server              Procedure(),STRING,DERIVED         ! Get server name from connection string
-GetPROP:User                Procedure(),STRING,DERIVED         ! Get user name from connection string
+_ExecuteSql                 Procedure(),Long,Derived
+GetPROP:Database            Procedure(),String,Derived         ! Get database name from connection String
+GetPROP:DatabaseName        Procedure(),String,Derived         ! Get database name - ie SQLITE, PostgreSQL etc.
+GETPROP:Driver              Procedure(),String,Derived         ! Get name of file driver !D
+GetPROP:Server              Procedure(),String,Derived         ! Get server name from connection String
+GetPROP:User                Procedure(),String,Derived         ! Get user name from connection String
                           End
 !============================================================================================================
 ! Supported, Built-in, Custom Field Types

@@ -1039,8 +1039,9 @@ tail          long
   Case result
   of SQLite_Ok
   Else
+    self.SetErrorSqlite(result,'[p040] Filed to Prepare SQL:')
+    pSqlCode.Trace()
   End
-  self.SetErrorSqlite(result,'[p040]')
   Return stmt
 
 !-----------------------------------------------------------------
@@ -1895,9 +1896,13 @@ rTextLen      Long
 ! if the pClarionType is a CLADECIMAL or CLAPDECIMAL then the Fields node has to be loaded. Otherwise fields is not used.
 DriverFileSQLite2Class._Morph      Procedure(String pFieldLabel, Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength)
 lg      long,Auto
+ulg     Ulong,Auto
 sr      Sreal,Auto
 rl      Real,Auto
+srl     SReal,Auto
+sh      Short,Auto
 ush     Ushort,Auto
+bt      Byte,Auto
 cst     Cstring(21),Auto  !bigint range is -9 223 372 036 854 775 808 -- 18 446 744 073 709 551 615
 len     Long,Auto
 strmem  String(36),Auto
@@ -2151,6 +2156,89 @@ StrLen  Long,Auto
       memcpy(pClarionAddress,address(strmem),8)
     Else
       Case pClarionType
+!region -     ClaLong
+      of ClaLong
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        lg = rl
+        If lg <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(lg),4)
+!endregion
+!region -     ClaUlong
+      of ClaULong
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        ulg = rl
+        If ulg <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(ulg),4)
+!endregion
+!region -     ClaShort
+      of ClaShort
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        sh = rl
+        If sh <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(sh),2)
+!endregion
+!region -     ClaUShort
+      of ClaUShort
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        ush = rl
+        If ush <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(ush),2)
+!endregion
+!region -     ClaByte
+      of ClaByte
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        bt = rl
+        If bt <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(bt),1)
+!endregion
+!region -     ClaReal
+      of ClaReal
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        If str <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(rl),8)
+!endregion
+!region -     ClaSreal
+      of ClaSReal
+        str &= pCellAddress & ':' & pCellLength
+        rl = str
+        srl = rl
+        If srl <> rl and self.opt:ignoretruncation = false
+          self.SetError(DataTruncatedError)
+          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          Return
+        End
+        memcpy(pClarionAddress,address(srl),4)
+!endregion
 !region -     ClaDATE
       of ClaDATE
           str &= pCellAddress & ':' & pCellLength
@@ -2215,8 +2303,8 @@ StrLen  Long,Auto
       of ClaBLOB
         self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
 !endregion
-!region -     else
-      else
+!region -     Else
+      Else
         str &= pCellAddress & ':' & pCellLength
         self.SetError(FieldMismatchError)
         self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & str)
@@ -4224,7 +4312,7 @@ ans  long
 ! Thus the DATE function, as used in say a filter, must return a string of the form yyyy-mm-dd
 ! if pLabelType is driver:field, then the self.fields group is loaded with the field that this DATE() call is being compared *to*
 !!!todo, this assumes it's a prop:filter, not a prop:order or prop:project.
-DriverFileSQLite2Class._TranslateDateSql  Procedure(String pMonth, String pDay, String pYear, Byte pLabelType,*Cstring pCond)
+DriverFileSQLite2Class._TranslateDateSql  Procedure(*CString pField,String pMonth, String pDay, String pYear, Byte pLabelType,*Cstring pCond)
   code
   If pLabelType <> driver:field or self.Fields.Type = ClaDATE
     If Numeric(pMonth) = false or numeric(pDay) = false or numeric(pYear) = false
@@ -4255,6 +4343,7 @@ DriverFileSQLite2Class._TranslateLabelOverTimeSQL Procedure(FieldGroupType pNode
 !-----------------------------------------------------------------
 !  as in DAY(date) or MONTH(date) or YEAR(date)
 !  date is either a DATE field in the database, a LONG field in the database
+!  assumes fields queue is loaded
 DriverFileSQLite2Class._TranslateDatePartSQL   Procedure(*CString pField,String pPart)
 node  &FieldGroupType,Auto
   code
@@ -4826,5 +4915,7 @@ result  Long,Auto
 DriverViewSQLite2Class._GenParm                PROCEDURE(Long pCount)
   code
   Return '?' & pCount
+!-----------------------------------------------------------------
+
 !!-----------------------------------------------------------------
 

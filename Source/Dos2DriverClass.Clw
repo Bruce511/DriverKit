@@ -1348,10 +1348,10 @@ DriverFileDos2Class.GetProp:Driver               PROCEDURE()
   Return 'DOS2'
 
 !-----------------------------------------------------------------
-DriverFileDos2Class.GETPROP:DriverVersion  PROCEDURE() 
+DriverFileDos2Class.GETPROP:DriverVersion  PROCEDURE()
   code
-  Return driver:version    
-  
+  Return driver:version
+
 !-----------------------------------------------------------------
 DriverFileDos2Class.GetProp:FileSize             PROCEDURE()
   code

@@ -2720,7 +2720,7 @@ t          Long ,Auto
 LabelType  Byte
 FieldType  Long
 cond       Cstring(5)
-n          string(1)
+fld        Cstring(128)
 dy         Cstring(128) ,Auto
 mth        Cstring(128) ,Auto
 yr         Cstring(128) ,Auto
@@ -2736,7 +2736,7 @@ yr         Cstring(128) ,Auto
     If sub(pTokenString,pTokenPos - 6,1) = token:condition and sub(pTokenString,pTokenPos - 12,1) = token:label
       t = sub(pTokenString,pTokenPos - 11,4)
       get(self.LabelQueue,t)
-      n = self.TranslateLabel(self.LabelQueue.Label,LabelType)   ! gets the specific self.fields node.
+      fld = self.TranslateLabel(self.LabelQueue.Label,LabelType)   ! gets the specific self.fields node.
     end
   ElsIf pTokenPos + 17 < len(clip(pTokenString))
     If sub(pTokenString,pTokenPos + 6,1) = token:condition
@@ -2747,7 +2747,7 @@ yr         Cstring(128) ,Auto
     If sub(pTokenString,pTokenPos + 6,1) = token:condition and sub(pTokenString,pTokenPos + 12,1) = token:label
       t = sub(pTokenString,pTokenPos + 13,4)
       get(self.LabelQueue,t)
-      n = self.TranslateLabel(self.LabelQueue.Label,LabelType)   ! gets the specific self.fields node.
+      fld = self.TranslateLabel(self.LabelQueue.Label,LabelType)   ! gets the specific self.fields node.
     end
   End
 
@@ -2784,11 +2784,11 @@ yr         Cstring(128) ,Auto
     get(self.LabelQueue,t)
     yr = self.LabelQueue.Label
   End
-  Return self._TranslateDateSql(mth,dy,yr,LabelType,Cond)
+  Return self._TranslateDateSql(fld,mth,dy,yr,LabelType,Cond)
 
 !-----------------------------------------------------------------
 !!!DERIVE
-DriverBaseClass._TranslateDateSql          Procedure(String pMonth, String pDay, String pYear, Byte pLabelType,*Cstring pCond)
+DriverBaseClass._TranslateDateSql          Procedure(*CString pField, String pMonth, String pDay, String pYear, Byte pLabelType,*Cstring pCond)
   code
   Return ''
 
@@ -2812,6 +2812,7 @@ LabelType  Byte
       self.ValueQueue.Value = dy                                ! safe to just use because ParseValue will force it to be a number
       do ParseValue
     Of driver:field
+    orof driver:unknown
       dy = self._TranslateDaySQL(dy)
     End
   End
@@ -3054,6 +3055,7 @@ LabelType  Byte
       self.ValueQueue.Value = mth
       do ParseValue
     of driver:field
+    orof driver:unknown
       mth = self._TranslateMonthSQL(mth)
     End
   End
@@ -3139,6 +3141,7 @@ ParseValue  routine
 !!!DERIVE
 DriverBaseClass._TranslateYearSQL   Procedure(*CString pField)
   code
+  self.trace('DriverBaseClass._TranslateYearSQL Not Expected here')
   Return ''
 
 !-----------------------------------------------------------------
@@ -3225,21 +3228,6 @@ DriverBaseClass._SetParameterField          Procedure(Long pCount, *FieldGroupTy
 x   long,auto
 tx  string(10)
   code
-!  If pNode.SQLType
-!    tx = format(clock(),@t04)
-!    case lower(sub(pNode.SQLType,1,4))
-!    of 'time'
-!      Case pNode.Type
-!      of ClaLONG
-!        self._SetParameterString(pCount,tx)
-!      of ClaSTRING
-!      orof ClaSTRING
-!        self._SetParameterString(pCount,tx)
-!      of ClaDECIMAL
-!        self._SetParameterString(pCount,tx)
-!      End
-!    End
-!  End
   self._SetParameterNode(pCount,pNode,pSource,pOffset)
   Return
 
@@ -3669,10 +3657,10 @@ UserLen                Ulong,Auto
   !Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][' & _User & '][' & _ProcessId & '][' & thread() & '][' & format(today(),'@d1')& '][' & format(clock(),'@t4') & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog) & '<13,10>'
   !Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][' & _User & '][' & _ProcessId & '][' & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & ']' & clip(pLog) & '<13,10>'
   If self._LogFile = ''
-    Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _ProcessId & '][' & thread() & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog)
+    Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][PID=' & _ProcessId & '][THD=' & thread() & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog)
     osOutputDebugString(Clog)
   Elsif self._LogFile
-    Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][' & _User & '][' & _ProcessId & '][' & thread() & '][' & format(today(),'@d1')& '][' & format(clock(),'@t4') & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog) & '<13,10>'
+    Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][USR=' & _User & '][PID=' & _ProcessId & '][THD=' & thread() & '][' & format(today(),'@d1')& '][' & format(clock(),'@t4') & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog) & '<13,10>'
     If self._logHandle = 0
       ! open log file, in append mode
       self._logHandle = osCreateFile(self._LogFile, GENERIC_WRITE, SHARE_ALL , 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
@@ -3708,7 +3696,7 @@ UserLen                Ulong,Auto
 !-----------------------------------------------------------------
 DriverBaseClass.LOGGINGON                  Procedure(<String pFileName>,Long pOptions=0)
   Code
-  !self.trace('=========================== LOGGING ON ' & self.FullPathName & ' ==============================================')
+  self.trace('=========================== LOGGING ON ' & self.FullPathName & ' ==============================================')
   If Omitted(pFileName)
     self._LogFile = ''
   Else
@@ -5441,6 +5429,7 @@ DriverFileClass._AfterParseFields        Procedure()
 DriverFileClass._parseFieldsWalker    Procedure(*Long pAddr,Long pFields,*Long pIndex,Long pLastRealOffSet, Long pLastRealLength,Long pInOveredGroup,Long pLevel)
 b               Byte
 HighBit         Byte
+HighBit2        Byte
 c               Long
 maybeTimeStamp  Long
 pNode           &FieldGroupType
@@ -5502,7 +5491,7 @@ InOveredGroup   Long
     End
     pNode.Label = ''
     If Band(pNode.Attribute,ClaAttrLabel)
-      pNode.Label = self._GetVariableLengthString(pAddr)
+      pNode.Label = self._GetVariableLengthString(pAddr)  ! label inline in the structure at this point
     End
     pNode.Name = ''
     If Band(pNode.Attribute,ClaAttrName)
@@ -5512,7 +5501,7 @@ InOveredGroup   Long
     pNode.Over = 0
     HighBit = 0
     If Band(pNode.Attribute,ClaAttrOver)
-      pNode.Over = self._GetVariableLengthNumber(pAddr,HighBit)
+      pNode.Over = self._GetVariableLengthNumber(pAddr,HighBit)   ! over is a relative number of bytes backwards in the record
     End
 
     ! Array Support
@@ -5520,16 +5509,15 @@ InOveredGroup   Long
     pNode.DimProduct = 1
     pNode.Length = pNode.Size
     Clear(pNode.Dim)
-    If band(pNode.Attribute,ClaAttrDim)                        ! it is an array
+    If band(pNode.Attribute,ClaAttrDim)             ! it is an array
       Peek(pAddr,pNode.Dims)                        ! number of dimensions
       pAddr += 1
       !self.trace('pNode.Dims=' & pNode.Dims & ' max=' & maximum(pNode.dim,1) & ' attr=' & pNode.Attribute)
       Loop c = 1 to pNode.Dims
         If c <= maximum(pNode.dim,1)
-          Peek(pAddr,pNode.Dim[c])                  ! maximum value of each dimension
-          pAddr += 1
-          pNode.Length *= pNode.Dim[c]                ! working out the memory used by the field, allowing for all array space
-          pNode.DimProduct *= pNode.Dim[c]            ! working out the product of all the dimensions
+          pNode.Dim[c] = self._GetVariableLengthNumber(pAddr,HighBit2)
+          pNode.Length *= pNode.Dim[c]              ! working out the memory used by the field, allowing for all array space
+          pNode.DimProduct *= pNode.Dim[c]          ! working out the product of all the dimensions
         End
       End
     End
@@ -5637,7 +5625,7 @@ x    Long
   str.setvalue(self.keys.name,st:clip)
   str.Split('|')
   Loop x = 2 to str.records()
-    str.trace('[' & str.GetLine(x) & ']')
+    !str.trace('[' & str.GetLine(x) & ']')
     Case upper(clip(left(str.GetLine(x))))
     Of 'CLUSTER'
     Orof 'CLUSTERED'
@@ -5972,7 +5960,9 @@ DriverFileClass._UpdateFileStrings  Procedure()
     If self._FullPathNameSetFromPropName = false
       self.FullPathName = clip(self._GetString(self.ClaFCB.phyname))
     End
-    self.Owner        = clip(self._GetString(self.ClaFCB.oname))
+    If self._OwnerSetFromPropOwner = false
+      self.Owner        = clip(self._GetString(self.ClaFCB.oname))
+    End
     self.DriverStr    = clip(self._GetString(self.ClaFCB.drvstr))
   End
   Return
@@ -6082,9 +6072,9 @@ e         Cstring(4096)
   ! If the variable is not in a table, then EVALUATE it and turn it into a fixed value.
 
   ! the incoming value is of the form
-  ! a) Clarion Label (cus:address)          ! translate this to columnname
-  ! b) SQL table.column (customer.address)  ! translate this to columnname
-  ! c) a.address                            ! translate this to columnname (without the alias)
+  ! a) Clarion Label (cus:address)          ! translate this to columnname (with the alias)
+  ! b) SQL table.column (customer.address)  ! translate this to columnname (with the alias)
+  ! c) a.address                            ! translate this to columnname (with the alias)
 
   ! first: known equates which can be used in filters
 
@@ -7600,6 +7590,10 @@ DriverFileClass.CLOSE            PROCEDURE()
     self.FullPathName = clip(self._GetString(self.ClaFCB.phyname))
   End
   self._FullPathNameSetFromPropName = false
+  If self._OwnerSetFromPropOwner = false
+    self.Owner = clip(self._GetString(self.ClaFCB.oname))
+  End
+  self._OwnerSetFromPropOwner = false
   self.SetKey &= Null
   self.SetKeyKey &= Null
   Return
@@ -8679,10 +8673,6 @@ DriverFileClass.GET              PROCEDURE(KEY pKey, BIGINT pKeyPointer)
   self.NoMemoArmed = false
   self.AddOnly = false
   Return
-
-!-----------------------------------------------------------------
-DriverFileClass.GETROW           PROCEDURE(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>)
-  Code
 
 !-----------------------------------------------------------------
 DriverFileClass.HOLD             PROCEDURE()
@@ -10776,18 +10766,25 @@ DriverFileClass.GetProp:OEM                PROCEDURE()  ! Get OEM attribute
 DriverFileClass.SETPROP:OEM                PROCEDURE(Byte pOEM)!VIRTUAL  ! Set OEM attribute
   code
   self.SharedProperties.oem = pOEM
-  return
+  Return
 !-----------------------------------------------------------------
 DriverFileClass.GetProp:Owner              PROCEDURE()!,STRING,VIRTUAL ! Get Owner
   code
-  self.Owner = self._GetString(self.ClaFCB.oname)
-  return self.Owner
+  If self._OwnerSetFromPropOwner = false
+    self.Owner = self._GetString(self.ClaFCB.oname)
+  End
+  Return self.Owner
 !-----------------------------------------------------------------
 DriverFileClass.SETPROP:Owner              PROCEDURE(STRING pOwner)!,STRING,VIRTUAL ! Get Owner
   code
-  !self._SetString(self.ClaFCB.oname,pOwner)
   self.Owner = clip(pOwner)
-  return
+  If self.Owner
+    self._OwnerSetFromPropOwner = true
+  Else
+    self._OwnerSetFromPropOwner = false
+  End
+  Return
+
 !-----------------------------------------------------------------
 DriverFileClass.GetProp:Over              PROCEDURE(Long pIndex)
   code
@@ -14469,6 +14466,50 @@ obj  &DriverFileClass
   Return driver:notok
 
 !-----------------------------------------------------------------
+! takes a label of the form alias.label
+! sets pNode to the node of the file
+DriverViewClass._withNodeFieldLabelAlias            Procedure(String pAliasDotLabel)
+lbl    cString(size(pAliasDotLabel)+1)
+alias  cString(DRIVER:MAXALIASLENGTH)
+x      Long
+  code
+  x = instring('.',pAliasDotLabel,1,1)
+  self.trace('DriverViewClass._withNodeFieldLabelAlias x=' & x)
+  If x = 0 then Return Driver:notok.
+  alias = sub(pAliasDotLabel,1,x-1)
+  lbl = sub(pAliasDotLabel,x+1,len(pAliasDotLabel))
+  self.trace('alias=' & alias & ' lbl=' & lbl)
+  If self._withNodeFieldLabelAliasWalker(self.tree,alias,lbl) = Driver:ok
+    return Driver:ok
+  End
+  self.trace('wnfla 9')
+  Return Driver:notok
+
+!-----------------------------------------------------------------
+! Given a field label, find the node that contains that field label.
+DriverViewClass._withNodeFieldLabelAliasWalker    Procedure(ViewTreeType pNode, *CString pAlias, *Cstring pLabel)
+x    long
+obj  &DriverFileClass
+  code
+  Loop x = 1 to Records(pNode)
+    Get(pNode,x)
+    If pNode.File &= null then cycle.
+    obj &= pNode.File{prop:object}
+    If obj &= null then cycle.
+    self.trace('pNode.Alias=' & pNode.Alias & ' pAlias=' & pAlias & ' plabel=' & plabel)
+    If pNode.Alias = pAlias and obj._WithFieldNamed(plabel) = driver:ok
+      self.node &= pNode
+      Return driver:ok
+    End
+    If not pNode.children &= null
+      If self._withNodeFieldLabelAliasWalker(pNode.children,pAlias,pLabel) = driver:ok
+        Return Driver:ok
+      End
+    End
+  End
+  Return Driver:notok
+
+!-----------------------------------------------------------------
 ! given a view field number pIndex, find the node that contains that number.
 ! self._FieldsOffset will be the number of fields in the nodes that preceed this node.
 ! self.FieldsFile will be set to the FILE handle of this node.
@@ -14545,6 +14586,63 @@ x    long
     ans += self._countNodes(pNode.children)
   End
   Return Ans
+
+!-----------------------------------------------------------------
+DriverViewClass._TranslateYearSQL       Procedure(*CString pField)
+obj   &DriverFileSQLClass
+cstr  Cstring(DRIVER:MAXFIELDNAMELEN)
+  code
+  !self.trace('DriverViewClass._TranslateYearSQL pField=' & pField)
+  If self._withNodeFieldLabelAlias(pField) = Driver:ok
+    obj &= self.node.File{prop:object}
+    If obj &= Null then Return ''.
+    cstr = obj.fields.Column
+    Return obj._TranslateYearSQL(cstr)
+  End
+  Return ''
+
+!-----------------------------------------------------------------
+DriverViewClass._TranslateMonthSQL       Procedure(*CString pField)
+obj   &DriverFileSQLClass
+cstr  Cstring(DRIVER:MAXFIELDNAMELEN)
+  code
+  self.trace('DriverViewClass._TranslateMonthSQL ' & pField )
+  If self._withNodeFieldLabelAlias(pField) = Driver:ok
+    self.trace('m1')
+    obj &= self.node.File{prop:object}
+    self.trace('m12')
+    If obj &= Null then Return ''.
+    cstr = obj.fields.Column
+    self.trace('m3 ' & cstr & ' ' & obj._TranslateMonthSQL(cstr))
+    Return obj._TranslateMonthSQL(cstr)
+  End
+  Return ''
+
+!-----------------------------------------------------------------
+DriverViewClass._TranslateDaySQL       Procedure(*CString pField)
+obj   &DriverFileSQLClass
+cstr  Cstring(DRIVER:MAXFIELDNAMELEN)
+  code
+  If self._withNodeFieldLabelAlias(pField) = Driver:ok
+    obj &= self.node.File{prop:object}
+    If obj &= Null then Return ''.
+    cstr = obj.fields.Column
+    Return obj._TranslateDaySQL(cstr)
+  End
+  Return ''
+
+!-----------------------------------------------------------------
+DriverViewClass._TranslateDateSQL       Procedure(*CString pField,String pMonth, String pDay, String pYear, Byte pLabelType,*Cstring pCond)
+obj   &DriverFileSQLClass
+cstr  Cstring(DRIVER:MAXFIELDNAMELEN)
+  code
+  If self._withNodeFieldLabelAlias(pField) = Driver:ok
+    obj &= self.node.File{prop:object}
+    If obj &= Null then Return ''.
+    cstr = obj.fields.Column
+    Return obj._TranslateDateSQL(pField,pMonth,pDay,pYear,pLabelType,pCond)
+  End
+  Return ''
 
 !-----------------------------------------------------------------
 DriverViewClass.GetProp:Alias  procedure(Long pFileNumber)
@@ -14696,6 +14794,9 @@ adj   long
   Code
   If self._withNodeField(pIndex) = driver:ok
     adj = pIndex - self._FieldsOffset
+    if adj <= 0
+      return ''
+    End
     If self.Node.name[adj] then return self.Node.name[adj].
     If not self.node.File &= null
       Return self.node.File{prop:name,self.node.Field[adj]}

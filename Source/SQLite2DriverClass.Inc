@@ -246,7 +246,7 @@ _MergeWork                  Procedure(DriverFileSQLClass pObj, String pDestinati
 DeformatText                Procedure(String pText),String,Derived
 ResultToExplain             Procedure(iResultSet pResult),Derived
 OperatorsToFunction         Procedure(StringTheory pStr),Long,Proc,Derived
-_TranslateDateSql           Procedure(String pMonth, String pDay, String pYear, Byte pLabelType,*CString pCond),String,Derived
+_TranslateDateSql           Procedure(*CString pField,String pMonth, String pDay, String pYear, Byte pLabelType,*CString pCond),String,Derived
 _TranslateDatePartSQL       Procedure(*CString pField,String pPart),String,Virtual
 _TranslateDaySQL            Procedure(*CString pField),String,Derived
 _TranslateMonthSQL          Procedure(*CString pField),String,Derived

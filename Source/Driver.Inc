@@ -75,15 +75,15 @@ driver:FromPrimaryKeyPosition Equate(3)
 
 driver:filter           Equate(1)
 driver:sqlfilter        Equate(2)
-driver:order            Equate(3)      
+driver:order            Equate(3)
 driver:sqlorder         Equate(4)
 driver:groupby          Equate(5)
 driver:having           Equate(6)
-driver:project          Equate(7)      
+driver:project          Equate(7)
 driver:parameter        Equate(8)
 driver:join             Equate(9)
 driver:expression       Equate(10)
-driver:searchfilter     Equate(13)     
+driver:searchfilter     Equate(13)
 
 ! driver:sqltable is 10
 ! driver:dosfile is 11
@@ -117,7 +117,7 @@ driver:ResetToBufferRow   Equate(1)
 driver:ShadowBufferPrimed Equate(2)
 driver:BufferPrimed       Equate(3)
 
-driver:all                Equate('*')  
+driver:all                Equate('*')
 
 driver:GroupOverTimeStamp  Equate(1)
 driver:StringToTimeStamp   Equate(2)
@@ -353,7 +353,7 @@ ClaNOTHING       Equate(018h) !                   Nothing                       
 ClaQUEUE         Equate(01Ah) !                   /* 0x1A Queue          */        ?
 ClaBLOB          Equate(01Bh) ! 27                /* 0x1B Blob and TempStr          */        ?
 ClaREFERENCE     Equate(01Fh)
-ClaTYPE          Equate(08Eh)  
+ClaTYPE          Equate(08Eh)
 ClaInt64         Equate(064h)   ! Placeholder for now - bj
 !EndRegion: Data Types
 

@@ -560,7 +560,7 @@ TranslateBeginsWith        Procedure(*Cstring pFunc, *CString pParms,string pTok
 TranslateChr               Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms),String,Virtual
 TranslateClip              Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms),String,Virtual
 TranslateDate              Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms),String,Virtual
-_TranslateDateSql          Procedure(String pMonth, String pDay, String pYear, Byte pLabelType, *Cstring pCond),String,Virtual
+_TranslateDateSql          Procedure(*CString pField, String pMonth, String pDay, String pYear, Byte pLabelType, *Cstring pCond),String,Virtual
 TranslateDay               Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms),String,Virtual
 _TranslateDaySQL           Procedure(*CString pField),String,Virtual
 TranslateEndsWith          Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms),String,Virtual
@@ -625,7 +625,7 @@ SEND                       Procedure(STRING pMessage),STRING,PROC,VIRTUAL
 SetDriverOption            Procedure(String pOption, String pValue),STRING,VIRTUAL
 SQL                        Procedure(String pSql,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),VIRTUAL
 STATUS                     Procedure(),LONG,VIRTUAL
-SUBSET                     Procedure(FILE pFile,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),VIRTUAL 
+SUBSET                     Procedure(FILE pFile,*? pParm1,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),VIRTUAL
 _AddSubsetCommand          Procedure(Byte pOperation, File pFile,<String pFilter>),VIRTUAL
 BuildSubsetCTE             Procedure(StringTheory pCTE),VIRTUAL
 BuildSubsetWhere           Procedure(StringTheory pWhere, String pAlias),VIRTUAL
@@ -816,6 +816,7 @@ _watchBufferState       byte      ! is the watch buffer loaded with the last rea
 _doingWatchCheck        byte      ! only set during the actual WATCH check, before PUTTING
 _exists                 byte
 _FullPathNameSetFromPropName Byte
+_OwnerSetFromPropOwner  Byte
 
 _nullstr                &string   ! each byte in the string represents a field in the record, and whether it is null or not.
 
@@ -1057,7 +1058,6 @@ GET                        Procedure(BIGINT pFilePointer),VIRTUAL
 GET                        Procedure(BIGINT pFilePointer, LONG pLength),VIRTUAL
 GET                        Procedure(KEY pKey),VIRTUAL
 GET                        Procedure(KEY pKey, BIGINT pKeyPointer),VIRTUAL
-GETROW                     Procedure(FILE pFile,*? pField1, ? pValue1,<*? pField2>,<? pValue2>,<*? pField3>,<? pValue3>,<*? pField4>,<? pValue4>,<*? pField5>,<? pValue5>,<*? pField6>,<? pValue6>,<*? pField7>,<? pValue7>,<*? pField8>,<? pValue8>,<*? pField9>,<? pValue9>,<*? pField10>,<? pValue10>),Virtual
 HOLD                       Procedure(),VIRTUAL
 HOLD                       Procedure(LONG pSeconds),VIRTUAL
 MERGE                      Procedure(FILE pDestination, LONG pOptions),VIRTUAL
@@ -1440,6 +1440,9 @@ _withNodeFile                   Procedure(File pFile),long,VIRTUAL
 _withNodeFileWalker             Procedure(ViewTreeType pNode,File pFile),long,VIRTUAL
 _withNodeTableName              Procedure(String pTableName),long,VIRTUAL
 _withNodeTableNameWalker        Procedure(ViewTreeType pNode, String pTableName),long,VIRTUAL
+_withNodeFieldLabelAlias        Procedure(String pAliasDotLabel),long,VIRTUAL
+_withNodeFieldLabelAliasWalker  Procedure(ViewTreeType pNode, *CString pAlias, *Cstring pLabel),long,VIRTUAL
+
 _countNodes                     Procedure(ViewTreeType pNode),Long,Virtual
 _CountFields                    Procedure(),Virtual
 _FillOrderFromLabel             Procedure(String pLabel, Byte pCase),Long,Derived
@@ -1498,6 +1501,12 @@ SEARCH                          Procedure(String pSearchString,<*? pField1>, <*?
 _SetFromFile                    Procedure(),Long,Virtual
 SET                             Procedure(Long pIndex),Virtual
 STATUS                          Procedure(),LONG,DERIVED
+
+_TranslateYearSQL               Procedure(*CString pField),String,Derived
+_TranslateMonthSQL              Procedure(*CString pField),String,Derived
+_TranslateDaySQL                Procedure(*CString pField),String,Derived
+_TranslateDateSql               Procedure(*CString pField, String pMonth, String pDay, String pYear, Byte pLabelType, *Cstring pCond),String,Derived
+
 
 SetProperty                     Procedure(String pProperty,Long pIndex,STRING pValue),Virtual
 GetProp:Alias                   Procedure(Long pFileNumber),String,Virtual

@@ -36,6 +36,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="CLAOBD.clw" />
+    <Compile Include="CwDriver.Clw" />
     <None Include="CLAOBD.exp" />
   </ItemGroup>
   <ItemGroup>

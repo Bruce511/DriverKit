@@ -39,7 +39,7 @@ TDescAddress Equate(00a527bch)
     SQLite2DriverSetObjectView(Long pOpCode, Long pClaVCB, long pVarList),Long
     !
     module('windows')
-      ods(*cstring msg), raw, pascal, name('OutputDebugStringA')
+      ods(*cstring msg), raw, pascal, name('OutputDebugStringA') ,dll(1)
     end
   END
 

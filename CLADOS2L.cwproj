@@ -10,7 +10,7 @@
     <DefineConstants>DRVDOS2LM=&gt;1%3bDRVDOS2DM=&gt;0%3bDRVLM=&gt;0%3bDRVDM=&gt;0%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;0%3bMD5=&gt;1%3bmaincode=&gt;on</DefineConstants>
     <stack_size>16384</stack_size>
     <CopyCore>True</CopyCore>
-    <Model>Dll</Model>
+    <Model>Lib</Model>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>True</DebugSymbols>

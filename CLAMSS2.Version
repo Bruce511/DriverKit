@@ -14,12 +14,12 @@ BEGIN
     BLOCK "040904E4"
       BEGIN
         VALUE "CompanyName", "CapeSoft\0"
-        VALUE "FileDescription", "File Driver Base Classes\0"
+        VALUE "FileDescription", "MSSQL2 File Driver\0"
         VALUE "FileVersion", "1.13.0.0\0"
-        VALUE "InternalName", "File Driver Base Classes\0"
+        VALUE "InternalName", "MSSQL2 File Driver\0"
         VALUE "LegalCopyright", "Copyright (c) 2025 by CapeSoft\0"
-        VALUE "OriginalFilename", "CLAOBD.DLL\0"
-        VALUE "ProductName", "File Driver Base Classes\0"
+        VALUE "OriginalFilename", "CLAMSS2.DLL\0"
+        VALUE "ProductName", "MSSQL2 File Driver\0"
         VALUE "ProductVersion", "1.13.0.0\0"
         VALUE "HomePage", "capesoft.com\0"
       END

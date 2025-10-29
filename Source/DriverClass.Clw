@@ -3669,7 +3669,7 @@ UserLen                Ulong,Auto
         self._WinError()
       End
     End
-    If self._logHandle
+    If self._logHandle >= 0
       ! set to end of file
       LogCriticalSection.Wait()
       If osSetEndOfFile(self._logHandle) = 0

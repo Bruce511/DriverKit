@@ -7,7 +7,7 @@
     <RootNamespace>CLADOS2</RootNamespace>
     <AssemblyName>CLADOS2</AssemblyName>
     <OutputName>CLADOS2</OutputName>
-    <DefineConstants>DRVDOS2LM=&gt;1%3bDRVDOS2DM=&gt;0%3bDRVLM=&gt;0%3bDRVDM=&gt;1%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;1%3bMD5=&gt;1</DefineConstants>
+    <DefineConstants>DRVDOS2LM=&gt;1%3bDRVDOS2DM=&gt;0%3bDRVLM=&gt;0%3bDRVDM=&gt;1%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;1%3bMD5=&gt;1%3bDRV2=&gt;1</DefineConstants>
     <stack_size>16384</stack_size>
     <CopyCore>True</CopyCore>
     <Model>Dll</Model>

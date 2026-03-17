@@ -1,7 +1,7 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
-!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
-!   Released under MIT License
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
+!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm          !
+!   Released under MIT License                                                                  !
 !------------------------------------------------------------------------------------------------
 
 !!!todo export client-side views to server-side views?
@@ -18,14 +18,15 @@
     End
     Module('SQLite api')
         sqlite3_open_v2(*cString pFileName,Long pHandleAddress, Long pFlags, Long pVFS),Long,C,Raw,name('sqlite3_open_v2'),dll(1) ! filename in utf-8 format
-        sqlite3_close(Long pHandle),Long,C,Proc,dll(1)
+        sqlite3_close(Long pHandle),Long,C,Proc,name('sqlite3_close'),dll(1)
+        sqlite3_get_autocommit(Long pHandle),Long,C,Proc,name('sqlite3_get_autocommit'),dll(1)
 
         sqlite3_bind_blob    (Long pStmt, Long pParm, Long pAddress, Long pSize,Long pLife),Long,C,Raw,name('sqlite3_bind_blob'),dll(1)
         sqlite3_bind_int     (Long pStmt, Long pParm, Long pValue),Long,C,Raw,name('sqlite3_bind_int'),dll(1)
         sqlite3_bind_double  (Long pStmt, Long pParm, Real pValue),Long,C,Raw,name('sqlite3_bind_double')   ,dll(1)
         sqlite3_bind_null    (Long pStmt, Long pParm),Long,C,Raw,name('sqlite3_bind_null'),dll(1)
         sqlite3_bind_text    (Long pStmt, Long pParm,Long pAddress, Long pSize, Long pLife),Long,C,Raw,name('sqlite3_bind_text'),dll(1)
-        sqlite3_bind_textA   (Long pStmt, Long pParm,*String pString, Long pSize, Long pLife),Long,C,Raw,name('sqlite3_bind_text'),dll(1)
+        !sqlite3_bind_textA   (Long pStmt, Long pParm,*String pString, Long pSize, Long pLife),Long,C,Raw,name('sqlite3_bind_text'),dll(1)
         sqlite3_changes      (Long pHandle),long,C,raw,name('sqlite3_changes'),dll(1)
         sqlite3_total_changes(Long pHandle),long,C,raw,name('sqlite3_total_changes'),dll(1)
         sqlite3_step         (Long pStmt),Long,C,Raw,name('sqlite3_step'),dll(1)
@@ -44,6 +45,7 @@
         sqlite3_finalize     (Long pStmt),Long,C,Raw,name('sqlite3_finalize'),dll(1)
         sqlite3_wal_checkpoint (Long pHandle, *cString pFileName),Long,Raw,C,name('sqlite3_wal_checkpoint'),dll(1)
         sqlite3_errmsg(Long),*Cstring,C,Raw,name('sqlite3_errmsg'),dll(1)
+        sqlite3_extended_errcode(Long pHandle),Long,C,Raw,name('sqlite3_extended_errcode'),dll(1)
         sqlite3_extended_result_codes(Long pHandle, Long pOnOff),Long,C,Raw,name('sqlite3_extended_result_codes'),dll(1)
         sqlite3_progress_handler(Long,Long,Long,Long),C,dll(1)
         sqlite3_busy_timeout(Long,Long),Long,C,Proc  ,dll(1)
@@ -103,7 +105,7 @@ old    &DriverFileSQLite2Class,Auto
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.Construct  Procedure()
   code
-  self.opt:BusyTimeout = 53000   ! 53 seconds
+  self.opt:BusyTimeout = 53   ! 53 seconds
   self._ThisSqlType = 'SQLITE2TYPE'    ! used in dict in extended attributes to identify type settings specific to SQLITE
   self.QuoteString = '"'
   self.AllowParameterRepeats = true
@@ -112,12 +114,20 @@ DriverFileSQLite2Class.Construct  Procedure()
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.Destruct  Procedure()
   code
+  self._Destructing = true
   If self.dbHandle
     self.Disconnect()
   End
   Dispose(self._PutSqlCache)
   Dispose(self.opt:LogFileName)
   Dispose(self.opt:LogMessage)
+  Return
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class.Init   Procedure(FILE pFile, Long pForce=false)
+  code
+  self.ConnectionPool &= ConnectionPoolSQlite2
+  parent.Init(pFile,pForce)
   Return
 
 !-----------------------------------------------------------------
@@ -228,36 +238,82 @@ InitLogVars  routine
 ! this driver supports the "custom" field types; UUID4 and UUID7 "out of the box".
 ! Primarly as an example of how custom fields can be supported.
 DriverFileSQLite2Class._parseFields      PROCEDURE(Long pAddr)
-x  long
+x  long,Auto
   code
   parent._ParseFields(pAddr)
   Loop x = 1 to self.SharedProperties.FieldList.nodes
     self.Fields &= self._WithFieldNode(x)
-    Case self.Fields.UUID
-    Of 4 Orof 7
-      If (self.Fields.Type = ClaSTRING and self.Fields.length = 36)
-        self.Fields.Interface &= (Address(DriverGuidSQLite2))
+    If self.Fields.SQLType = 'STRING' or self.Fields.SQLType = 'TEXT' then cycle.
+    If self.Fields.UUID = 4 or self.Fields.UUID = 7 or Upper(self.fields.SQLType) = 'BLOB' or Upper(self.fields.SQLType) = 'UUID' or Upper(self.fields.SQLType) = 'UNIQUEIDENTIFIER'
+      Case self.Fields.Type
+      of ClaSTRING
+      orof ClaCSTRING
+        self.Fields.Interface &= (Address(DriverGuidSQLiteObject))
         self.Fields.SourceSize = self.Fields.Interface.GetSourceSize()
-        !Put(self.Fields)
-        !!!todo
-        !self.trace('_parseFields : SetInterface and source size=' & self.Fields.SourceSize)
       End
     End
   End
   Return
 
 !-----------------------------------------------------------------
+DriverFileSQLite2Class._ParseDefaultDefault   Procedure(FieldGroupType pNode)
+  code
+  If pNode.sqlUuid = true
+    pNode.HasDefault = true
+    case pNode.UUID
+    of 4
+    orof 7
+      pNode.DefaultValue = '!randomblob(16)'
+    End
+  End
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class._ParseFieldSQLType       Procedure(FieldGroupType pNode)
+  code
+  parent._ParseFieldSQLType(pNode)
+  case upper(pNode.SqlType)
+  of 'UUID'
+    pNode.SqlType = 'BLOB'
+  of 'STRING'
+    pNode.SqlType = 'TEXT'
+  End
+  If upper(pNode.SqlType) = 'BLOB' and pNode.UUID
+    pNode.sqlUuid = true
+  End
+
+!-----------------------------------------------------------------
 DriverFileSQLite2Class.SetErrorSqlite  PROCEDURE(Long pSQLiteErrorCode, String pRef)
-str  StringTheory
+str           StringTheory
+ExtendedCode  Long
+ErrMess       &cstring
+ErrorMess     cstring(1024)
   Code
   If errorcode() then return. ! The first error is always the one reported back to the program.
-  Case pSQLiteErrorCode
+  If pSQLiteErrorCode = SQLite_Ok
+    self.SetError(NoError)
+    self.SetFileError(pSQLiteErrorCode, '')
+    return
+  End
+
+  ExtendedCode = sqlite3_extended_errcode(self.dbHandle)
+  ErrMess &=  sqlite3_errmsg(self.dbHandle)
+  If not ErrMess &= null
+    ErrorMess = ErrMess
+  End
+
+  Case ExtendedCode
   of SQLite_Ok
     self.SetError(NoError)
     self.SetFileError(pSQLiteErrorCode, '')
   of SQLite_Error
-    self.SetError(FileSystemErr)
-    self.SetFileError(pSQLiteErrorCode, pRef & 'SQLite Error.')
+    If Instring('already exists',ErrorMess,1,1)
+      self.SetError(ObjectExistsErr)
+    ElsIf Instring('no such savepoint',ErrorMess,1,1)
+      self.SetError(InvalidSavePointErr)
+    Else
+      self.SetError(FileSystemErr)
+    End
+    self.SetFileError(pSQLiteErrorCode, pRef & 'SQLite Error. ' & ErrorMess)
   of SQLite_Internal
     self.SetError(FileSystemErr)
     self.SetFileError(pSQLiteErrorCode, pRef & 'SQLite Internal Error.')
@@ -370,7 +426,7 @@ str  StringTheory
     self.SetError(FileSystemErr)
     self.SetFileError(pSQLiteErrorCode, pRef & '')
   of SQLITE_CONSTRAINT_CHECK
-    self.SetError(InvalidFieldError)
+    self.SetError(InvalidFieldErr)
     If self.dbHandle > 0
       str.SetValue(sqlite3_errmsg(self.dbHandle) & ' ')
       str.SetAfter(' check_')
@@ -438,9 +494,9 @@ str  StringTheory
     self.SetFileError(pSQLiteErrorCode, pRef & 'A file open operation failed because the operating system was unable to convert the filename into a full pathname.')
   of SQLITE_CONSTRAINT_FOREIGNKEY
     If self._ParameterOpcode = Opcode:DELETE
-      self.SetError(RestrictedDelete)
+      self.SetError(RestrictedDeleteErr)
     Else
-      self.SetError(ForeignKeyFailed)
+      self.SetError(ForeignKeyFailedErr)
     End
     self.SetFileError(pSQLiteErrorCode, pRef & 'A foreign key (must be in file) constraint failed.')
   of SQLITE_READONLY_DBMOVED
@@ -465,7 +521,7 @@ str  StringTheory
     self.SetError(FileSystemErr)
     self.SetFileError(pSQLiteErrorCode, pRef & '')
   of SQLITE_CONSTRAINT_NOTNULL
-    self.SetError(NotNullFailed)
+    self.SetError(NotNullFailedErr)
     If self.dbHandle > 0
       str.SetValue(sqlite3_errmsg(self.dbHandle) & ' ')
       !str.SetAfter(' check_')
@@ -493,9 +549,9 @@ str  StringTheory
     self.SetFileError(pSQLiteErrorCode, pRef & 'An I/O error in the VFS layer while trying to invoke fstat() (or the equivalent) on a file in order to determine information such as the file size or access permissions.')
   of SQLITE_CONSTRAINT_TRIGGER
     If self._ParameterOpcode = Opcode:DELETE
-      self.SetError(RestrictedDelete)
+      self.SetError(RestrictedDeleteErr)
     Else
-      self.SetError(ForeignKeyFailed)
+      self.SetError(ForeignKeyFailedErr)
     End
     !self.SetError(FileSystemErr)
     self.SetFileError(pSQLiteErrorCode, pRef & 'A RAISE function within a trigger fired, causing the SQL statement to abort.')
@@ -667,41 +723,75 @@ Len           BIGINT,Auto
 !           timestamps are stored as DateTTime
 ! Fields node must already be loaded
 ! given text, returns binary data of the correct size
-DriverFileSQLite2Class.DeformatText Procedure(String pText)
+DriverFileSQLite2Class.DeformatText Procedure(String pText,Long pGroupPattern)
 strmem   string(16),Auto
 dt       Date,Auto
+dts      String(4),over(dt)
 tm       Time ,Auto
-sdt      string(4),over(dt)
-stm      string(4),over(tm)
+tms      string(4),over(tm)
 i        long,Auto
 j        long,Auto
 gr       Group,Auto
 dt1        Date
 tm1        Time
          End
+dt1s     string(4),over(gr.dt1)
+
+gr2      Group,Auto
+dt2        Date
+tm2        Long
+         End
+dt2s     string(4),over(gr2.dt2)
+
+gr3      Group,Auto
+dt3        Long
+tm3        Time
+         End
+gr4      Group,Auto
+dt4        Long
+tm4        Long
+         End
+
   code
+  !self.trace('DriverFileSQLite2Class.DeformatText pText=' & pText & ' pGroupPattern=' & pGroupPattern)
   If self.Deformat &= null
     self.Deformat &= new StringDeformat
   End
-  If self.fields.SqlTimeStamp
+  If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStamp4
     j = len(self.DateTimeSeparator)
     i = instring(self.DateTimeSeparator,pText,1,1)
     if i = 0 then i = instring(' T ',pText,1,1) ; j = 3.
     if i = 0 then i = instring(' ',pText,1,1) ; j = 1.
     if i = 0 then i = instring('T',pText,1,1) ; j = 1.
     if i
-      gr.dt1 = self.Deformat.DeformatDate(sub(pText,1,i-1),'@d10-')
-      gr.tm1 = self.Deformat.DeformatTime(sub(pText,i+j,len(pText)),'@t93')
-    end
+      case pGroupPattern
+      of driver:GroupOverTimeStamp
+        dt1s = self.Deformat.DeformatDateDate(sub(pText,1,i-1),'@d010-')
+        gr.tm1 = self.Deformat.DeformatTime(sub(pText,i+j,len(pText)),'@t093')
+        Return gr
+      of driver:GroupOverTimeStamp2
+        dt2s = self.Deformat.DeformatDateDate(sub(pText,1,i-1),'@d010-')
+        gr2.tm2 = self.Deformat.DeformatTime(sub(pText,i+j,len(pText)),'@t093')
+        Return gr2
+      of driver:GroupOverTimeStamp3
+        gr3.dt3 = self.Deformat.DeformatDate(sub(pText,1,i-1),'@d010-')
+        gr3.tm3 = self.Deformat.DeformatTime(sub(pText,i+j,len(pText)),'@t093')
+        Return gr3
+      of driver:GroupOverTimeStamp4
+        gr4.dt4 = self.Deformat.DeformatDate(sub(pText,1,i-1),'@d010-')
+        gr4.tm4 = self.Deformat.DeformatTime(sub(pText,i+j,len(pText)),'@t093')
+        Return gr4
+      End
+    End
     Return gr
   End
   Case self.Fields.Type
   of ClaDATE
-      dt = self.Deformat.DeformatDate(pText,'@d10-')
-      return sdt
+      dts = self.Deformat.DeformatDateDate(pText,'@d010-')
+      return dts
   of ClaTIME
-      tm = self.Deformat.DeformatTime(pText,'@t93')
-      return stm
+      tm = self.Deformat.DeformatTime(pText,'@t093')
+      return tms
   of ClaDECIMAL
   orof ClaPDECIMAL
      self._StringToDec(pText,self.Fields.Type, address(strmem), self.Fields.DecimalSize, self.Fields.DecimalPlaces)
@@ -729,7 +819,7 @@ mode    string(20)
     If pValue <> ''
       self.opt:BusyTimeout = pValue
       If self.dbHandle
-        result = sqlite3_busy_timeout(self.dbHandle,self.opt:BusyTimeout)
+        result = sqlite3_busy_timeout(self.dbHandle,self.opt:BusyTimeout * 1000)
       End
     End
     Return self.opt:BusyTimeout
@@ -777,15 +867,50 @@ CheckBoolean  routine
   of 'FALSE'
     pValue = 0
   End
+!-----------------------------------------------------------------
+! SQLite doesn’t have a database-level “current default collation” in the way Postgres or SQL Server do.
+! SQLite has built-in collations: BINARY (default), NOCASE, RTRIM
+! These can be set per column, or per expression.
+! So the effective answer to “what is the current default database collation?” is: BINARY, always.
+DriverFileSQLite2Class._GetCollation      Procedure(Long pIndex)
+collation   cstring(100)
+  code
+  Self.SetError(NoError)
+  If pIndex = 0
+    Return 'BINARY'
+  ElsIf PIndex > 0
+    If self._WithField(pIndex) = Driver:NotOk   ! SQLite is not checking the database here, and it should.
+      Return ''                            !!!todo Fetch table declaration and parse the COLLATE out of the declaration.
+    End
+    Return self.fields.Collate
+  ElsIf  pIndex < 0
+    If self._WithBlob(pIndex) = Driver:NotOk
+      Return ''
+    End
+    Return self.blobs.Collate
+  End
+  Return 'BINARY'
 
 !-----------------------------------------------------------------
-DriverFileSQLite2Class._ExecuteToRecord    Procedure(Long pStmt,Long pWhichBuffer,Byte pErrIfNoRecord,Long pOpCode)
+DriverFileSQLite2Class._ExecuteSqlToRecord    Procedure()
+stmt   Long,Auto
+  Code
+  If self.CheckConnect() = driver:notok then Return driver:notok.
+  stmt = self._Prepare()
+  If stmt
+    Return self._ExecuteSqlToRecord(stmt,driver:buffer,NoRecErr,self._ParameterOpcode)
+  end
+  Return driver:notok
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class._ExecuteSqlToRecord    Procedure(Long pStmt,Long pWhichBuffer,Byte pErrIfNoRecord,Long pOpCode)
 result        Long,Auto
 totalchanged  long,auto
 found         Byte
   code
-  !self.trace('DriverFileSQLite2Class._ExecuteToRecord')
-  If self._BindParameters(pStmt) = driver:ok
+  !self.trace('DriverFileSQLite2Class._ExecuteSqlToRecord')
+  If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
+  If self._BindParameters(pStmt,self.ParmBufferX,self.codepage) = driver:ok
     !self.NewResultSet(driver:DontFreeRam)     ! Explicitly do NOT touch the Result set here
     totalchanged = sqlite3_total_changes(self.dbHandle)
     If self._logSQL then self.Log('[SQL ]' & self.SqlCode.GetValue()).
@@ -803,6 +928,7 @@ found         Byte
         orof Opcode:APPEND
           If pErrIfNoRecord Then self.SetError(pErrIfNoRecord).
         of Opcode:GET
+        orof Opcode:Claim
           If found = false and pErrIfNoRecord Then self.SetError(pErrIfNoRecord).
         End
         break
@@ -810,19 +936,22 @@ found         Byte
         If found = false then self._toRecord(pStmt,pWhichBuffer).
         found = true
       Else
-        self.SetErrorSqlite(result,'[p001]')
+        self.SetErrorSqlite(result,'[p002]')
         Break
       End
     End
     result = sqlite3_reset(pStmt)              ! does an implicit commit if the transaction is implicit
   End
   result = sqlite3_clear_bindings(pStmt)     ! do not leak values to next call.
-  Return
+  If found
+    Return driver:ok   ! record found
+  end
+  Return driver:NotOk  ! no record found
 
 !-----------------------------------------------------------------
 ! moves the results from the SQLITE result set to the .Results parameter using the SQLite API.
 ! called from DriverClass and DriverViewClass, so avoid referencing the "self" object here.
-DriverFileSQLite2Class._ExecuteToResults    Procedure(Long pStmt,iResultSet pResult)
+DriverFileSQLite2Class._ExecuteSqlToResults    Procedure(Long pStmt,iResultSet pResult)
 result        long,auto
 columns       long,auto
 totalchanged  long,auto
@@ -869,6 +998,21 @@ stmt    Long ,Auto
   Return driver:ok
 
 !-----------------------------------------------------------------
+! prepares and executes the SQL in SqlCode
+
+DriverFileSQLite2Class._ExecuteSqlNoParms procedure(iResultSet pResult)
+stmt    Long ,Auto
+  code
+  If self.CheckConnect() = driver:notok then Return driver:notok.
+  stmt = self._Prepare()
+  If stmt
+    self._ExecuteSqlToResults(stmt,self.result)
+  Else
+    Return Driver:notok
+  End
+  Return driver:ok
+
+!-----------------------------------------------------------------
 DriverFileSQLite2Class._executeSql procedure(Long pStmt)
   Code
   If self.CheckConnect() = driver:notok then Return driver:notok.
@@ -883,8 +1027,9 @@ DriverFileSQLite2Class._ExecuteSqlWork procedure(Long pStmt)
 result  Long,Auto
   code
   If pStmt
-    If self._BindParameters(pStmt) = Driver:ok
-      self._ExecuteToResults(pStmt,self.result)
+    If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
+    If self._BindParameters(pStmt,self.ParmBufferX,self.codepage) = Driver:ok
+      self._ExecuteSqlToResults(pStmt,self.result)
     End
     result = sqlite3_finalize(pStmt)
     self.SetErrorSqlite(result,'[p010]')
@@ -936,7 +1081,7 @@ rl     real
     If not omitted(pParm19) then parm = pParm19 ; do BindParm.
     If not omitted(pParm20) then parm = pParm20 ; do BindParm.
     !self.NewResultSet(driver:DontFreeRam)
-    self._ExecuteToResults(stmt,self.result)
+    self._ExecuteSqlToResults(stmt,self.result)
     result = sqlite3_finalize(stmt)
     self._ClearParameterQueue(self._ParameterOpcode)
     self.SetErrorSqlite(result,'[p015]')
@@ -956,7 +1101,9 @@ BindParm  routine
     s &= new(string(len))
     s = parm
     If self._logBind then self.Log('[BIND][sb1]' & count & ' (string)[' & s & ']').
-    result = sqlite3_bind_textA(stmt,count,s, len ,SQLITE_TRANSIENT)
+    If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
+    self.ParmBufferX._SetParmBuffer(count,Address(s),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+    result = sqlite3_bind_text(Stmt,Count ,self.ParmBufferX.ParmBufferAddr[Count], self.ParmBufferX.ParmBufferLen[Count] ,SQLITE_STATIC)
     self.SetErrorSqlite(result,'[p020]')
     Dispose(s)
   Else
@@ -1029,6 +1176,7 @@ DriverFileSQLite2Class._Prepare  Procedure()
 
 !-----------------------------------------------------------------
 ! take a SQL statement and pass it to the SQLite prepare call
+! called from View and File, so avoid using self.
 DriverFileSQLite2Class._Prepare  Procedure(StringTheory pSqlCode)
 result        long,Auto
 stmt          long
@@ -1039,7 +1187,7 @@ tail          long
   Case result
   of SQLite_Ok
   Else
-    self.SetErrorSqlite(result,'[p040] Filed to Prepare SQL:')
+    self.SetErrorSqlite(result,'[p040] Failed to Prepare SQL:')
     pSqlCode.Trace()
   End
   Return stmt
@@ -1055,7 +1203,7 @@ DriverFileSQLite2Class._GetDBVersion   Procedure
     self._ParameterOpcode = 0
     If self._ExecuteSql() = Driver:ok and self.result.Rows()
       self._ParseVersionDb(self.Result.GetCell(1,1))
-      If self.CheckVersion(SQLite_Major_Required, SQLite_Minor_Required,SQLite_Build_Required) <> driver:ok
+      If self.CheckVersionDb(SQLite_Major_Required, SQLite_Minor_Required,SQLite_Build_Required) <> driver:ok
         self.trace('Database Version : ' & self.DBVersionMajor & '.' & self.DBVersionMinor & '.' & self.DBVersionBuild  & ' Too Old. Need ' & SQLite_Major_Required & '.' & SQLite_Minor_Required & '.' & SQLite_Build_Required & ' or later.')
         self.BugAlert('[' & self.GetPROP:Driver() & '] ' & self.GetPROP:Database() & ' Database Version : ' & self.DBVersionMajor & '.' & self.DBVersionMinor & '.' & self.DBVersionBuild  & ' Too Old. Need ' & SQLite_Major_Required & '.' & SQLite_Minor_Required & '.' & SQLite_Build_Required & ' or later.')
       End
@@ -1146,6 +1294,40 @@ ValuesList     StringTheory
   End
   self.SqlCode.Append(';')
   return driver:ok
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class._ClaimSql  Procedure(? pFIELD, ? pNewValue)
+update   cstring(1024)
+  code
+  If self._WithFieldPtr(pField) <> Driver:ok
+    self.SetError(BadFieldErr)
+    Return driver:notok
+  End
+  If IsString(pField)
+    update = self.fields.Column & '= ''' & clip(pNewValue) & ''''
+  Else
+    update = self.fields.Column & ' = ' & pNewValue
+  End
+
+  self.Sqlcode.SetValue( |
+    'UPDATE ' & self._sanitize(self.FullPathName,driver:sqlTable) & |
+    ' SET ' & update & |
+    ' WHERE rowid = (' & |
+       ' SELECT rowid' & |
+       ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) &|
+       ' WHERE ' & self.GetProp:Where()  & |
+       ' ORDER BY ' & self.GetProp:Order() & |
+       ' LIMIT 1' & |
+    ')' & |
+    ' RETURNING ' & self.projectlist.GetValue() & ';')
+  self._ClaimSqlDidPut = true
+  Return driver:ok
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class._RollbackSavePointSql  Procedure(String pSavePoint)
+  code
+  self.SqlCode.SetValue('ROLLBACK TO ' & self._sanitize(pSavePoint,driver:SqlSavePoint) & ';')
+  Return
 
 !-----------------------------------------------------------------
 ! can take Opcode:Add, Opcode:Append, Opcode:Upsert as the parameter.
@@ -1463,7 +1645,7 @@ x            Long,Auto
   Loop x = 1 to Records(self.OrderQueue)                       ! Turn the OrderBy queue into SQLite SQL code.
     Get(self.OrderQueue,x)
     OrderBy.Append(self.OrderQueue.Clause,,',')
-    If self.OrderQueue.Nocase
+    If self.OrderQueue.Nocase and self.orderqueue.IsString = true
       OrderBy.Append(' COLLATE NOCASE')
     End
     If self._setdirection = Opcode:NEXT
@@ -1490,12 +1672,14 @@ DriverFileSQLite2Class._AppendOrderQueueToWhere  Procedure()
   code
 
 !-----------------------------------------------------------------
-DriverFileSQLite2Class._BindParameters  Procedure(Long pStmt)
+! called fromView and File, so avoid using Self.
+DriverFileSQLite2Class._BindParameters  Procedure(Long pStmt, DriverParmBufferClass pParmBuffer, Long pCodePage)
 x       Long,Auto
 y       Long,Auto
 p       Long,Auto
 result  Long,Auto
 Len     Long,Auto
+Count   Long,Auto
 addr    Long,Auto
   code
   If self.ParameterQueue &= null then return driver:ok.
@@ -1511,8 +1695,10 @@ addr    Long,Auto
       If self.ParameterQueue.ParameterArray[x].OpCode <> self._ParameterOpcode then cycle.
       If not self.ParameterQueue.ParameterArray[x].Value &= null
         len = len(self.ParameterQueue.ParameterArray[x].Value)
+        count = self.ParameterQueue.ParameterArray[x].Count
         If self._logBind then self.Log('[BIND][sb4]' & self.ParameterQueue.ParameterArray[x].Count & ' (string)' & self.ParameterQueue.ParameterArray[x].Value).
-        result = sqlite3_bind_textA(pStmt,self.ParameterQueue.ParameterArray[x].Count ,self.ParameterQueue.ParameterArray[x].Value, len ,SQLITE_STATIC)
+        pParmBuffer._SetParmBuffer(count,Address(self.ParameterQueue.ParameterArray[x].Value),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,pCodePage)
+        result = sqlite3_bind_text(pStmt,Count ,pParmBuffer.ParmBufferAddr[Count], pParmBuffer.ParmBufferLen[Count] ,SQLITE_STATIC)
       Elsif not self.ParameterQueue.ParameterArray[x].FieldNode &= null
         self.Fields &= self.ParameterQueue.ParameterArray[x].FieldNode
         case self.ParameterQueue.ParameterArray[x].Source
@@ -1523,10 +1709,10 @@ addr    Long,Auto
         of driver:FromPrimaryKeyPosition
           addr = address(self.PrimaryKeyPosition) + self.ParameterQueue.ParameterArray[x].Offset
         End
-        self._BindField(pStmt,self.ParameterQueue.ParameterArray[x].Count,addr)
+        self._BindField(pStmt,self.ParameterQueue.ParameterArray[x].Count,addr,pParmBuffer,pCodePage)
       ElsIf self.ParameterQueue.ParameterArray[x].BlobIndex <> 0
         If self._WithBlob(self.ParameterQueue.ParameterArray[x].BlobIndex) = driver:ok
-          self._BindBlob(pStmt,self.ParameterQueue.ParameterArray[x].Count)
+          self._BindBlob(pStmt,self.ParameterQueue.ParameterArray[x].Count,pParmBuffer,pCodePage)
         End
       End
     End
@@ -1535,7 +1721,9 @@ addr    Long,Auto
   Return driver:ok
 
 !-----------------------------------------------------------------
-DriverFileSQLite2Class._BindBlob  Procedure(Long pStmt,Long pCount)
+! called from View and File, so avoid self
+! blobs record for the file is loaded.
+DriverFileSQLite2Class._BindBlob  Procedure(Long pStmt,Long pCount, DriverParmBufferClass pParmBuffer, Long pCodePage)
 result  long,auto
   code
   If self.blobs.Memo
@@ -1546,7 +1734,8 @@ result  long,auto
         self.SetErrorSqlite(result,'[p060]')
       Else
         If self._logBind then self.Log('[BIND][sb6]' & pCount & ' (memo)' & self.Blobs.memostring).
-        result = sqlite3_bind_text(pStmt,pCount,address(self.Blobs.memostring), len(clip(self.Blobs.memostring)) ,SQLITE_STATIC)
+        pParmBuffer._SetParmBuffer(pCount,address(self.Blobs.memostring),len(clip(self.Blobs.memostring)), SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,pCodepage)
+        result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
         self.SetErrorSqlite(result,'[p061]')
       End
     Else
@@ -1561,7 +1750,7 @@ result  long,auto
         self.SetErrorSqlite(result,'[p062]')
       Else
         If self._logBind then self.Log('[BIND][sb9]' & pCount & ' (blob)').
-        result = sqlite3_bind_text(pStmt,pCount,self.Blobs.handle, Self.Blobs.HandleSize ,SQLITE_STATIC)
+        result = sqlite3_bind_text(pStmt,pCount,self.Blobs.handle, Self.Blobs.HandleSize ,SQLITE_STATIC)   ! Blob, so no conversion to utf8
         self.SetErrorSqlite(result,'[p063]')
       End
     Else
@@ -1574,7 +1763,8 @@ result  long,auto
 ! binds one field to a parameter. Source of the field is the mem address in the 3rd parameter.
 ! The self.Fields queue must be loaded with the correct record before this is called.
 ! Do not call this for Blob or Memo fields.
-DriverFileSQLite2Class._BindField  Procedure(Long pStmt,Long pCount, Long pAddress)
+! called from View and File, so avoid self
+DriverFileSQLite2Class._BindField  Procedure(Long pStmt,Long pCount, Long pAddress, DriverParmBufferClass pParmBuffer, Long pCodePage)
 result  long,auto
 len     long,auto
 p       long,auto
@@ -1599,7 +1789,13 @@ hi        Long
         End
 
   code
-  If not self.Fields.Interface &= null
+  If self.null_(self.Fields.index) = true
+    If self._logBind then self.Log('[BIND][sb49]' & pCount & ' (null)').
+    result = sqlite3_bind_null(pStmt,pCount)
+    self.SetErrorSqlite(result,'[p077]')
+    Return
+
+  ElsIf not self.Fields.Interface &= null
     len = self.Fields.SourceSize
     If len
       strmem &= new string(len)
@@ -1642,25 +1838,28 @@ hi        Long
         self.SetErrorSqlite(result,'[p074]')
       of 'TEXT'
       orof 'CHAR'
-      orof 'NCHAR'
       orof 'VARCHAR'
-      orof 'NVARCHAR'
-        If self._logBind then self.Log('[BIND][sb16]' & pCount & ' (string)' & strmem).
-        result = sqlite3_bind_textA(pStmt,pCount,strmem, len ,SQLITE_TRANSIENT)
+        If self._logBind then self.Log('[BIND][sb16]' & pCount & ' (string(' & len & '))[' & strmem &']').
+        result = sqlite3_bind_text(pStmt,pCount,address(strmem), len ,SQLITE_TRANSIENT)   ! custom field, so no need to convert to utf-8 here.
         self.SetErrorSqlite(result,'[p075]')
+      of 'BLOB'
+        If strMem = ''
+          clear(Strmem,-1)
+        End
+        If self._logBind then self.Log('[BIND][sb17]' & pCount & ' (blob(' & len & '))[' & strmem &']').
+        result = sqlite3_bind_blob(pStmt,pCount,address(strmem), len ,SQLITE_TRANSIENT)
+        self.SetErrorSqlite(result,'[p092]')
+
+      of 'NCHAR'
+      orof 'NVARCHAR'
       End
       Dispose(strmem)
     End
+
   ElsIf self.Fields.DimProduct > 1
     do HandleArray
   Else
     p = self.Fields.index
-    If self.null_(p) = true
-      If self._logBind then self.Log('[BIND][sb17]' & pCount & ' (null)').
-      result = sqlite3_bind_null(pStmt,pCount)
-      self.SetErrorSqlite(result,'[p077]')
-      Return
-    End
     self.Fields &= self._WithFieldNode(p)
     strmem &= pAddress & ':' & self.Fields.Length
     sx = strmem
@@ -1668,31 +1867,35 @@ hi        Long
     Of ClaCSTRING
       cstr &= pAddress & ':' & self.Fields.Length
       len = len(cstr)
-      If self._logBind then self.Log('[BIND][sb18]' & pCount & ' (cstring)' & cstr).
+      If self._logBind then self.Log('[BIND][sb18]' & pCount & ' (cstring(' & len & '))[' & cstr & ']').
+      pParmBuffer._SetParmBuffer(pCount,pAddress,len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
       result = sqlite3_bind_text(pStmt,pCount,pAddress, len,SQLITE_TRANSIENT)
       self.SetErrorSqlite(result,'[p078]')
 
     Of ClaPSTRING
       peek(pAddress,bt)
       len = bt
-      If self._logBind then self.Log('[BIND][sb19]' & pCount & ' (pstring)' & strmem).       !!!todo bug here
-      result = sqlite3_bind_text(pStmt,pCount,pAddress+1, len,SQLITE_TRANSIENT)
+      If self._logBind then self.Log('[BIND][sb19]' & pCount & ' (pstring('&len&'))[' & strmem[2:len+1] & ']').
+      pParmBuffer._SetParmBuffer(pCount,pAddress+1,len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+      result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
       self.SetErrorSqlite(result,'[p079]')
 
     Of ClaSTRING
-      If self.fields.SqlTimeStamp
-        sx = self.FormatTimeStamp(sx)
+      If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStamp4
+        sx = self.FormatTimeStamp(sx,self.fields.SqlTimeStamp)
         len = len(clip(sx))
         If self._logBind then self.Log('[BIND][sb20]' & pCount & ' (timestamp)' & sx).
-        result = sqlite3_bind_text(pStmt,pCount,address(sx), len ,SQLITE_TRANSIENT)
+        pParmBuffer._SetParmBuffer(pCount,address(sx),len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+        result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
       ElsIf self.Fields.binary = false
         len = len(clip(strmem))
         If self._logBind then self.Log('[BIND][sb21]' & pCount & ' (string: ' & len & ')[' & strmem & ']').
-        result = sqlite3_bind_text(pStmt,pCount,pAddress, len ,SQLITE_TRANSIENT)
+        pParmBuffer._SetParmBuffer(pCount,pAddress,len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+        result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
         self.SetErrorSqlite(result,'[p080]')
-      Else
+      Else  ! binary string
         len = self.Fields.Length
-        If self._logBind then self.Log('[BIND][sb22]' & pCount & ' (binarystring: ' & len & ')[' & strmem & ']').
+        If self._logBind then self.Log('[BIND][sb22]' & pCount & ' (binarystring( ' & len & '))[' & strmem & ']').
         result = sqlite3_bind_blob(pStmt,pCount,pAddress, len ,SQLITE_TRANSIENT)
       End
     of ClaREAL
@@ -1734,14 +1937,16 @@ hi        Long
       sx = self.FormatDate(dt)
       len = len(clip(sx))
       If self._logBind then self.Log('[BIND][sb31]' & pCount & ' (date)' & sx).
-      result = sqlite3_bind_text(pStmt,pCount,address(sx), len ,SQLITE_TRANSIENT)
+      pParmBuffer._SetParmBuffer(pCount,address(sx),len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+      result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
       self.SetErrorSqlite(result,'[p088]')
 
     of ClaTime
       sx = self.FormatTime(tm)
       len = len(clip(sx))
       If self._logBind then self.Log('[BIND][sb32]' & pCount & ' (time)' & sx).
-      result = sqlite3_bind_text(pStmt,pCount,address(sx), len ,SQLITE_TRANSIENT)
+      pParmBuffer._SetParmBuffer(pCount,address(sx),len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+      result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
       self.SetErrorSqlite(result,'[p089]')
 
     of ClaDecimal
@@ -1750,7 +1955,8 @@ hi        Long
       self._DecToString(address(sx),self.Fields.length, self.Fields.DecimalSize,self.Fields.DecimalPlaces,self.Fields.Type,sx)
       len = len(clip(sx))
       If self._logBind then self.Log('[BIND][sb33]' & pCount & ' (decimal)' & sx).
-      result = sqlite3_bind_text(pStmt,pCount,address(sx), len ,SQLITE_TRANSIENT)
+      pParmBuffer._SetParmBuffer(pCount,address(sx),len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+      result = sqlite3_bind_text(pStmt,pCount ,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
       self.SetErrorSqlite(result,'[p090]')
     End
   End
@@ -1763,6 +1969,7 @@ arr StringTheory ! moved into a routine for performance
     ! Array Support.  This will likely vary from one driver to another.
     ! In SQLite arrays become JSON fields, stored in a TEXT field
     arr.SetValue(self.GetProp:Json(self.Fields.Index))  ! get a JSON form of the Array
+    arr.ToUnicode(st:EncodeUtf8,self.codepage)
     If self._logBind then self.Log('[BIND][sb34]' & pCount & ' (array)' & arr.GetValue()).
     result = sqlite3_bind_text(pStmt,pCount,arr.GetAddress(), arr.Length() ,SQLITE_TRANSIENT)
     self.SetErrorSqlite(result,'[p076]')
@@ -1771,9 +1978,10 @@ arr StringTheory ! moved into a routine for performance
 ! Data has come from the database, and is in the pStr "raw" (ie as it is in the database).
 ! It needs to move into the field in the record. The fieldsQueue is already loaded.
 ! In SQLite the data is stored in a Text Array, so all we need to do is call self._PutJsonAsField
-DriverFileSQLite2Class._LoadArray        Procedure(*String pStr,Long pIndex)
+DriverFileSQLite2Class._LoadArray        Procedure(*String pStr,Long pIndex, Long pBuffer, Long pCanNull)
   code
-  self._PutJsonAsField(pStr,pIndex)
+  self._PutJsonAsField(pStr,pIndex,pBuffer)
+  Return
 
 !-----------------------------------------------------------------
 ! data has been read, and is now moving from the SQL engine directly into the record.
@@ -1842,7 +2050,7 @@ rTextLen      Long
         ElsIf self.Fields.DimProduct > 1                     ! field matching this column is an array. In SQLite this means a TEXT field, in JSON form. ! Parse the JSON and move the values into the record buffer
            If dbText
              str &= dbAddress & ':' & dbLength
-             self._LoadArray(str,self.Fields.index)
+             self._LoadArray(str,self.Fields.index,Buffer,canNull)
            Else
              self._ClearField()
            End
@@ -1886,15 +2094,15 @@ rTextLen      Long
 !-----------------------------------------------------------------
 ! a function which copies data from the database format to the clarion format.
 ! this is a matrix which converts database types to Clarion types.
-! This can be as simple, or as flexible as you want. In this case, since Clarion has automatica type conversion
-! an so does SQLite, this function is quite long so as to handle as many cases as is possible. If it's not possible
-! to store the SQL data into the Clarion type then errorcode is set to DataTruncatedError
+! This can be as simple, or as flexible as you want. In this case, since Clarion has automatic type conversion
+! and so does SQLite, this function is quite long so as to handle as many cases as is possible. If it's not possible
+! to store the SQL data into the Clarion type then errorcode is set to DataTruncatedErr
 ! For databases which support a lot of types, this function could get VERY long.
 ! converting can take time, so matching the clarion type to the database type to begin with will speed things along.
 ! if the pClarionType is ClaBlob then pClarionAddress is the blob index (as a neg number)
 ! if the pClarionType is a ClaMEMO then the pClarionAddress and pClarionLength are set as normal
 ! if the pClarionType is a CLADECIMAL or CLAPDECIMAL then the Fields node has to be loaded. Otherwise fields is not used.
-DriverFileSQLite2Class._Morph      Procedure(String pFieldLabel, Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength)
+DriverFileSQLite2Class._Morph      Procedure(String pFieldLabel, Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pDbType, Long pDbAddress, Long pDbLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength)
 lg      long,Auto
 ulg     Ulong,Auto
 sr      Sreal,Auto
@@ -1908,43 +2116,46 @@ len     Long,Auto
 strmem  String(36),Auto
 str     &string
 StrLen  Long,Auto
+strx    &string   ! do not auto
+utfstr  &string
+
   Code
-  !self.trace('DriverFileSQLite2Class._Morph pFieldLabel=' & clip(pFieldLabel) & ' pClarionType=' & pClarionType & ' ' & self.InterpretType(pClarionType) & ' rTextLength=' & rTextLength & ' pCellType=' & pCellType & ' ' & self.InterpretSQLType(pCellType) & ' pCellLength=' & pCellLength)
-  Case pCellType
+  !self.trace('DriverFileSQLite2Class._Morph pFieldLabel=' & clip(pFieldLabel) & ' pClarionType=' & pClarionType & ' ' & self.InterpretType(pClarionType) & ' pClarionLength=' & pClarionLength & ' rTextLength=' & rTextLength & ' pDbType=' & pDbType )
+  Case pDbType
 !region - SQLITE_INTEGER
 !------------------------------------------------
   Of SQLITE_INTEGER
-    memcpy(address(lg),pCellAddress,4)   !!!todo limited to 32 bit integers for now
+    memcpy(address(lg),pDbAddress,4)   !!!todo limited to 32 bit integers for now
     Case pClarionType
 !region -     ClaBYTE
     of ClaBYTE
       If band(lg,0FFFFFF00h) > 0 and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 1 & ')' & ' value: ' & lg)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 1 & ')' & ' value: ' & lg)
         Return
       End
-      memcpy(pClarionAddress,pCellAddress,1)
+      memcpy(pClarionAddress,pDbAddress,1)
 !endregion
 !region -     ClaLONG
     of ClaLONG orof ClaSIGNED
-      memcpy(pClarionAddress,pCellAddress,4)
+      memcpy(pClarionAddress,pDbAddress,4)
 
 !endregion
 !region -     ClaSHORT
     of ClaSHORT
       If (lg < -32768 or lg > 32767) and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 2 & ')' & ' value: ' & lg)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 2 & ')' & ' value: ' & lg)
         Return
       End
-      memcpy(pClarionAddress,pCellAddress,2)
+      memcpy(pClarionAddress,pDbAddress,2)
 
 !endregion
 !region -     ClaUSHORT
     of ClaUSHORT
       If band(lg,0FFFF0000h) > 0 and self.opt:ignoretruncation = false
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 2 & ')' & ' value: ' & lg)
-        self.SetError(DataTruncatedError)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 2 & ')' & ' value: ' & lg)
+        self.SetError(DataTruncatedErr)
         Return
       End
       ush = lg
@@ -1952,7 +2163,7 @@ StrLen  Long,Auto
 !endregion
 !region -     ClaULONG
     of ClaULONG orof ClaUNSIGNED
-      memcpy(pClarionAddress,pCellAddress,4)
+      memcpy(pClarionAddress,pDbAddress,4)
 
     ! integers from the db can be stored in real fields in clarion.
     !!!todo support integers past long up to 15 digits
@@ -1960,8 +2171,8 @@ StrLen  Long,Auto
 !region -     ClaSREAL
     of ClaSREAL
       If (lg < -16777216 or lg > 16777216 )  and self.opt:ignoretruncation = false     ! sReal has 23 bits of integer space
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 4 & ')' & ' value: ' & lg)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 4 & ')' & ' value: ' & lg)
         Return
       End
       sr = lg
@@ -1978,8 +2189,8 @@ StrLen  Long,Auto
 !region -     ClaDATE , ClaTIME
     of ClaDATE
     orof ClaTIME
-      self.SetError(FieldMismatchError)
-      self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
+      self.SetError(FieldMismatchErr)
+      self.SetFileError(FieldMismatchErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
 !endregion
 !region -     ClaDECIMAL, ClaPDECIMAL
     of ClaDECIMAL
@@ -1996,8 +2207,8 @@ StrLen  Long,Auto
       cst = lg
       len = len(cst)
       If len > pClarionLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
         Return
       End
       If len > pClarionLength then len = pClarionLength.
@@ -2010,15 +2221,15 @@ StrLen  Long,Auto
 !region -     ClaCSTRING
     of ClaCSTRING
       !!! todo handle integers longer than a long
-      If pCellLength > 4 and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
+      If pDbLength > 4 and self.opt:ignoretruncation = false
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
         Return
       End
       cst = lg
       len = len(cst)
       If len > pClarionLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
+        self.SetError(DataTruncatedErr)
         Return
       End
       If len > pClarionLength-1 then len = pClarionLength-1.
@@ -2030,15 +2241,15 @@ StrLen  Long,Auto
 !region -     ClaPSTRING
     of ClaPSTRING
       !!! todo handle integers longer than a long
-      If pCellLength > 4 and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
+      If pDbLength > 4 and self.opt:ignoretruncation = false
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & lg)
         Return
       End
       cst = lg
       len = len(cst)
       If len + 1 > pClarionLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
+        self.SetError(DataTruncatedErr)
         Return
       End
       If len > pClarionLength-1 then len = pClarionLength-1.
@@ -2049,8 +2260,8 @@ StrLen  Long,Auto
 !endregion
 !region -     Else
     else
-      self.SetError(FieldMismatchError)
-      self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
+      self.SetError(FieldMismatchErr)
+      self.SetFileError(FieldMismatchErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
 !endregion
     End
 !endregion
@@ -2060,15 +2271,15 @@ StrLen  Long,Auto
     case pClarionType
 !region -     ClaREAL
     of ClaREAL
-      memcpy(pClarionAddress,pCellAddress,8)
+      memcpy(pClarionAddress,pDbAddress,8)
 !endregion
 !region -     ClaSREAL
     of ClaSREAL
       !!!todo, REAL into SREAL needs work to see if a) the integer part will fit, b) the exponent part will fit.  Using SREAL in the file declaration is thus not recommended.
-      memcpy(address(rl),pCellAddress,8)
+      memcpy(address(rl),pDbAddress,8)
       If rl > 07fffffh and self.opt:ignoretruncation = false  ! sReal has 23 bits of integer space
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 4 & ')' & ' value: ' & rl)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & 4 & ')' & ' value: ' & rl)
         Return
       End
       sr = rl
@@ -2078,7 +2289,7 @@ StrLen  Long,Auto
 !region -     ClaDECIMAL , ClaPDECIMAL
     of ClaDECIMAL
     orof ClaPDECIMAL
-      memcpy(address(rl),pCellAddress,8)
+      memcpy(address(rl),pDbAddress,8)
       !!!todo - some sort of range check to see if the real "fit" into the declared decimal field. Note that decimal field may have fewer decimal places. That's not neceessarily a truncation.
       strmem = rl
       self._StringToDec(strmem,self.Fields.Type, address(strmem), self.Fields.DecimalSize, self.Fields.DecimalPlaces)
@@ -2087,12 +2298,12 @@ StrLen  Long,Auto
 !endregion
 !region -     ClaSTRING , ClaMEMO
     of ClaSTRING orof ClaMEMO
-      memcpy(address(rl),pCellAddress,8)
+      memcpy(address(rl),pDbAddress,8)
       cst = rl
       len = len(cst)
       If len > pClarionLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
         Return
       End
       If len > pClarionLength then len = pClarionLength.
@@ -2104,12 +2315,12 @@ StrLen  Long,Auto
 !endregion
 !region -     ClaCSTRING
     of ClaCSTRING
-      memcpy(address(rl),pCellAddress,8)
+      memcpy(address(rl),pDbAddress,8)
       cst = rl
       len = len(cst)
       If len > pClarionLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
         Return
       End
       If len > pClarionLength-1 then len = pClarionLength-1.
@@ -2120,12 +2331,12 @@ StrLen  Long,Auto
 !endregion
 !region -     ClaPSTRING
     of ClaPSTRING
-      memcpy(address(rl),pCellAddress,8)
+      memcpy(address(rl),pDbAddress,8)
       cst = rl
       len = len(cst)
       If len + 1 > pClarionLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
         Return
       End
       If len > pClarionLength-1 then len = pClarionLength-1.
@@ -2136,132 +2347,152 @@ StrLen  Long,Auto
 !endregion
 !region -     Else
     else
-      memcpy(address(rl),pCellAddress,8)
-      self.SetError(FieldMismatchError)
-      self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
+      memcpy(address(rl),pDbAddress,8)
+      self.SetError(FieldMismatchErr)
+      self.SetFileError(FieldMismatchErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & rl)
 !endregion
     End
 !endregion
 !region - SQLITE_TEXT
 !------------------------------------------------
   Of SQLITE_TEXT
-    If pClarionType = ClaSTRING and pSqlTimeStamp   ! Special Case
-      str &= pCellAddress & ':' & pCellLength
-      strmem = self.DeformatText(str)
+    If pClarionType = ClaSTRING and pSqlTimeStamp    ! Special Case
+      str &= pDbAddress & ':' & pDbLength
+      strmem = self.DeformatText(str,pSqlTimeStamp)
       If pClarionLength < 8 and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
       memcpy(pClarionAddress,address(strmem),8)
     Else
+      If pDbLength
+        If pClarionType = ClaBLOB
+        ElsIf pClarionType <> ClaMEMO and pFieldLabel and self.fields.Binary
+          str &= pDbAddress & ':' & pDbLength
+          strx &= new String(pDbLength)
+          strx = str
+          len = pDbLength
+        Else
+          utfstr &= pDbAddress & ':' & pDbLength
+          strx &= self.tempstr.Utf8ToAnsi(utfstr,len,self.codepage)    ! len is the ANSI len after the conversion.
+          If strx &= null
+            self.SetFileError(UnicodeConversionError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ') From utf-8 To Ansi val=[' & utfstr & ']')
+            self.SetError(UnicodeConversionError)
+            Return
+          End
+        End
+      Else
+        strx &= new string(1)
+      End
       Case pClarionType
 !region -     ClaLong
       of ClaLong
-        str &= pCellAddress & ':' & pCellLength
-        rl = str
+        !str &= pDbAddress & ':' & pDbLength
+        rl = strx
         lg = rl
         If lg <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(lg),4)
 !endregion
 !region -     ClaUlong
       of ClaULong
-        str &= pCellAddress & ':' & pCellLength
-        rl = str
+        !str &= pDbAddress & ':' & pDbLength
+        rl = strx
         ulg = rl
         If ulg <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(ulg),4)
 !endregion
 !region -     ClaShort
       of ClaShort
-        str &= pCellAddress & ':' & pCellLength
-        rl = str
+        !str &= pDbAddress & ':' & pDbLength
+        rl = strx
         sh = rl
         If sh <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(sh),2)
 !endregion
 !region -     ClaUShort
       of ClaUShort
-        str &= pCellAddress & ':' & pCellLength
-        rl = str
+        !str &= pDbAddress & ':' & pDbLength
+        rl = strx
         ush = rl
         If ush <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(ush),2)
 !endregion
 !region -     ClaByte
       of ClaByte
-        str &= pCellAddress & ':' & pCellLength
+        !str &= pDbAddress & ':' & pDbLength
         rl = str
         bt = rl
         If bt <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(bt),1)
 !endregion
 !region -     ClaReal
       of ClaReal
-        str &= pCellAddress & ':' & pCellLength
-        rl = str
+        !str &= pDbAddress & ':' & pDbLength
+        rl = strx
         If str <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(rl),8)
 !endregion
 !region -     ClaSreal
       of ClaSReal
-        str &= pCellAddress & ':' & pCellLength
-        rl = str
+        !str &= pDbAddress & ':' & pDbLength
+        rl = strx
         srl = rl
         If srl <> rl and self.opt:ignoretruncation = false
-          self.SetError(DataTruncatedError)
-          self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+          self.SetError(DataTruncatedErr)
+          self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
           Return
         End
         memcpy(pClarionAddress,address(srl),4)
 !endregion
 !region -     ClaDATE
       of ClaDATE
-          str &= pCellAddress & ':' & pCellLength
-          strmem = self.DeformatText(str)
+          !str &= pDbAddress & ':' & pDbLength
+          strmem = self.DeformatText(strx,0)
           memcpy(pClarionAddress,address(strmem),4)
 !endregion
 !region -     ClaTIME
       of ClaTIME
-          str &= pCellAddress & ':' & pCellLength
-          strmem = self.DeformatText(str)
+          !str &= pDbAddress & ':' & pDbLength
+          strmem = self.DeformatText(strx,0)
           memcpy(pClarionAddress,address(strmem),4)
 !endregion
 !region -     ClaCSTRING
       of ClaCSTRING
-          len = pCellLength
+          len = pDbLength
           If pClarionLength < len + 1 and self.opt:ignoretruncation = false
-            str &= pCellAddress & ':' & pCellLength
-            self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
-            self.SetError(DataTruncatedError)
+            !str &= pDbAddress & ':' & pDbLength
+            self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
+            self.SetError(DataTruncatedErr)
             Return
           End
           If len > pClarionLength-1 then len = pClarionLength-1.
-          memcpy(pClarionAddress,pCellAddress,len)
+          !memcpy(pClarionAddress,pDbAddress,len)
+          memcpy(pClarionAddress,Address(strx),len)
           memset(pClarionAddress+len,0,1)
           StrLen = Len
           do PadString
@@ -2269,47 +2500,50 @@ StrLen  Long,Auto
 !region -     ClaSTRING , CLAMEMO
       of ClaSTRING
       orof ClaMEMO
-          len = pCellLength
+          len = pDbLength
           If pClarionLength < len and self.opt:ignoretruncation = false
-            str &= pCellAddress & ':' & pCellLength
-            self.SetError(DataTruncatedError)
-            self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+            !str &= pDbAddress & ':' & pDbLength
+            self.SetError(DataTruncatedErr)
+            self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
             Return
           End
           If len > pClarionLength then len = pClarionLength.
-          memcpy(pClarionAddress,pCellAddress,Len)
+          !memcpy(pClarionAddress,pDbAddress,Len)
+          memcpy(pClarionAddress,Address(strx),Len)
           StrLen = len
           If rTextLength = 0 then do PadString.
-          rTextLength = pCellLength
+          rTextLength = pDbLength
 
 !endregion
 !region -     ClaPSTRING
       of ClaPSTRING
-          len = pCellLength
+          len = pDbLength
           If pClarionLength < len + 1 and self.opt:ignoretruncation = false
-            str &= pCellAddress & ':' & pCellLength
-            self.SetError(DataTruncatedError)
-            self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+            !str &= pDbAddress & ':' & pDbLength
+            self.SetError(DataTruncatedErr)
+            self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
             Return
           End
           If len > pClarionLength-1 then len = pClarionLength-1.
-          memcpy(pClarionAddress+1,pCellAddress,pCellLength)
-          memset(pClarionAddress,pCellLength,1)
+          !memcpy(pClarionAddress+1,pDbAddress,pDbLength)
+          memcpy(pClarionAddress+1,address(strx),len)
+          memset(pClarionAddress,len,1)
           StrLen = len
           do PadString
 
 !endregion
 !region -     ClaBLOB
       of ClaBLOB
-        self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
+        self.SetBlobFromAddr(pClarionAddress, 0, pDbAddress, pDbLength)      ! if ClaBlob then pClarionAddress is the blob index
 !endregion
 !region -     Else
       Else
-        str &= pCellAddress & ':' & pCellLength
-        self.SetError(FieldMismatchError)
-        self.SetFileError(FieldMismatchError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & str)
+        !str &= pDbAddress & ':' & pDbLength
+        self.SetError(FieldMismatchErr)
+        self.SetFileError(FieldMismatchErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & strx)
 !endregion
       End
+      Dispose(strx)
     End
 
 !endregion
@@ -2319,65 +2553,65 @@ StrLen  Long,Auto
     Case pClarionType
 !region -     ClaBLOB
     of ClaBLOB
-      self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
+      self.SetBlobFromAddr(pClarionAddress, 0, pDbAddress, pDbLength)      ! if ClaBlob then pClarionAddress is the blob index
 !endregion
 !region -     ClaSTRING , ClaMEMO
     of ClaSTRING
     orof ClaMEMO
-      len = pCellLength
-      str &= pCellAddress & ':' & pCellLength
+      len = pDbLength
+      str &= pDbAddress & ':' & pDbLength
       If pClarionLength < len and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
       If len > pClarionLength then len = pClarionLength.
-      memcpy(pClarionAddress,pCellAddress,len)
+      memcpy(pClarionAddress,pDbAddress,len)
       StrLen = len
       If rTextLength = 0 then do PadString.
-      rTextLength = pCellLength
+      rTextLength = pDbLength
 
 !endregion
 !region -     ClaCSTRING
     of ClaCSTRING
-      len = pCellLength
-      str &= pCellAddress & ':' & pCellLength
+      len = pDbLength
+      str &= pDbAddress & ':' & pDbLength
       If pClarionLength < len + 1 and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
       If len > pClarionLength-1 then len = pClarionLength-1.
-      memcpy(pClarionAddress,pCellAddress,pCellLength)
-      memset(pClarionAddress+pCellLength+1,0,1)
+      memcpy(pClarionAddress,pDbAddress,pDbLength)
+      memset(pClarionAddress+pDbLength+1,0,1)
       StrLen = len
       do PadString
 
 !endregion
 !region -     ClaPSTRING
     of ClaPSTRING
-      len = pCellLength
-      str &= pCellAddress & ':' & pCellLength
+      len = pDbLength
+      str &= pDbAddress & ':' & pDbLength
       If pClarionLength < len + 1 and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
       If len > pClarionLength-1 then len = pClarionLength-1.
-      memcpy(pClarionAddress+1,pCellAddress,pCellLength)
-      memset(pClarionAddress,pCellLength,1)
+      memcpy(pClarionAddress+1,pDbAddress,pDbLength)
+      memset(pClarionAddress,pDbLength,1)
       StrLen = len
       do PadString
 !endregion
 !region -     else
     else
-      str &= pCellAddress & ':' & pCellLength
-      If pClarionLength < pCellLength and self.opt:ignoretruncation = false
-        self.SetError(DataTruncatedError)
-        self.SetFileError(DataTruncatedError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pCellType) & '(' & pCellLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
+      str &= pDbAddress & ':' & pDbLength
+      If pClarionLength < pDbLength and self.opt:ignoretruncation = false
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & str)
         Return
       End
-      memcpy(pClarionAddress,pCellAddress,pCellLength)
+      memcpy(pClarionAddress,pDbAddress,pDbLength)
 !endregion
     End
 !endregion
@@ -2387,7 +2621,7 @@ StrLen  Long,Auto
     case pClarionType
 !region -     ClaBLOB
     of ClaBLOB
-      self.SetBlobFromAddr(pClarionAddress, 0, pCellAddress, pCellLength)      ! if ClaBlob then pClarionAddress is the blob index
+      self.SetBlobFromAddr(pClarionAddress, 0, pDbAddress, pDbLength)      ! if ClaBlob then pClarionAddress is the blob index
 !endregion
 !region -     ClaMEMO
     of ClaMEMO
@@ -2458,6 +2692,11 @@ DriverFileSQLite2Class.BUILD            PROCEDURE(KEY pKey)
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.CLOSE            PROCEDURE()
   Code
+  If self._Destructing = true then Return.
+  If self.InTransaction()   ! do this here. (It needs to be done very first).
+    self.SetError(LogActiveErr)
+    Return
+  End
   self._closing = true  ! needs to come before the call to Disconnect
   self.SetError(NoError)
   self._ClearStmts()
@@ -2508,12 +2747,12 @@ owner   cstring(DRIVER:MAXOWNER),Auto
     pOptions = Bor(pOptions,SQLITE_OPEN_URI)
   End
 
-  self.dbHandle = ConnectionPoolSQlite2.GetConnection(Owner,self.Pool,pOptions)
+  self.dbHandle = self.ConnectionPool.GetConnection(Owner,self.Pool,pOptions)
   If self.dbHandle = 0
     result = sqlite3_open_v2(self.Owner,address(self.dbHandle), pOptions ,0)
     If result = SQLite_Ok
       If self._logConnections then self.Log('[CONN] New Connection. Handle= ' & self.dbHandle & ' ' & Owner) .
-      ConnectionPoolSQlite2.SetConnection(Owner,self.Pool,pOptions,self.dbHandle)
+      self.ConnectionPool.SetConnection(Owner,self.Pool,pOptions,self.dbHandle)
       self._ConnectedAs = self.Owner                                                  ! not owner. We want to be able to compare to self.owner later
       self._ConnectedPool = self.Pool
       self.SetError(NoError)
@@ -2545,8 +2784,14 @@ DriverFileSQLite2Class.AfterConnect  procedure
 result  long
   code
   result = sqlite3_extended_result_codes(self.dbHandle,1) ! turns on extended codes
-  result = sqlite3_busy_timeout(self.dbHandle,self.opt:BusyTimeout)
+  result = sqlite3_busy_timeout(self.dbHandle,self.opt:BusyTimeout * 1000)
   Return
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class.ClearProps              PROCEDURE()
+  code
+  parent.ClearProps()
+  self.SetProp:DatePicture('@D010-')    ! SQLite Diver uses - for dates, not /, so SQLite2 driver follows.
 
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.COPY             PROCEDURE(STRING pNewTableName, Long pOptions)
@@ -2718,15 +2963,15 @@ allSql        StringTheory
         self.SqlCode.append(' REAL')
       of ClaCSTRING
         self.SqlCode.append(' TEXT')
-        If self.Fields.collate = ''
-        !self.trace('CSTRING self.fields.column=' & self.fields.Column & ' ' & self.Fields.incase)
+        If self.Fields.collate
+        ElsIf self.fields.FieldCase = driver:ForceNocase
+          self.SqlCode.append(' COLLATE NOCASE')
+        Else
           case self.fields.InCase                       ! if -1 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
           of true                                       ! is in a case sensitive key, so leave as case sensitive
-            !self.SqlCode.append(' COLLATE RTRIM')
           of false                                      ! is in at least one case-insensitive key, and no case-insensitive keys, so make the default collation NoCase.
             self.SqlCode.append(' COLLATE NOCASE')
           of 255                                         ! strings not in any key,  default to leave it alone
-            !self.SqlCode.append(' COLLATE RTRIM')
           End
         End
       of ClaSTRING
@@ -2734,13 +2979,14 @@ allSql        StringTheory
           self.SqlCode.append(' DATETIME')    ! will affinity to Numeric, but useful to distinguish will be stored as yyyy-mm-ddThh:mm:ss.sss
         ElsIf self.Fields.Binary = true
           self.SqlCode.append(' BLOB')
-          If self.Fields.collate = '' then self.SqlCode.append(' COLLATE BINARY').
         Else
           self.SqlCode.append(' TEXT')
-          If self.Fields.collate = ''
-            !self.trace('STRING self.fields.column=' & self.fields.Column & ' ' & self.Fields.incase)
             ! SQLite doesn't allow for COLLATE NOCASE and RTRIM. There's also no database-wide default of Case Insensitive strings like say MsSql.
             ! For strings in NOCASE keys, default to COLLATE NOCASE, for other strings default to RTRIM
+          If self.Fields.collate
+          ElsIf self.fields.FieldCase = driver:ForceNocase
+            self.SqlCode.append(' COLLATE NOCASE')
+          Else
             case self.fields.InCase                       ! if -1 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
             of true                                       ! is in a case sensitive key, so leave as case sensitive
               self.SqlCode.append(' COLLATE RTRIM')
@@ -2754,18 +3000,17 @@ allSql        StringTheory
       of ClaPSTRING
         If self.Fields.Binary = true
           self.SqlCode.append(' BLOB')
-          If self.Fields.collate = '' then self.SqlCode.append(' COLLATE BINARY').
         Else
           self.SqlCode.append(' TEXT')
-          If self.Fields.collate = ''
-            !self.trace('PSTRING self.fields.column=' & self.fields.Column & ' ' & self.Fields.incase)
+          If self.Fields.collate
+          ElsIf self.fields.FieldCase = driver:ForceNocase
+            self.SqlCode.append(' COLLATE NOCASE')
+          Else
             case self.fields.InCase                       ! if -1 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
             of true                                       ! is in a case sensitive key, so leave as case sensitive
-              !self.SqlCode.append(' COLLATE RTRIM')
             of false                                      ! is in at least one case-insensitive key, and no case-insensitive keys, so make the default collation NoCase.
               self.SqlCode.append(' COLLATE NOCASE')
             of 255                                        ! strings not in any key, default to leave it alone
-              !self.SqlCode.append(' COLLATE RTRIM')
             End
           End
         End
@@ -2841,6 +3086,21 @@ allSql        StringTheory
     AllSql.Append(self.SqlCode)
   End
   self.SqlCode.SetValue(allSql)
+  Return
+
+!-----------------------------------------------------------------
+! In SQLite Expressions/Functions as defaults must be wrapped in brackets.
+DriverFileSQLite2Class._CreateDefault   Procedure(Long pHasDefault, Long pType, String pDefault)
+  Code
+  If sub(pDefault,1,2) = '!('                                                ! is an expression, already has parameters.
+    Parent._CreateDefault(pHasDefault,pType,pDefault)                        !    so can use as is.
+  ElsIf sub(pDefault,2,1) = '('                                              ! starts with a (, so again, use as is.
+    Parent._CreateDefault(pHasDefault,pType,pDefault)
+  ElsIf sub(pDefault,1,1) = '!'                                              ! starts with a !, so an expression, but no (), so need to add them.
+    Parent._CreateDefault(pHasDefault,pType,'!(' & sub(pDefault,2,Len(pDefault)) & ')')
+  Else
+    Parent._CreateDefault(pHasDefault,pType,pDefault)                        ! constant, so no brackets required
+  End
   Return
 
 !-----------------------------------------------------------------
@@ -2970,14 +3230,21 @@ result   Long,Auto
 stmt     Long,Auto
 Ans      Long
   Code
-  If self.CheckConnect() = driver:notok then Return ans.
+  If self._CheckOpen() = false then Return Ans.
+  If self.CheckConnect() = driver:notok then Return Ans.
   self._ParameterOpcode = Opcode:DUPLICATE
   If self._DuplicateSql(pKey) = driver:ok
     stmt = self._Prepare()
     If stmt
-      If self._BindParameters(stmt) = Driver:ok
-        self._ExecuteToResults(stmt,self.result)
-        if self.result.GetCell(1,1) <> '0' then ans = true.
+      If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
+      If self._BindParameters(stmt,self.ParmBufferX,self.codepage) = Driver:ok
+        If self._ExecuteSqlToRecord(Stmt,driver:shadow,false,Opcode:DUPLICATE) = driver:notok
+          Return False ! no record found, so no duplicate
+        End
+        ! check the found primary key fields against the last read position.
+        If self.ComparePrimaryKeyPosition(driver:shadow) = false
+          Ans = true
+        End
       End
       result = sqlite3_finalize(stmt)
       self.SetErrorSqlite(result,'[p105]')
@@ -3003,6 +3270,7 @@ AllSql  StringTheory
       End
     End
   End
+  Self.SqlCode.SetValue(AllSql)
   Return  ! the second part may have failed, but the first part succeeded
 
 !-----------------------------------------------------------------
@@ -3037,403 +3305,6 @@ poc         Long,Auto
   End
   self._ParameterOpcode = poc
   Return false
-
-
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.EXPORTCSV        PROCEDURE(String pDosFileName, Long pOptions=0)
-append    Byte,Auto  ! driver:append
-header    Byte,auto  ! driver:header
-stmt      long,Auto
-x         long,Auto
-result    long,Auto
-columns   long,Auto
-str       StringTheory
-val       StringTheory
-colname   &cstring,Auto
-coltext   &cstring,Auto
-paging    Byte,auto
-Addr      Long,auto
-Len       Long,Auto
-
-  Code
-  If band(pOptions,driver:append) then append = true else append = false.
-  If band(pOptions,driver:header) then header = true else header = false.
-
-  If pDosFileName = driver:clipboard
-    If append
-      str.SetValue(Clipboard())
-      If str.length() then header = false.
-    End
-  Else
-    If Exists(pDosFileName) and str.FileSize(pDosFileName) > 0 and append
-      header = false
-    End
-    If str.Stream(pDosFileName,10,Append) = st:notok
-      self.SetError(FileSystemErr)
-      Return driver:notok
-    End
-  End
-  If self.CheckConnect() = driver:notok then Return driver:notok.
-  paging = self.Paging
-  self.Paging = false                     ! for SQLite there's no need to page, since it's a straight read-through
-  self._GenerateSelect(Opcode:NEXT)       ! does the sql and the prepare.
-
-  self.Paging = Paging
-  If ErrorCode() then Return driver:notok.
-  If self.Stmt_Set = 0
-    self.SetError(FileSystemErr)
-    If pDosFileName <> driver:clipboard then str.Flush().
-    Return driver:notok
-  End
-  self._ParameterOpcode = Opcode:NEXT
-  If self._BindParameters(Self.Stmt_Set) <> driver:ok
-    self.SetError(FileSystemErr)
-    If pDosFileName <> driver:clipboard then str.Flush().
-    Return driver:notok
-  End
-  If self._OffsetParmNumber
-    ! Bind OFFSET
-    If self._logBind then self.Log('[BIND][sb35]' & self._OffsetParmNumber & ' (long)' & self._SetOffset).
-    result = sqlite3_bind_int(self.Stmt_Set,self._OffsetParmNumber,self._SetOffset)
-    self._SetOffset = 1
-  End
-  stmt = self.Stmt_Set
-  self.Stmt_Set = 0
-  If self._logSQL then self.Log('[SQL ]' & self.SqlCode.GetValue()).
-
-  result = sqlite3_step(Stmt)  ! executes the sql and returns the first row
-  columns = sqlite3_column_count(Stmt)
-  ! possible header row
-  If Header = true
-    Loop x = 0 to columns - 1
-      colname &= sqlite3_column_name(Stmt,x)
-      str.Append(colname,,',')
-    End
-    str.Append('<13,10>')
-  End
-  ! loop through the data
-  Loop
-    case result
-    of SQLite_Done
-      break
-    of SQLite_Row
-      Loop x = 0 to columns - 1
-        case sqlite3_column_type(stmt,x)
-        of SQLITE_INTEGER
-          Addr = sqlite3_column_text(Stmt,x)
-          Len = sqlite3_column_bytes(Stmt,x)
-          val.SetValueByAddress(Addr,Len)
-        of SQLITE_FLOAT
-          Addr = sqlite3_column_text(Stmt,x)
-          Len = sqlite3_column_bytes(Stmt,x)
-          val.SetValueByAddress(Addr,Len)
-        of SQLITE_TEXT
-          Addr = sqlite3_column_text(Stmt,x)
-          Len = sqlite3_column_bytes(Stmt,x)
-          val.SetValueByAddress(Addr,Len)
-          val.CSVEncode(self.AlwaysQuote,self.Separator,self.LineEndings)
-        of SQLITE_NULL
-          val.setvalue(self.NullString)
-        of SQLITE_BLOB
-          addr = sqlite3_column_blob(Stmt,x)
-          len = sqlite3_column_bytes(Stmt,x)
-          val.SetValueByAddress(addr,len)
-          If band(pOptions,Driver:Bin2Base64)
-            val.Base64Encode(st:noWrap )
-            val.Prepend('base64:')
-          else
-            val.ToHex(st:upper)
-            val.Prepend('hex:')
-          end
-          If self.AlwaysQuote
-            val.Prepend('"')
-            val.Append('"')
-          End
-        End
-        If x > 0 then str.Append(self.Separator).
-        str.Append(val)
-      End
-      str.Append(self.LineEndings)
-    Else
-      self.SetErrorSqlite(result,'[p201]')
-      Break
-    End
-    result = sqlite3_step(Stmt)  ! next row, and cycle.
-  End
-
-  result = sqlite3_finalize(stmt)
-  If Errorcode()
-    If pDosFileName <> driver:clipboard then str.Flush().
-    Return driver:notok
-  End
-  If pDosFileName = driver:clipboard
-    SetClipboard(str.GetValue())
-  Else
-    str.Flush()
-  End
-  Return driver:ok
-
-!-----------------------------------------------------------------
-! supports prop:project to limit the fields being added into SQL
-DriverFileSQLite2Class.IMPORTCSV        PROCEDURE(String pDosFileName, Long pOptions=0)
-Offset        BIGINT
-Len           Long(10000000)  ! 10 megs'ish  ! must be longer than 2 lines can be, including blobs
-str           StringTheory
-lne           StringTheory
-CsvCell       StringTheory
-
-FieldsList    StringTheory
-ValuesList    StringTheory
-Excluded      StringTheory
-
-sqlColumns    long,auto
-sqlColumnName     Cstring(255),auto
-sqlColumnNameSafe Cstring(255),auto
-sqlColumnType long,dim(DRIVER:MAXFILEFIELDS)
-sqlColumnNotNull Byte,dim(DRIVER:MAXFILEFIELDS)
-csvColumns    long,Auto
-mapColumns    long,dim(DRIVER:MAXFILEFIELDS)  ! not ,Auto
-impColumns    long,Auto
-
-header      byte
-
-r           Real,auto
-i           Long,auto
-s           String(1)
-x           Long,auto
-y           Long,auto
-recs        Long,auto
-stmt        Long,Auto
-result      Long,Auto
-count       Long,Auto
-  code
-  ! read the SQL table to see what columns exist
-  self.sqlcode.SetValue('SELECT * FROM pragma_table_info(''' & self._sanitize(self.FullPathName,driver:sqlTable) & ''') ORDER BY cid;')
-  stmt = self._Prepare()
-  If stmt = 0 then Return driver:notok.
-  self._ExecuteToResults(stmt,self.Result)
-  result = sqlite3_finalize(stmt)
-  SqlColumns = self.result.Rows()
-  impColumns = SqlColumns
-
-  ! read in the first page
-  If str.LoadFile(pDosfilename,Offset,Len) = false
-    self.SetError(NoFileErr)
-    Return driver:notok
-  End
-  str.SetEncodingFromBOM(st:removeBOM)
-  str.Split(self.LineEndings)
-  str.RemoveLines()
-  Offset += str.EndOfLastLine - 1
-  If str.eof
-    recs = str.Records()
-  else
-    recs = str.Records()-1
-  end
-
-  Lne.SetValue(str.GetLine(1))
-  Lne.Split(self.Separator,'"','"',st:remove)
-  CsvColumns = lne.records()
-
-  If Band(pOptions,driver:header)
-    Header = 1
-    count = 0
-    Loop i = 1 to self.Result.Rows()                                   ! i is the column number in the database record
-      sqlColumnName = self.result.GetCell(i,2)
-      sqlColumnNameSafe = self.TranslateReserved(sqlColumnName)
-      Loop y = 1 to lne.records()                                      ! y is the column number in the csv file
-        If upper(lne.GetLine(y)) = upper(sqlColumnName)
-          mapColumns[y] = i                                            ! mapcolumns[csv column] = db column
-          sqlColumnNotNull[y] = self.result.GetCell(i,4)
-          case self.result.GetCell(i,3)
-          of 'INTEGER'
-            sqlColumnType[y] = SQLITE_INTEGER
-          of 'REAL'
-            sqlColumnType[y] = SQLITE_FLOAT
-          of 'TEXT'
-            sqlColumnType[y] = SQLITE_TEXT
-          of 'DATE'
-            sqlColumnType[y] = SQLITE_TEXT
-          of 'TIME'
-            sqlColumnType[y] = SQLITE_TEXT
-          of 'DATETIME'
-            sqlColumnType[y] = SQLITE_TEXT
-          of 'BLOB'
-            sqlColumnType[y] = SQLITE_BLOB
-          else
-            sqlColumnType[y] = SQLITE_FLOAT   ! for other numerics
-          end
-          Break
-        End
-      End
-      If mapColumns[y]
-        FieldsList.Append(sqlColumnNameSafe,,',')
-        count += 1
-        ValuesList.Append(self._GenParm(count),,',')
-        If self.Result.GetCell(y,6) = 0  ! not in the primary key
-          excluded.Append( sqlColumnNameSafe & '= excluded.' & sqlColumnNameSafe ,st:NoClip,',')
-        End
-      End
-    End
-  Else
-    Count = 0
-    Loop y = 1 to lne.records()
-      mapColumns[y] = y
-      sqlColumnNotNull[y] = self.result.GetCell(i,4)
-      case self.result.GetCell(i,3)
-      of 'INTEGER'
-        sqlColumnType[y] = SQLITE_INTEGER
-      of 'REAL'
-        sqlColumnType[y] = SQLITE_FLOAT
-      of 'TEXT'
-        sqlColumnType[y] = SQLITE_TEXT
-      of 'DATE'
-        sqlColumnType[y] = SQLITE_TEXT
-      of 'TIME'
-        sqlColumnType[y] = SQLITE_TEXT
-      of 'DATETIME'
-        sqlColumnType[y] = SQLITE_TEXT
-      of 'BLOB'
-        sqlColumnType[y] = SQLITE_BLOB
-      else
-        sqlColumnType[y] = SQLITE_FLOAT   ! for other numerics
-      end
-      FieldsList.Append(sqlColumnNameSafe,,',')
-      count += 1
-      ValuesList.Append(self._GenParm(count),,',')
-      If self.Result.GetCell(y,6) = 0  ! not in the primary key
-        excluded.append( sqlColumnNameSafe & '= excluded.' & sqlColumnNameSafe ,st:NoClip,',')
-      End
-    End
-  End
-
-  ! prepare the SQL statement
-  self.SqlCode.SetValue('INSERT INTO ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' (' & FieldsList.GetValue() & ') values (' & ValuesList.GetValue() & ') ')
-  If Band(pOptions,driver:upsert)
-    self.SqlCode.Append(' ON CONFLICT DO UPDATE SET ' & excluded.GetValue())
-  End
-  self.SqlCode.Append(';')
-
-  stmt = self._Prepare()
-  If stmt = 0
-    self.SetError(SQLErr)
-    Return Driver:notok
-  End
-
-  ! load the file in pages of Len size
-  Loop
-    do ImportPage
-    If str.eof then break.
-    If str.LoadFile(pDosfilename,Offset,Len) = false
-      Break
-    End
-    str.Split(self.LineEndings)
-    str.RemoveLines()
-    Offset += str.EndOfLastLine - 1
-    If str.eof
-      recs = str.Records()
-    else
-      recs = str.Records()-1
-    end
-  End
-  result = sqlite3_reset(stmt)              ! does an implicit commit if the transaction is implicit
-  result = sqlite3_finalize(stmt)
-  Return driver:ok
-
-ImportPage  Routine
-  ! BIND fields
-  ! It's important that the CSV text is mapped to the parameters, and does NOT go through the file record.
-  ! No data formatting, or deformating is done - the data is sent to the database directly as it is in the CSV.
-  ! This is important for consistency with databases that can import CSV directly, bypassing the client program completely.
-  Loop x = 1 to recs
-    If header
-      header = 0
-      cycle
-    End
-    Lne.SetValue(str.GetLine(x))
-    Lne.Split(self.Separator,'"','"')
-    result = sqlite3_reset(stmt)
-    count = 0
-    Loop y = 1 to lne.Records()                                                                                                    ! y is the column number in the csv file
-      If mapColumns[y] = 0 then cycle.  ! some items in the CSV can be excluded, if they are not in the Project List.              ! mapcolumns[csv column] = db column
-      count += 1
-      CsvCell.SetValue(lne.Getline(y))
-      If CsvCell.GetValue() = self.NullString
-        If sqlColumnNotNull[y]
-          ! null not allowed, so revert to blank value
-          Case sqlColumnType[y]
-          Of SQLITE_INTEGER
-            i = 0
-            If self._logBind then self.Log('[BIND][sb36]' & mapColumns[y] & ' (int)' & i).
-            result = sqlite3_bind_int(Stmt,count,i)
-          Of SQLITE_FLOAT
-            r = 0
-            If self._logBind then self.Log('[BIND][sb37]' & mapColumns[y] & ' (real)' & r).
-            result = sqlite3_bind_double(Stmt,count,r)
-          Else
-            !of SQLITE_TEXT
-            !orof SQLITE_BLOB
-            If self._logBind then self.Log('[BIND][sb38]' & mapColumns[y] & ' (string)' & s).   ! null not allowed, so setting the column to a blank string.
-            result = sqlite3_bind_textA(stmt,count,s, 0 ,SQLITE_TRANSIENT)
-          End
-        Else
-          If self._logBind then self.Log('[BIND][sb39]' & mapColumns[y] & ' (null)').           ! null in the csv, null in the database allowed
-          result = sqlite3_bind_null(stmt,count)
-        End
-      Else ! text in CSV is not a "null"
-        CsvCell.CSVDecode()
-        If CsvCell.Sub(1,7) = 'base64:'
-          CsvCell.Top(7)
-          CsvCell.Base64Decode()
-          If self._logBind then self.Log('[BIND][sb42]' & mapColumns[y] & ' (blob)' & CsvCell.GetValue()).
-          result = sqlite3_bind_blob(stmt,count,CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
-          cycle
-        End
-        Case(sqlColumnType[y])
-        of SQLITE_BLOB
-          CsvCell.FromHex()
-          If self._logBind then self.Log('[BIND][sb43]' & mapColumns[y] & ' (blob)' & CsvCell.GetValue()).
-          result = sqlite3_bind_blob(stmt,count,CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
-          cycle
-
-        of SQLITE_INTEGER
-          If CsvCell.IsAllDigits()
-            i = CsvCell.GetValue()
-            If self._logBind then self.Log('[BIND][sb40]' & mapColumns[y] & ' (int)' & i).
-            result = sqlite3_bind_int(Stmt,count,i)
-            cycle
-          End
-
-        of SQLITE_FLOAT
-          If numeric(CsvCell.GetValue())
-            r = CsvCell.GetValue()
-            If self._logBind then self.Log('[BIND][sb41]' & mapColumns[y] & ' (real)' & r).
-            result = sqlite3_bind_double(Stmt,count,r)
-            cycle
-          End
-        end
-        If self._logBind then self.Log('[BIND][sb44]' & mapColumns[y] & ' (string)' & CsvCell.GetValue()).
-        result = sqlite3_bind_textA(stmt,count,CsvCell.GetValuePtr(), CsvCell.length() ,SQLITE_TRANSIENT)
-      End
-    End
-    ! execute SQL
-    If self._logSQL then self.Log('[SQL ]' & self.SqlCode.GetValue()).
-    Loop
-      result = sqlite3_step(Stmt)  ! executes the sql
-      Case result
-      Of SQLite_Done !101
-         break
-      Of SQLite_Row
-         cycle
-      Else
-        self.SetErrorSqlite(result,'[p091]')
-        Break
-      End
-    End
-    result = sqlite3_clear_bindings(stmt)
-    If errorcode() then break.
-  End
 
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.SUSPENDRELATIONS           PROCEDURE()
@@ -3659,7 +3530,11 @@ DriverFileSQLite2Class.OPEN             PROCEDURE(LONG pAccessMode=022h)
       self.AfterOpen(pAccessmode,false)  ! false means "not open"
     End
   Else
-    self.AfterOpen(pAccessmode,true)
+    If self.Exists(self.FullPathName) = false
+      self.SetError(NoFileErr)
+    Else
+      self.AfterOpen(pAccessmode,true)
+    End
   End
   If self._opened and self.opt:dummy = false
     self.Send('/pragma_foreign_keys=ON')
@@ -3825,7 +3700,7 @@ result  long,Auto
   If Errorcode() then Return.
   self._PrepareAdd(Opcode:Add)
   If self.Stmt_Add
-    self._ExecuteToRecord(self.Stmt_Add,driver:buffer,NoError,Opcode:ADD)
+    self._ExecuteSqlToRecord(self.Stmt_Add,driver:buffer,NoError,Opcode:ADD)
   End
   self._AfterWrite(opcode:Add)
   Return
@@ -3842,7 +3717,7 @@ result  long,Auto
   self.SetError(NoError)
   self._PrepareAdd(Opcode:APPEND)
   If self.Stmt_Append
-    self._ExecuteToRecord(self.Stmt_Append,driver:nobuffer,NoError,Opcode:APPEND)
+    self._ExecuteSqlToRecord(self.Stmt_Append,driver:nobuffer,NoError,Opcode:APPEND)
   End
   self._AfterWrite(opcode:Append)
   Return
@@ -3856,7 +3731,7 @@ result  long,Auto
   parent.Delete()
   If Errorcode() = NoError
     If self._PrepareDelete() = driver:ok and Errorcode() = NoError
-      self._ExecuteToRecord(self.Stmt_Delete,driver:buffer,NoRecErr,Opcode:DELETE)
+      self._ExecuteSqlToRecord(self.Stmt_Delete,driver:buffer,NoRecErr,Opcode:DELETE)
     End
   End
   self._AfterWrite(opcode:Delete)
@@ -3898,7 +3773,7 @@ stmt    Long,Auto
     stmt = self._PrepareGet(pKey)
     If ErrorCode() = NoError
       ! the bit about memo or nomemo only affects the Project List, not the parameter list.
-      self._ExecuteToRecord(stmt,self._GetBuffer,NoRecErr,Opcode:GET)
+      self._ExecuteSqlToRecord(stmt,self._GetBuffer,NoRecErr,Opcode:GET)
     End
   Else
     self.SetError(InvKeyErr)
@@ -3926,7 +3801,7 @@ stmt    Long,Auto
     rnd = Random(0,recs-1)                     !!!todo - Random only returns in the range 1 to 2 billion.
     stmt = self._PrepareRandom(pFilter,rnd)
     If stmt
-      self._ExecuteToRecord(stmt,driver:buffer,NoRecErr,Opcode:GET)
+      self._ExecuteSqlToRecord(stmt,driver:buffer,NoRecErr,Opcode:GET)
     End
     Parent.GetRandom(pFilter)
   End
@@ -3943,7 +3818,8 @@ result   Long,auto
   If self.CheckConnect() = driver:notok then Return.
   If ErrorCode() = 0
     self._ParameterOpcode = Opcode:SET
-    If self._BindParameters(Self.Stmt_Set) = driver:ok
+    If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
+    If self._BindParameters(Self.Stmt_Set,self.ParmBufferX,self.codepage) = driver:ok
       If self._OffsetParmNumber
         ! Bind OFFSET
         If self._logBind then self.Log('[BIND][sb45]' & self._OffsetParmNumber & ' (long)' & self._SetOffset).
@@ -3951,7 +3827,7 @@ result   Long,auto
         self._SetOffset = 1
       End
       ! Execute statement, and move results to Results interface
-      self._ExecuteToResults(Self.Stmt_Set,self.result)
+      self._ExecuteSqlToResults(Self.Stmt_Set,self.result)
       ! reset the statement so it can be used again
       result = sqlite3_reset(Self.Stmt_Set)
       result = sqlite3_clear_bindings(Self.Stmt_Set)
@@ -3990,7 +3866,7 @@ result  long,auto
   If Errorcode() then Return.
   stmt = self._PreparePut()
   If stmt
-    self._ExecuteToRecord(stmt,driver:buffer,NoError,Opcode:PUT)
+    self._ExecuteSqlToRecord(stmt,driver:buffer,NoError,Opcode:PUT)
   End
   self._AfterWrite(opcode:Put)
   Return
@@ -4145,7 +4021,7 @@ x         Long
       If self.Fields.UUID then cycle.
       If not self.fields.Interface &= null then cycle.
       If self.fields.Primary then cycle.
-      If self.fields.SqlTimeStamp then cycle.
+      If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStamp4 then cycle.
       If self.fields.over then cycle.
       Case self.fields.Type
       of ClaCSTRING
@@ -4253,8 +4129,9 @@ rTextLen Long
   If Errorcode() then Return.
   self._PrepareAdd(Opcode:Upsert)
   If self.Stmt_Upsert
-    If self._BindParameters(self.Stmt_Upsert) = Driver:ok
-      self._ExecuteToResults(self.Stmt_Upsert,self.result)  ! POSSIBLY RETURN INTO
+    If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
+    If self._BindParameters(self.Stmt_Upsert,self.ParmBufferX,self.codepage) = Driver:ok
+      self._ExecuteSqlToResults(self.Stmt_Upsert,self.result)  ! POSSIBLY RETURN INTO
       If self.result.Rows()
         Loop x = 1 to self.SharedProperties.FieldList.nodes
           self.Fields &= self._WithFieldNode(x)
@@ -4318,7 +4195,7 @@ DriverFileSQLite2Class._TranslateDateSql  Procedure(*CString pField,String pMont
     If Numeric(pMonth) = false or numeric(pDay) = false or numeric(pYear) = false
       Return 'DATE(CAST(' & pYear & ' AS TEXT) || ''-'' || printf(''%02d'', ' & pMonth & ') || ''-'' || printf(''%02d'', ' & pDay & '))'
     Else
-      Return '''' & self.FormatDate(Date(pMonth,pDay,pYear)) & ''''
+      Return '''' & self.FormatDate(pMonth,pDay,pYear) & ''''
     End
   End
   If self.Fields.Type = ClaLONG
@@ -4385,120 +4262,9 @@ DriverFileSQLite2Class.TranslateRegularExpression Procedure(*CString pExpr,*CStr
   Return ''
 
 !-----------------------------------------------------------------
-! Transaction Processing
-!-----------------------------------------------------------------
-!-----------------------------------------------------------------
-! When called from cwDriver.Clw / LogoutConnection, then  self._transactionPrimary is set to true.
-DriverFileSQLite2Class.LOGOUTCONNECTION    PROCEDURE()
-t  Long,Auto
-  Code
-  If self.CheckConnect() = driver:notok then return.
-  If self._transactionPrimary = false then return.
-  parent.LogoutConnection()
-  If Errorcode() then Return.
-  If self.dbHandle
-    t = ConnectionPoolSQlite2.GetTransaction(self.dbHandle)
-    if t = 0
-      self._ParameterOpcode = Opcode:NONE
-      self.SqlCode.SetValue('BEGIN;')
-      If self._ExecuteSql() = Driver:ok
-        ConnectionPoolSQlite2.SetTransaction(self.dbHandle,true)
-        self._inTransaction = true
-      End
-    else
-      self.SetError(LogActiveErr)
-      self._transactionPrimary = false
-    End
-  End
-  Return
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.COMMIT           PROCEDURE()
-  Code
-  If self.CheckConnect() = driver:notok then return.
-  If self._transactionPrimary = false then return.
-  parent.Commit()
-  If Errorcode() then Return.
-  If self.dbHandle
-    If ConnectionPoolSQlite2.GetTransaction(self.dbHandle)
-      self._ParameterOpcode = Opcode:NONE
-      self.SqlCode.SetValue('COMMIT;')
-      If self._ExecuteSql() = Driver:ok
-        ConnectionPoolSQlite2.SetTransaction(self.dbHandle,false)
-        self._inTransaction = false
-      End
-    End
-  End
-  self._transactionPrimary = false
-  Return
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.ROLLBACK         PROCEDURE()
-  Code
-  If self.CheckConnect() = driver:notok then return.
-  if self._transactionPrimary = false then return.
-  parent.Rollback()
-  If Errorcode() then Return.
-  If self.dbHandle
-    If ConnectionPoolSQlite2.GetTransaction(self.dbHandle)
-      self._ParameterOpcode = Opcode:NONE
-      self.SqlCode.SetValue('ROLLBACK;')
-      If self._ExecuteSql() = Driver:ok
-        ConnectionPoolSQlite2.SetTransaction(self.dbHandle,false)
-        self._inTransaction = false
-      End
-    End
-  End
-  self._transactionPrimary = false
-  Return
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.ROLLBACK         PROCEDURE(String pSavePoint)
-t  Long,Auto
-  Code
-  If self.CheckConnect() = driver:notok then return.
-  If self._transactionPrimary = false then return.
-  parent.Rollback(pSavePoint)
-  If Errorcode() then Return.
-  If self.dbHandle
-    t = ConnectionPoolSQlite2.GetTransaction(self.dbHandle)
-    If t
-      self._ParameterOpcode = Opcode:NONE
-      self.SqlCode.SetValue('ROLLBACK TO ' & self._sanitize(pSavePoint,driver:sqlSavePoint) & ';')
-      If self._ExecuteSql() = Driver:ok
-      else
-        self.SetError(InvalidSavePointErr)
-      End
-    Else
-      self.SetError(NoLogoutErr)
-    End
-  End
-  Return
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.SAVEPOINT        PROCEDURE(String pSavePoint)
-t  Long,Auto
-  Code
-  If self.CheckConnect() = driver:notok then return.
-  parent.SavePoint(pSavePoint)
-  If Errorcode() then Return.
-  If self.dbHandle
-    t = ConnectionPoolSQlite2.GetTransaction(self.dbHandle)
-    If t
-      self._ParameterOpcode = Opcode:NONE
-      self.SqlCode.SetValue('SAVEPOINT ' & self._sanitize(pSavePoint,driver:sqlSavePoint) & ';')
-      If self._ExecuteSql() = Driver:ok
-      End
-    Else
-      self.SetError(NoLogoutErr)
-    End
-  End
-  Return
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.CreateDB      PROCEDURE(String pDatabaseName)
+DriverFileSQLite2Class.CreateDB      PROCEDURE(String pDatabaseName, String pOptions)
   code
-  parent.CreateDB(pDatabaseName)
+  parent.CreateDB(pDatabaseName,pOptions)
   If Errorcode() then Return.
   self.Connect()
   Return
@@ -4510,7 +4276,7 @@ stmt    Long
   Code
   parent.Disconnect()
   If self.dbHandle
-    If ConnectionPoolSQlite2.Disconnect(self.dbHandle) = true
+    If self.ConnectionPool.Disconnect(self.dbHandle) = true
       result = sqlite3_close(self.dbHandle)
       self.SetErrorSqlite(result,'[p115]')
     End
@@ -4526,18 +4292,10 @@ DriverFileSQLite2Class.GETPROP:Arrays       PROCEDURE()
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.GETPROP:Database       PROCEDURE()
   Code
+  If self.dbhandle = 0
+    self._UpdateFileStrings()
+  End
   Return self._connect[1]
-
-!-----------------------------------------------------------------
-DriverFileSQLite2Class.GetProp:Hdbc           PROCEDURE()!,STRING,VIRTUAL
-  code
-  Return self.dbHandle
-
-!-----------------------------------------------------------------
-! SQLite is embeded so there is no "server"
-DriverFileSQLite2Class.GetPROP:Server         PROCEDURE()
-  code
-  Return ''
 
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.GetPROP:DatabaseName   PROCEDURE() ! Get name of database, like SQLITE or PostgreSQL or whatever
@@ -4554,6 +4312,28 @@ DriverFileSQLite2Class.GETPROP:DriverVersion  PROCEDURE()
   code
   Return driver:version
 
+!-----------------------------------------------------------------
+DriverFileSQLite2Class.GetProp:Hdbc           PROCEDURE()!,STRING,VIRTUAL
+  code
+  Return self.dbHandle
+
+!-----------------------------------------------------------------
+! SQLite is embeded so there is no "server"
+DriverFileSQLite2Class.GetPROP:Server         PROCEDURE()
+  code
+  Return ''
+
+!-----------------------------------------------------------------
+DriverFileSQLite2Class.GetProp:TransactionStatus  Procedure()
+tstatus  Long  ,Auto
+  code
+  tstatus = sqlite3_get_autocommit(self.dbhandle)
+  Case tstatus
+  Of 0
+    Return driver:TransactionOn
+  Else
+    Return driver:TransactionOff
+  End
 !-----------------------------------------------------------------
 ! SQLite is embeded so there is no "user"
 DriverFileSQLite2Class.GetPROP:User           PROCEDURE()
@@ -4624,6 +4404,7 @@ y         Long,Auto
 z         Long,Auto
 Len       Long,Auto
 Result    Long,Auto
+Count     Long,Auto
 obj       &DriverFileSQLite2Class
   code
   !self.trace('DriverViewSQLite2Class._BindParameters self.Files=' & self.Files)
@@ -4641,15 +4422,17 @@ obj       &DriverFileSQLite2Class
           If self.ParameterQueue.ParameterArray[z].OpCode <> self._ParameterOpcode then cycle.
           If not self.ParameterQueue.ParameterArray[z].Value &= null
             len = len(self.ParameterQueue.ParameterArray[z].Value)
-            If self._logBind then self.Log('[BIND][sb48]' & self.ParameterQueue.ParameterArray[z].Count & ' (string)' & self.ParameterQueue.ParameterArray[z].Value).
-            result = sqlite3_bind_textA(pStmt,self.ParameterQueue.ParameterArray[z].Count ,self.ParameterQueue.ParameterArray[z].Value, len ,SQLITE_STATIC)
+            count = self.ParameterQueue.ParameterArray[z].Count
+            If self._logBind then self.Log('[BIND][sb48]' & self.ParameterQueue.ParameterArray[z].Count & ' (string(' & len & '))[' & self.ParameterQueue.ParameterArray[z].Value & ']').
+            self.ParmBufferX._SetParmBuffer(count,Address(self.ParameterQueue.ParameterArray[z].Value),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+            result = sqlite3_bind_text(pStmt,Count ,self.ParmBufferX.ParmBufferAddr[Count], self.ParmBufferX.ParmBufferLen[Count] ,SQLITE_STATIC)
           End
         End
       End
 
     Else
       obj._ParameterOpcode = self._ParameterOpcode
-      If obj._BindParameters(pStmt) = Driver:ok
+      If obj._BindParameters(pStmt,self.ParmBufferX,self.codepage) = Driver:ok
       End
     End
   End
@@ -4667,7 +4450,7 @@ x            Long,Auto
   Loop x = 1 to Records(self.OrderQueue)                                                 ! Turn the OrderBy queue into SQLite SQL code.
     Get(self.OrderQueue,x)
     OrderBy.Append(self.OrderQueue.Clause,,',')
-    If self.OrderQueue.Nocase
+    If self.OrderQueue.Nocase and self.orderqueue.IsString = true
       OrderBy.Append(' COLLATE NOCASE')
     End
     If self._setdirection = Opcode:NEXT
@@ -4782,6 +4565,7 @@ result   Long ! not ,Auto
   If Self.Stmt_Set = 0 then Return.
   If self.CheckConnect() = driver:notok then Return.
   self.PrimaryFileObject.SetErrorSqlite(result,'[p125]')              ! Clear error to 0
+  If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
   If self._BindParameters(Self.Stmt_Set) = driver:ok                  ! Bind all the parameters for the files.
     If self._OffsetParmNumber
       If self._logBind then self.Log('[BIND][sb47]' & self._OffsetParmNumber & ' (long)' & self._SetOffset).
@@ -4790,7 +4574,7 @@ result   Long ! not ,Auto
     End
     self.NewResultSet(driver:DontFreeRam)                             ! Want to do this here, before going to the file object.
     self.PrimaryFileObject.SqlCode.SetValue(self.SqlCode)                       ! for logging
-    self.PrimaryFileObject._ExecuteToResults(Self.Stmt_Set,self.result)    ! Execute statement, and move resultset to Results interface
+    self.PrimaryFileObject._ExecuteSqlToResults(Self.Stmt_Set,self.result)    ! Execute statement, and move resultset to Results interface
     result = sqlite3_reset(Self.Stmt_Set)                           ! reset the statement so it can be used again
     result = sqlite3_clear_bindings(self.Stmt_Set)
   End
@@ -4900,9 +4684,13 @@ result  Long,Auto
   If self.CheckConnect() = driver:notok then Return driver:notok.
   stmt = self._Prepare()
   If stmt
+    If self.ParmBufferX &= Null then self.ParmBufferX &= NEW DriverParmBufferClass.
     If self._BindParameters(stmt) = Driver:ok
       self.PrimaryFileObject.SqlCode.SetValue(self.SqlCode)  ! for logging
-      self.PrimaryFileObject._ExecuteToResults(stmt,self.result)
+      self.ResultRow = 0
+      self._ResultRow = 0
+      self.Affected = 0
+      self.PrimaryFileObject._ExecuteSqlToResults(stmt,self.result)
     End
     result = sqlite3_finalize(stmt)
     self.PrimaryFileObject.SetErrorSqlite(result,'[p130]')

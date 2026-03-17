@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -16,6 +16,9 @@
 Driver:ok               Equate(0)
 Driver:notok            Equate(1)
 driver:SetBoundary      Equate(-1)
+
+driver:Force            Equate(1)
+driver:ForcePrimary     Equate(1)
 
 driver:NotSet           Equate(0)
 driver:SetFile          Equate(1)
@@ -97,6 +100,9 @@ driver:SqlSavepoint     Equate(13)
 driver:withdot          Equate(1)
 driver:nodot            Equate(0)
 
+driver:ForceCase        Equate(1)
+driver:ForceNocase      Equate(2)
+
 driver:LeftJoin         Equate(0)   ! this is the current clarion default when not ,INNER
 driver:InnerJoin        Equate(1)   ! this is the Clarion ,INNER property
 driver:RightJoin        Equate(2)
@@ -119,10 +125,13 @@ driver:BufferPrimed       Equate(3)
 
 driver:all                Equate('*')
 
-driver:GroupOverTimeStamp  Equate(1)
-driver:StringToTimeStamp   Equate(2)
-driver:StringToTimeStamp2  Equate(3)
-driver:StringToTimeStampTZ Equate(4)
+driver:GroupOverTimeStamp   Equate(1)
+driver:GroupOverTimeStamp2  Equate(2)
+driver:GroupOverTimeStamp3  Equate(3)
+driver:GroupOverTimeStamp4  Equate(4)
+driver:StringToTimeStamp    Equate(8)
+driver:StringToTimeStamp2   Equate(9)
+driver:StringToTimeStampTZ  Equate(10)
 
 Watch:off               Equate(0)
 Watch:on                Equate(1)
@@ -162,6 +171,7 @@ token:as            equate(token:operator & '0011 ')
 ! the first parameter is the opcode. These are those codes.
 ! The comment for each code indicates the parameters expected.
 
+Opcode:ALL                     equate(-1)
 Opcode:NONE                    equate(0)
 Opcode:ADD                     equate(1)   !     DRV(code,fcb);
 Opcode:ADDfilelen              equate(51)  !     DRV(code,fcb,unsigned len);
@@ -316,6 +326,7 @@ Opcode:Intersect               equate(174)
 Opcode:Subset                  equate(175)
 Opcode:ResultGet               equate(176)
 Opcode:Update                  equate(177)
+Opcode:Claim                   equate(178)
 
 !EndRegion: Opcodes
 

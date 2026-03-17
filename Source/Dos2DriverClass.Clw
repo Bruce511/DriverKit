@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -120,7 +120,8 @@ DriverFileDos2Class.CONSTRUCT             PROCEDURE()
   Code
   Self.SetMethod = driver:NotSet
   self._justset = true
-  self.opt:BusyTimeout = 5
+  self.opt:BusyTimeout = 5   ! DOS driver doesn't use /BusyTimeout, uses /BusyRetries instead.
+  self.opt:BusyRetries = 5
 
 !-----------------------------------------------------------------
 ! In derived classes derive this method with this exact same code, but
@@ -141,9 +142,14 @@ old    &DriverFileDos2Class
 DriverFileDos2Class.SetDriverOption            Procedure(String pOption, String pValue)
   Code
   Case upper(pOption)
+  of '/BUSYRETRIES'
+    If pValue <> ''
+      self.opt:BusyRetries = pValue
+    End
   of '/BUSYTIMEOUT'
     If pValue <> ''
       self.opt:BusyTimeout = pValue
+      self.opt:BusyRetries = pValue  ! DOS doesn't use opt:BusyTimeout, so Developer likely wants opt:BusyRetries
     End
   End
   Return parent.SetDriverOption(pOption,pValue)
@@ -671,12 +677,12 @@ x               Long,auto
   NewFileName = clip(pNewFileName)
   self._UpdateFileStrings()
   self._ExpandName()
-  Loop x = 0 to self.opt:BusyTimeout                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
+  Loop x = 0 to self.opt:BusyRetries                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
     If DosCopyFile(self.FullPathName, NewFileName, false) <> 0
       break
     End
     e = DosGetLastError()
-    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyTimeout
+    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyRetries
       DosSleep(1000)
       Cycle
     End
@@ -701,8 +707,8 @@ Filename        Cstring(FILE:MAXFILENAME2),auto
     self.Remove()
   End
   FileName = self.name()
-  If self.opt:BusyTimeout < 0 then self.opt:BusyTimeout = 0.
-  Loop x = 0 to self.opt:BusyTimeout                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
+  If self.opt:BusyRetries < 0 then self.opt:BusyRetries = 0.
+  Loop x = 0 to self.opt:BusyRetries                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
     hFile = DosCreateFile(FileName, dos:GENERIC_WRITE, dos:FILE_DENY_ALL, 0, dos:CREATE_ALWAYS, dos:FILE_ATTRIBUTE_NORMAL, 0)
     If hFile >= 0
       DosCloseHandle(hfile)
@@ -710,7 +716,7 @@ Filename        Cstring(FILE:MAXFILENAME2),auto
       Return
     End
     e = DosGetLastError()
-    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyTimeout
+    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyRetries
       DosSleep(1000)
       Cycle
     End
@@ -1225,10 +1231,10 @@ x   Long,Auto
   If self._CheckClosed() = false then Return.
   self._UpdateFileStrings()
   self._ExpandName()
-  Loop x = 0 to self.opt:BusyTimeout                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
+  Loop x = 0 to self.opt:BusyRetries                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
     If DosDeleteFile(self.FullPathName) <> 0 then break.       ! 0 means failed.  If DosDeleteFile succeeds, the return value is nonzero.
     e = DosGetLastError()
-    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyTimeout
+    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyRetries
       DosSleep(1000)
       Cycle
     End
@@ -1251,12 +1257,12 @@ e        long,Auto
   If Right(Toname,1) = '\'
     do ExpandName
   End
-  Loop x = 0 to self.opt:BusyTimeout                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
+  Loop x = 0 to self.opt:BusyRetries                           ! small loop in case the file will be "released shortly". Perhaps being held in AV scan etc.
     If DosMoveFileEx(self.FullPathName,ToName, dos:MOVEFILE_COPY_ALLOWED + dos:MOVEFILE_WRITE_THROUGH) <> 0  ! 0 means failed.  If DosMoveFileEx succeeds, the return value is nonzero.
       Break
     End
     e = DosGetLastError()
-    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyTimeout
+    If e = dos:ERROR_ACCESS_DENIED and x < self.opt:BusyRetries
       DosSleep(1000)
       Cycle
     End

@@ -7,7 +7,7 @@
     <RootNamespace>CLAMEM2L</RootNamespace>
     <AssemblyName>CLAMEM2L</AssemblyName>
     <OutputName>CLAMEM2L</OutputName>
-    <DefineConstants>DRVLM=&gt;0%3bDRVDM=&gt;0%3bDRVLITE2LM=&gt;0%3bDRVLITE2DM=&gt;0%3bDRVMEM2LM=&gt;1%3bDRVMEM2DM=&gt;0%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;0%3bMD5=&gt;1%3bmaincode=&gt;on</DefineConstants>
+    <DefineConstants>DRVLM=&gt;0%3bDRVDM=&gt;0%3bDRVLITE2LM=&gt;0%3bDRVLITE2DM=&gt;0%3bDRVMEM2LM=&gt;1%3bDRVMEM2DM=&gt;0%3bStringTheoryLinkMode=&gt;0%3bStringTheoryDllMode=&gt;0%3bMD5=&gt;1%3bmaincode=&gt;on%3bDRV2=&gt;1</DefineConstants>
     <stack_size>16384</stack_size>
     <CopyCore>True</CopyCore>
     <Model>Lib</Model>

@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -23,18 +23,28 @@ DriverIP6Class    Class,Implements(iDriverField), Type, MODULE('DriverFields.Clw
                   End
 
 ! -- DriverGUIDClass --
-! store as a 16 byte binary string. In the program expose it as a 37 byte hex-encoded value, with hyphens
-DriverGUIDClass  Class,Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',1), DLL(0)
-                 End
+! store as a 16 byte binary string. In the program expose it as a 36 byte hex-encoded value, with hyphens
+DriverGUIDClass                Class,Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',1), DLL(0)
+                               End
 
-! -- DriverGUIDClass --
-! MS SQL UNIQUEIDENTIFIER data type
-DriverUniqueIdentifierClass  Class,Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',1), DLL(0)
-                 End
+! derived class for SQLite Blob type
+DriverGUIDSqLiteClass          Class(DriverGUIDClass),Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',1), DLL(0)
+                               End
+
+! derived class for Postgres UUID type
+DriverUUIDPostgresClass        Class(DriverGUIDClass),Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',1), DLL(0)
+                               End
+
+! derived class for MS SQL UNIQUEIDENTIFIER data type
+DriverUniqueIdentifierMSClass  Class(DriverGUIDClass),Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',1), DLL(0)
+                               End
+
 
 ! Because none of these classes contain properties, they're just stand-alone methods, it's possible to declare "singletons"
 ! here which can then be used for the various fields. There's no need to re-declare these in your app.
-DriverIP4                 DriverIp4Class
-DriverIP6                 DriverIp6Class
-DriverGuid                DriverGuidClass
-DriverUniqueIdentifier    DriverUniqueIdentifierClass
+DriverIP4Object                 DriverIp4Class
+DriverIP6Object                 DriverIp6Class
+DriverGuidObject                DriverGuidClass
+DriverGuidSQLiteObject          DriverGuidSQLiteClass
+DriverUuidPostgresObject        DriverUUIDPostgresClass
+DriverUniqueIdentifierMSObject  DriverUniqueIdentifierMSClass

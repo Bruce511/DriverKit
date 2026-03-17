@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -51,6 +51,7 @@ AF_INET6                        equate(23)
 ClaNull                         equate(0)
 ClaLong                         equate(6)
 ClaString                       equate(012h)
+ClaCString                      Equate(013h)
 
 !!!todo Handle arrays in source and destination.
 
@@ -157,7 +158,7 @@ DriverIP4Class.iDriverField.GetSQLType    Procedure() !,STRING
 ! DriverIP6Class : Convert IPv6 type (16 char binary) into hex format
 !======================================================================================================================
 ! -------------------------------------------------------------------
-! First up is a method to identify the field type. This should be unique for differnt field types.
+! First up is a method to identify the field type. This should be unique for different field types.
 DriverIP6Class.iDriverField.GetFieldType   Procedure()!,STRING ! return a unique text identifier for the field type
   code
   return 'IP6'
@@ -249,6 +250,7 @@ DriverGUIDClass.iDriverField.GetFieldType   Procedure()!,STRING ! return a uniqu
 ! This method converts the Clarion dictionary field, and writes the database raw value into pWriteAddress
 !
 ! Takes in a string of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx and writes 16 char binary string.    [8-4-4-4-12]
+! If the string is 16 chars long, then it simply copies that to the database 16 byte binary string.
 ! x is an uppercase hexadecimal digit
 ! Returns 16 (the number of bytes written to the address)
 DriverGUIDClass.iDriverField.FromRecordField  Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize)
@@ -258,6 +260,13 @@ pos     long
 char    byte
 x       long
   Code
+  If pFieldType = ClaString and pFieldSize = 16
+    If pWriteAddress
+      MemCpy(pWriteAddress,pFieldAddress, 16)
+    End
+    Return 16
+  End
+
   If pFieldSize > size(str) then pFieldSize = size(str).
   MemCpy(address(str),pFieldAddress,pFieldSize)
   str = sub(str,1,8) & sub(str,10,4) & sub(str,15,4) & sub(str,20,4) & sub(str,25,12)
@@ -285,14 +294,23 @@ x       long
 ! -------------------------------------------------------------------
 ! Formats the source value (string(16)) to a string of xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx where x is a upper case hex digit
 ! The dictionary should declare a string of at least 36 chars to handle this.                             [8-4-4-4-12]
+! If the dictionary string is 16 chars then it's copied across as binary.
 !
 DriverGUIDClass.iDriverField.ToRecordField   Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,Long pSrcType, Long pSrcAddr, Long pSrcSize)
-str  string(36)
+str    string(36)
 bin    string(16)  ! guid, binary is 16 bytes
 pos    long
 x      long
 char   byte
   Code
+  If pFieldType = ClaString and pFieldSize = 16
+    If pSrcSize > size(bin) then pSrcSize = size(bin).
+    If pFieldAddress
+      MemCpy(pFieldAddress,pSrcAddr, pSrcSize)
+    End
+    Return self.iDriverField.GetSourceSize()
+  End
+
   If pSrcSize > size(bin) then pSrcSize = size(bin).
   If pSrcAddr = 0
     Clear(bin,-1)
@@ -312,15 +330,20 @@ char   byte
     End
   End
 
-  If pFieldSize <= size(str)
+  If pFieldSize <= size(str) and pFieldType = ClaString
     memcpy(pFieldAddress,address(str),pFieldSize)
-  Else
-    !!! todo this assumes the result is a STRING type, and so pads with spaces. If it's a CSTRING then could just terminate with a nul.
+  ElsIf pFieldSize <= size(str) and pFieldType = ClaCString
+    memcpy(pFieldAddress,address(str),pFieldSize-1)
+    memset(pFieldAddress+pFieldSize,0,1)
+  ElsIf pFieldType = ClaString
     memcpy(pFieldAddress,address(str),size(str))
     memset(pFieldAddress+size(str),32,pFieldSize-size(str))
+  ElsIf pFieldType = ClaCString
+    memcpy(pFieldAddress,address(str),size(str))
+    memset(pFieldAddress+size(str),0,1)
   End
 
-  return self.iDriverField.GetSourceSize()
+  Return self.iDriverField.GetSourceSize()
 
 onechar  routine
   case char
@@ -333,7 +356,13 @@ onechar  routine
 ! -------------------------------------------------------------------
 ! For now the pValue parameter will always be blank. Included for future use.
 DriverGUIDClass.iDriverField.ClearRecordField  Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,String pValue)
+str   string(16)
   code
+  If pFieldType = ClaString and pFieldSize = 16
+    ! for fields of type string(16) cler it just to a blank string
+    Return self.iDriverField.ToRecordField(pFieldType,pFieldAddress,pFieldSize,ClaNULL,address(str),size(str))
+  End
+  ! for cstring, or strings of length 36 clear to text 00000000-0000-0000-0000-000000000000
   Return self.iDriverField.ToRecordField(pFieldType,pFieldAddress,pFieldSize,ClaNULL,0,0)
 
 ! -------------------------------------------------------------------
@@ -347,32 +376,46 @@ DriverGUIDClass.iDriverField.GetSQLType    Procedure() !,STRING
   return 'CHAR(16)'
 
 !======================================================================================================================
+!SQLite used BLOB as the storage type
+! -------------------------------------------------------------------
+DriverGUIDSqLiteClass.iDriverField.GetSQLType    Procedure()
+  code
+  return 'BLOB'
 
 !======================================================================================================================
-! DriverUniqueIdentifierClass : MSSQL UNIQUEIDENTIFIER field type
-!======================================================================================================================
+! PostgreSQL uses UUID as the storage type
 ! -------------------------------------------------------------------
-! First up is a method to identify the field type. This should be unique for different field types.
-DriverUniqueIdentifierClass.iDriverField.GetFieldType   Procedure()!,STRING ! return a unique text identifier for the field type
+DriverUUIDPostgresClass.iDriverField.GetSQLType    Procedure()
+  code
+  return 'UUID'
+
+!======================================================================================================================
+! MS SQL Server uses UNIQUEIDENTIFIER as the storage type
+! -------------------------------------------------------------------
+DriverUniqueIdentifierMSClass.iDriverField.GetSQLType    Procedure()
   code
   return 'UNIQUEIDENTIFIER'
 
 ! -------------------------------------------------------------------
-! This method converts the Clarion dictionary field, and writes the database raw value into pWriteAddress
-!
+! MS SQL treads the first 3 parts as Long, Short, Short, and converts them to Big Endian.
 ! Takes in a string of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx and writes 16 char binary string.    [8-4-4-4-12]
 ! x is an uppercase hexadecimal digit
-! Returns 16 (the number of bytes written to the address)
-DriverUniqueIdentifierClass.iDriverField.FromRecordField  Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize)
-str     string(36)
-result  string(16)
-pos     long
-char    byte
-x       long
+! Returns the number of bytes written to the address
+DriverUniqueIdentifierMSClass.iDriverField.FromRecordField  Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize)
+str       string(36)
+revstr    string(16)
+result    string(16)
+revresult string(16)
+pos       long
+char      byte
+x         long
   Code
+  !cs = 'FromRecordField pFieldType=' & pFieldType & ' pFieldSize=' & pFieldSize & ' pWriteSize=' & pWriteSize ; wc_dbg(cs)
   If pFieldSize > size(str) then pFieldSize = size(str).
-  If pWriteAddress and pFieldSize = 16
-    MemCpy(pWriteAddress,pFieldAddress, 16)
+  If pWriteAddress and pFieldType = ClaString and pFieldSize = 16
+    MemCpy(address(str),pFieldAddress, 16)
+    revstr = str[4] & str[3] & str[2] & str[1]  & str[6] & str[5] & str[8] & str[7]  & str[9 : 16]
+    MemCpy(pWriteAddress,address(revstr), 16)
     Return 16
   End
   MemCpy(address(str),pFieldAddress,pFieldSize)
@@ -395,26 +438,35 @@ x       long
     result[pos] = chr(char)
   End
   If pWriteAddress
-    MemCpy(pWriteAddress,address(Result), 16)
+    revstr = result[4] & result[3] & result[2] & result[1] & result[6] & result[5] & result[8] & result[7]  & result[9 : 16]
+    MemCpy(pWriteAddress,address(revstr), 16)
   End
   Return 16
 ! -------------------------------------------------------------------
 ! Formats the source value (string(16)) to a string of xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx where x is a upper case hex digit
 ! The dictionary should declare a string of at least 36 chars to handle this.                             [8-4-4-4-12]
-!
-DriverUniqueIdentifierClass.iDriverField.ToRecordField   Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,Long pSrcType, Long pSrcAddr, Long pSrcSize)
-str  string(36)
+DriverUniqueIdentifierMSClass.iDriverField.ToRecordField   Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,Long pSrcType, Long pSrcAddr, Long pSrcSize)
+str    string(36)
+revstr string(17)
 bin    string(16)  ! guid, binary is 16 bytes
 pos    long
 x      long
 char   byte
   Code
+  If pFieldType = ClaString and pFieldSize = 16
+    If pFieldAddress
+      If pSrcSize > size(bin) then pSrcSize = size(bin).
+      MemCpy(address(bin),pSrcAddr,pSrcSize)
+      revstr = bin[4] & bin[3] & bin[2] & bin[1] & bin[6] & bin[5] & bin[8] & bin[7] & bin[9 : 16]
+      MemCpy(pFieldAddress,address(revstr), 16)
+    End
+    cs = revstr ; wc_dbg(cs)
+    Return self.iDriverField.GetSourceSize()
+  End
+
   If pSrcSize > size(bin) then pSrcSize = size(bin).
   If pSrcAddr = 0
     Clear(bin,-1)
-  ElsIf pFieldSize = 16
-    memcpy(pFieldAddress,pSrcAddr,pFieldSize)
-    return self.iDriverField.GetSourceSize()
   Else
     memcpy(address(bin),pSrcAddr,pSrcSize)
   End
@@ -430,16 +482,26 @@ char   byte
       pos += 1
     End
   End
-
+  ! so here, str is of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, but with wrong endian for the first 3 blocks.
+  str = str[7:8] & str[5:6] & str[3:4] & str[1:2] & str[9] & str[12:13] & str[10:11] & str[14] & str[17:18] & str[15:16] & str[19:36]
   If pFieldSize <= size(str)
     memcpy(pFieldAddress,address(str),pFieldSize)
   Else
-    !!! todo this assumes the result is a STRING type, and so pads with spaces. If it's a CSTRING then could just terminate with a nul.
-    memcpy(pFieldAddress,address(str),size(str))
-    memset(pFieldAddress+size(str),32,pFieldSize-size(str))
+    If pFieldSize <= size(str) and pFieldType = ClaString
+      memcpy(pFieldAddress,address(str),pFieldSize)
+    ElsIf pFieldSize <= size(str) and pFieldType = ClaCString
+      memcpy(pFieldAddress,address(str),pFieldSize-1)
+      memset(pFieldAddress+pFieldSize,0,1)
+    ElsIf pFieldType = ClaString
+      memcpy(pFieldAddress,address(str),size(str))
+      memset(pFieldAddress+size(str),32,pFieldSize-size(str))
+    ElsIf pFieldType = ClaCString
+      memcpy(pFieldAddress,address(str),size(str))
+      memset(pFieldAddress+size(str),0,1)
+    End
   End
 
-  return self.iDriverField.GetSourceSize()
+  Return self.iDriverField.GetSourceSize()
 
 onechar  routine
   case char
@@ -449,20 +511,7 @@ onechar  routine
     str[pos] = chr(char+55)
   end
   pos += 1
-! -------------------------------------------------------------------
-! For now the pValue parameter will always be blank. Included for future use.
-DriverUniqueIdentifierClass.iDriverField.ClearRecordField  Procedure(Byte pFieldType, Long pFieldAddress,Long pFieldSize,String pValue)
-  code
-  Return self.iDriverField.ToRecordField(pFieldType,pFieldAddress,pFieldSize,ClaNULL,0,0)
 
-! -------------------------------------------------------------------
-DriverUniqueIdentifierClass.iDriverField.GetSourceSize  Procedure()
-  code
-  Return 16
-! -------------------------------------------------------------------
-DriverUniqueIdentifierClass.iDriverField.GetSQLType    Procedure() !,STRING
-  code
-  return 'UNIQUEIDENTIFIER'
-
+!======================================================================================================================
 !======================================================================================================================
 

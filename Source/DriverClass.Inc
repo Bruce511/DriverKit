@@ -1,7 +1,7 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
-!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
-!   Released under MIT License
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
+!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm          !
+!   Released under MIT License                                                                  !
 !------------------------------------------------------------------------------------------------
 
 !!!todo PROP:TraceFile          EQUATE (7356H)  ! Set/Get the name of the INI file used to get driver wide file tracing settings
@@ -69,13 +69,15 @@ name                cString(256) ! Whole External name, including | attributes
 label               aString
 Column              aString      ! the external name, as it is in the database, no prefix or attributes
 UpperColumn         aString      ! upper form of the column name - no reserved-wrapping
-memostring          &string      ! if a Memo, then it goes in here.
+memostring          &String      ! if a Memo, then it goes in here.
 memosize            BIGINT       ! size of memo string.
 handle              Long         ! if a Blob then the memory is here. Returned by GlobalAlloc (which is important for prop:handle)
 handlesize          Long         ! size of the Blob memory
-Memo                byte         ! true if a memo
-Binary              byte         ! true if binary
+Memo                Byte         ! true if a memo
+Binary              Byte         ! true if binary
+
 ! -- extended name attibutes
+FieldCase           Byte         ! 0 or driver:ForceCase or driver:ForceNocase
 CheckForNull        Byte
 HasDefault          Byte
 NotNull             Byte
@@ -162,10 +164,12 @@ SourceSize            Long          ! cached from iDriverField
 Primary               Byte          ! Is in the primary key
 InCase                Byte          ! if 255 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
 SqlTimeStamp          Byte          ! Field is a String(8), with an OverGroup, containing Date and Time fields.
+SqlUUID               Byte          ! Field is created as a server-side UUID type
 
 ! -- extended name attibutes
 Binary                Byte
 Boolean               Byte          ! Validation
+FieldCase             Byte         ! 0 or driver:ForceCase or driver:ForceNocase
 GreaterThan           &string       ! Possibly > or >=
 LessThan              &string       ! Possibly < or <=
 NotEqual              &string
@@ -314,7 +318,9 @@ Clause               Cstring(100)
 Fixed                Byte
 Nocase               Byte
 IsCalc               Byte
+IsString             Byte
 Direction            Byte ! Driver:Ascending, Driver:Descending
+Uuid                 Byte
 FileIndex            Long
 FieldIndex           Long
                    End
@@ -336,12 +342,18 @@ DriverBaseClass          Class(), Type, Module('DriverClass.Clw'),Link('DriverCl
 ! This block are properties not saved and restored by GETSTATE and RESTORESTATE
 ! -----------------------------------------------------------------------------
 rid                        Long
+ConnectionPool             &DriverConnectionPoolClass
+dbHandle                   Long
+
 _Result                    &DriverResultSetClass    ! This is the class (not the interface). This isn't changed by saving state
 QuoteString                Cstring(4)               ! sets or returns the column name delimiter (typically a quote) that the Driver uses to surround column names within its generated SQL statements.
 AllowParameterRepeats      Byte                     ! Some databases allow parameter numbers to be repeated, some do not.
 _PropsCache                Byte                     ! an incrementing number which increments when one of the SQL properties is changed. (Project, Distinct, NotDistinct, Filter, GroupBy, Having, Order, OrderBy, SQLFilter, SQLOrder, Where, WherePage, Explain, FetchSize, ExceptFilter, ExceptTable)
+_inTransaction             Byte
+_Destructing               Byte
 _structure                 String(1)                ! either F for FILE structures or V for View Structures
 NoKeyProject               Byte                     ! inform the SQL view engine not to automatically project key components.
+ParmBufferX                &DriverParmBufferClass
 
     ! unicode
 CodePage                   Long
@@ -359,6 +371,8 @@ _logConnections            Byte
 
 ! pre-declared temp holders
 TempStr                    &StringTheory ! worker stringtheory object. Only use in places where there are no calls to self.method.
+TempFormat                 &StringFormat ! worker stringtheory object. Only use in places where there are no calls to self.method.
+TempDeformat               &StringDeformat ! worker stringtheory object. Only use in places where there are no calls to self.method.
 TokenStr                   &StringTheory ! worker stringtheory object. Typically passed to ParseProperty.
 _ParseContext              Long          ! caches the context passed into ParseProperty, so it doesn't have to be passed through.
 
@@ -373,7 +387,6 @@ ParameterQueue             &ParameterQueueType
 SubsetQueue                &SubsetQueueType
 
 _NoAlias                   Byte
-_Destructing               Byte
 
 ! -----------------------------------------------------------------------------
 ! This block contain pointers which need to be cloned when doing a GETSTATE and RESTORESTATE
@@ -407,6 +420,7 @@ Search                     &Cstring
 ! This block contain properties which need to be copied when doing a GETSTATE and RESTORESTATE
 ! no pointers allowed in here.
 __BASESTATESTART           byte                        ! do NOT move me
+opt:ZeroDate               Long           ! /ZERODATE=19010101
 ResultRow                  BIGINT
 _ResultRow                 BIGINT
 _ResultSetDirection        Byte
@@ -416,6 +430,7 @@ opt:explain                Byte    ! if set to true then all SET/NEXT loops on F
 opt:dummy                  Byte    ! /DUMMY, if set then result sets are mapped by order, and not by name.
 opt:ignoretruncation       Byte    ! /IGNORETRUNCATION=true
 opt:BusyTimeout            Long
+opt:BusyRetries            Long
 DBVersionMajor             Short
 DBVersionMinor             Short
 DBVersionBuild             Short
@@ -457,11 +472,13 @@ Affected                   Long                        ! set after a insert, upd
 ChildrenAffected           Long                        ! set after a relational insert, update or delete. prop:ChildrenAffected
 
   !  properties that apply to Export
-Separator                  cstring(11)
-LineEndings                cstring(11)
-AlwaysQuote                byte
-DateTimeSeparator          cstring(4)
-NullString                 cstring(11)
+Separator                  Cstring(11)
+LineEndings                Cstring(11)
+AlwaysQuote                Byte
+DateTimeSeparator          Cstring(4)
+NullString                 Cstring(11)
+DatePicture                Cstring(11)
+TimePicture                Cstring(11)
 
 PrimaryKeyPosition         String(DRIVER:MAX_PRIMARY_KEY_SIZE)        ! the position of the current record buffer in the file
 _OrderHasCalc              Byte
@@ -478,11 +495,11 @@ HasSubset                  Byte
 
 __BASESTATEEND                 byte                        ! do NOT move me
 ! -------------------------------------------------------------------------------------
-
 Construct                  Procedure
 Destruct                   Procedure,Virtual
 SetError                   Procedure(LONG pError),Virtual
 SetFileError               Procedure(String pError, String pMessage),VIRTUAL
+Debug                      Procedure(),Virtual
 InterpretOPCode            Procedure(LONG pOpCode),String,Virtual
 InterpretProperty          Procedure(LONG pProperty),String,Virtual
 InterpretType              Procedure(Byte pType),String,Virtual
@@ -492,9 +509,10 @@ LoadLogging                Procedure(),Virtual
 GetAnyType                 Procedure(*? pField),Long,Virtual
 GetAnySize                 Procedure(*? pField),Long,Virtual
 GetAnyAddress              Procedure(*? pField),Long,Virtual
-FormatDate                 Procedure(Date pDate),String,Virtual
+FormatDate                 Procedure(*Date pDate),String,Virtual
+FormatDate                 Procedure(Long pMonth,Long pDay,Long pYear),String,Virtual
 FormatTime                 Procedure(Time pTime),String,Virtual
-FormatTimeStamp            Procedure(String pStr),String,Virtual
+FormatTimeStamp            Procedure(String pStr,Long pGroupPattern),String,Virtual
 _FreeSubset                Procedure(),VIRTUAL
 _ViewTokens                Procedure(),VIRTUAL
 _Sanitize                  Procedure(String pStr,Long pContext),String,Virtual
@@ -521,7 +539,9 @@ _parseOrderByField         Procedure(String pClause,*Byte pDescending,*Byte pNoC
 _reparm                    Procedure(StringTheory pOrc, *Long pCount),String,Virtual
 _GetColumnNameFromOrder    Procedure(String pClause),String,Virtual  !!! todo - obsolete this in favor of the above?
 _GenParm                   Procedure(Long pCount),String,Virtual
-CheckVersion               Procedure(Long pMajorRqd, Long pMinorRqd, Long pBuildRqd),Long,Virtual
+InterpretSQLType           Procedure(Long pType),String,Virtual
+CheckVersionDb             Procedure(Long pMajorRqd, Long pMinorRqd, Long pBuildRqd),Long,Virtual
+CheckVersionClient         Procedure(Long pMajorRqd, Long pMinorRqd, Long pBuildRqd),Long,Virtual
 ExplainStart               Procedure(),String,Virtual
 ExplainEnd                 Procedure(),String,Virtual
 _Morph                     Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pCellType, Long pCellAddress, Long pCellLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength),Virtual
@@ -630,6 +650,8 @@ _AddSubsetCommand          Procedure(Byte pOperation, File pFile,<String pFilter
 BuildSubsetCTE             Procedure(StringTheory pCTE),VIRTUAL
 BuildSubsetWhere           Procedure(StringTheory pWhere, String pAlias),VIRTUAL
 PrimeSubset                Procedure(),VIRTUAL
+InTransaction              Procedure(),LONG,VIRTUAL
+SetInTransaction           Procedure(Long pState),VIRTUAL
 
 GetPROP:Affected           Procedure(),STRING,VIRTUAL             ! Get name of the database from the connect string
 GetProp:AlwaysQuote        Procedure(),STRING,VIRTUAL
@@ -641,11 +663,12 @@ GetProp:ClientVersionBuild Procedure(),STRING,VIRTUAL
 GetProp:ClientVersionMajor Procedure(),STRING,VIRTUAL
 GetProp:ClientVersionMinor Procedure(),STRING,VIRTUAL
 GetPROP:ClientVer          Procedure(),STRING,VIRTUAL  ! returns a character string indicating the version of the client DLL or ODBC DLL accessed by the driver
-
 GetPROP:Database           Procedure(),STRING,VIRTUAL             ! Get name of the database from the connect string
 GetPROP:DatabaseName       Procedure(),STRING,VIRTUAL             ! Get database name - ie SQLITE, PostgreSQL etc.
 GetProp:DbVersionMajor     Procedure(),STRING,VIRTUAL
 GetProp:DbVersionMinor     Procedure(),STRING,VIRTUAL
+GetProp:DatePicture        Procedure(),STRING,VIRTUAL
+SetProp:DatePicture        Procedure(String pValue),VIRTUAL
 GetProp:DateTimeSeparator  Procedure(),STRING,VIRTUAL
 SetProp:DateTimeSeparator  Procedure(String pValue),VIRTUAL
 GetProp:DbVersionBuild     Procedure(),STRING,VIRTUAL
@@ -720,13 +743,20 @@ GetPROP:Server             Procedure(),STRING,VIRTUAL             ! the name of 
 GetPROP:SQL                Procedure(),STRING,VIRTUAL  !  execute SQL statements in your program.
 SetPROP:SQL                Procedure(String pSQL),VIRTUAL
 DoPROP:SQL                 Procedure(),VIRTUAL
+GetProp:TimePicture        Procedure(),STRING,VIRTUAL
+SetProp:TimePicture        Procedure(String pValue),VIRTUAL
+
 _ExecuteSql                Procedure(StringTheory pSQL, <? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),LONG,VIRTUAL
 _ExecuteSql                Procedure(),LONG,VIRTUAL
+_ExecuteSqlNoParms         Procedure(),Long,Virtual                     ! no prepare, or bind parms, self.result gets the result
+_ExecuteSqlNoParms         Procedure(iResultSet pResult),Long,Virtual   ! no prepare, or bind parms
+_ExecuteSqlToRecord        Procedure(),Long,Proc,Virtual
 GetPROP:SQLFilter          Procedure(),STRING,VIRTUAL             ! this statement should be replaced by the more versatile SQL() statement.
 SetPROP:SQLFilter          Procedure(String pValue),VIRTUAL
 GetProp:SQLOrder           Procedure(),String,Virtual
 SetProp:SQLOrder           Procedure(String pValue),Virtual
-GetPROP:User               Procedure(),STRING,VIRTUAL             ! the name of the server from the connect string
+GetProp:TransactionStatus  Procedure(),Long,Virtual
+GetPROP:User               Procedure(),String,VIRTUAL             ! the name of the server from the connect string
 GetProp:Where              Procedure(),String,Virtual
 SetProp:Where              Procedure(String pValue),Virtual
 GetProp:WherePage          Procedure(),String,Virtual
@@ -750,19 +780,21 @@ SharedProperties        &FilePropertiesType
 Fields                  &FieldGroupType
 recbuf                  &string       ! *void ! FILE's RECORD buffer, this points to a buffer allocated by the Clarion run-time.  Data may be copied to it but it may not be reallocated or freed by the File Driver.
 
+_ThisSqlType            AString
 _numBlobs               long
 _numMemos               long
 TypeDescriptorAddress   Long          ! set in driver.clw, not in class
 LoginTimeout            Long          ! seconds
 reclen                  Ulong
 _indicies               Long,dim(255)
-_inTransaction          Byte
 _inStream               Byte
 _transactionPrimary     Byte
 _relationsOff           Byte
 _GetBuffer              Byte          ! used when resetting a view to do the GET into the shadow buffer
-_ThisSqlType            AString
 _locked                 Byte
+_ClaimStartedTransaction Byte
+_ClaimActive             Byte
+_ClaimSqlDidPut          Byte
 
 ! --------------------------------------------------------------------
 ! pointers which need to be cloned during a GETSTATE or RESTORESTATE
@@ -780,6 +812,8 @@ _TryConnectedAs         cstring(DRIVER:MAXOWNER)  ! The value in Owner when the 
 _ConnectedPool          long                      ! The value in prop:pool when the last connection was made.
 DriverStr               cstring(256)  ! The string specified as the second string in DRIVER attribute.
 Alias                   cstring(DRIVER:MAXALIASLENGTH)   ! The Alias used for the file in Views. Defaults to A,B,C etc. Can be set here.
+CollationDB             cstring(50)   ! 50 seems like enough, but might need to be lengthened in future.
+dbCaseInsensitive       Byte          ! true means the database is case insensitive
 RecordPointer           BIGINT        ! the position of the current record buffer in the file
 RecordLength            BIGINT        ! The Length of the last read when doing GET(pointer,length)
 SetPointer              BIGINT        ! The position of the last SET command.
@@ -851,6 +885,8 @@ _parseKeyNameAttributes  Procedure(),VIRTUAL
 _parseBlobNameAttributes Procedure(),VIRTUAL
 _parseFieldNameAttributes Procedure(FieldGroupType pNode),VIRTUAL
 _ParseFieldSQLType       Procedure(FieldGroupType pNode),VIRTUAL
+_ParseDefaultDefault     Procedure(FieldGroupType pNode),VIRTUAL
+_GetCollation            Procedure(Long pIndex),String,VIRTUAL           ! get the collation name for the database
 _Optimize                Procedure(),VIRTUAL
 _writeHandle             Procedure(),VIRTUAL
 _newMemoMemory           Procedure(Long pNewSize),VIRTUAL
@@ -887,18 +923,20 @@ _FieldIsBlank             Procedure(),Long,Virtual
 _FillShadowBufferFromPosition  Procedure(KEY pKey, STRING pStr),Virtual
 _PopulateUuidFields       Procedure(),VIRTUAL
 _GenerateSelect           Procedure(Long pOpcode),Virtual
+_PrepareSelect            Procedure(Long pOpcode),Virtual
 BuildGroupBy              Procedure(),Derived
-BuildProjectList          Procedure(),Virtual
+BuildProjectList          Procedure(Long pPrimary),Virtual
 BuildProjectListAppendClauses Procedure(),Virtual
 
-SetPrimaryKeyPosition     Procedure(),VIRTUAL
-ClearPrimaryKeyPosition   Procedure(),VIRTUAL
+SetPrimaryKeyPosition     Procedure(Byte pForce=False),Virtual                           ! Sets self.PrimaryKeyPosition from primary key values
+ComparePrimaryKeyPosition Procedure(Long pBuffer),Long,Virtual
+ClearPrimaryKeyPosition   Procedure(),Virtual
 _GetPrimaryKeyPosition    Procedure(*Long rLength),String, Virtual
-_SetPrimaryKeyPosition    Procedure(String pPosition,Long pBuffer,*Long rLen), Virtual
-_BeforeRead               Procedure(Long pOpCode),VIRTUAL
-_BeforeWrite              Procedure(Long pOpCode),VIRTUAL
-_AfterWrite               Procedure(Long pOpCode),VIRTUAL
-_AfterRead                Procedure(Long pOpCode),VIRTUAL
+_SetPrimaryKeyPosition    Procedure(String pPosition,Long pBuffer,*Long rLen), Virtual   ! Takes in a POSITION string, and moves the contents of the primary key fields into the nominated buffer
+_BeforeRead               Procedure(Long pOpCode),Virtual
+_BeforeWrite              Procedure(Long pOpCode),Virtual
+_AfterWrite               Procedure(Long pOpCode),Virtual
+_AfterRead                Procedure(Long pOpCode),Virtual
 ValidateStructure         Procedure(),Long,Virtual
 BuildOrderBy              Procedure(),Derived
 BuildOrderByKey           Procedure(Key pKey),Virtual
@@ -923,27 +961,33 @@ SetCustomType              Procedure(String pFieldLabel,iDriverField pInterface)
 TranslateLabel             Procedure(*cstring pValue,*byte pReturnType),String,Proc,Derived
 TranslateReserved          Procedure(*cstring pColumn),String,Virtual
 WrapReserved               Procedure(*cstring pColumn),String,Virtual
+UnwrapReserved             Procedure(*Astring pColumn),String,Virtual
 UnwrapReserved             Procedure(*cstring pColumn),String,Virtual
 _TranslateLabelOverDateSQL Procedure(FieldGroupType pNode),String,Virtual
 _TranslateLabelOverTimeSQL Procedure(FieldGroupType pNode),String,Virtual
 TranslateSearch            Procedure(String pSearchString),String,Virtual
 
 _CalcIndex                 Procedure(),Long,Virtual
-_GetFieldAsJson            Procedure(Long pIndex),String,Virtual
-_GetArrayAsJson            Procedure(StringTheory pStr,Long pIndex),Virtual
-_GetArrayAsJsonWalker      Procedure(StringTheory pStr,Long pIndex,LONG pDim),Virtual
+_GetFieldAsJson            Procedure(Long pIndex,string pLeft, String pRight),String,Virtual
+_GetArrayAsJson            Procedure(StringTheory pStr,Long pIndex,string pLeft, String pRight),Virtual
+_GetArrayAsJsonWalker      Procedure(StringTheory pStr,Long pIndex,LONG pDim,string pLeft, String pRight),Virtual
 
-_GetFieldAsText            Procedure(Long pIndex),String,Virtual
-_GetArrayAsText            Procedure(Long pIndex),String,Virtual
-_GetFieldAsText            Procedure(Long pIndex, Long pArrayIndex),String,Virtual
+_GetFieldAsText            Procedure(Long pIndex,string pLeft, String pRight,Long pOptions),String,Virtual
+_GetFieldAsText            Procedure(Long pIndex, Long pArrayIndex,Long pOptions),String,Virtual
+_GetArrayAsText            Procedure(StringTheory pStr,Long pIndex,string pLeft, String pRight,Long pOptions)
+_GetArrayAsTextWalker      Procedure(StringTheory pStr,Long pIndex,LONG pDim,string pLeft, String pRight,Long pOptions),Virtual
 
-_PutJsonAsField            Procedure(*String pStr,Long pIndex),Virtual
-_PutJsonAsFieldWorker      Procedure(StringTheory pStr, Long pIndex, Long pArrayIndex),Virtual
+_SetFieldFromText          Procedure(Long pIndex,String pText),Virtual
+_SetFieldFromText          Procedure(Long pIndex,String pText, Long pArrayIndex),Virtual
+_SetArrayFromText          Procedure(Long pIndex,String pText),Virtual
 
-_LoadArray                 Procedure(*String pStr,Long pIndex),Virtual  ! Pure virtual, filled in by the actual driver
+_PutJsonAsField            Procedure(*String pStr,Long pIndex, Long pBuffer),Virtual
+_PutJsonAsFieldWorker      Procedure(StringTheory pStr, Long pIndex, Long pArrayIndex, Long pBuffer),Virtual
+
+_LoadArray                 Procedure(*String pStr,Long pIndex, Long pBuffer, Long pCanNull),Virtual  ! Pure virtual, filled in by the actual driver
 _GetAlias                  Procedure(Byte pWithDot),String,Virtual
 
-DeformatText               Procedure(String pText),String,Virtual
+DeformatText               Procedure(String pText,Long pGroupPattern),String,Virtual
 !SetDriverOption            Procedure(String pOption, String pValue),STRING,Derived
 
 ! File Procedures
@@ -983,9 +1027,10 @@ CLEARPROPS                 Procedure(),DERIVED
 CLOSE                      Procedure(),DERIVED
 CONNECT                    Procedure(Long pOptions=0),VIRTUAL
 COPY                       Procedure(STRING pNewFileName, Long pOptions),VIRTUAL
-CREATEDB                   Procedure(String pDatabaseName),VIRTUAL
+CREATEDB                   Procedure(String pDatabaseName, String pOptions),VIRTUAL
 CREATETABLE                Procedure(),VIRTUAL
 _CREATETABLE               Procedure(),VIRTUAL            ! splitting this into a separate method allows it to be called without the parent checks.
+_CreateValidationBoolean   Procedure(),Long,VIRTUAL
 _CreateValidation          Procedure(),VIRTUAL
 _CreateDefault             Procedure(Long pHasDefault, Long pType, String pDefault),VIRTUAL
 _CreateForeignKeys         Procedure(),VIRTUAL
@@ -1052,6 +1097,10 @@ ADD                        Procedure(),VIRTUAL
 ADD                        Procedure(LONG pLength),VIRTUAL
 APPEND                     Procedure(),VIRTUAL
 APPEND                     Procedure(LONG pLength),VIRTUAL
+CLAIM                      Procedure(KEY pKey, ? pFIELD, ? pValue),VIRTUAL                          ! approach 2
+CLAIM                      Procedure(KEY pKey, ? pFIELD, ? pValue,? pNewValue),VIRTUAL              ! approach 1
+CLAIM                      Procedure(STRING pOrder, STRING pFilter, ? pFIELD, ? pNewValue),VIRTUAL  ! approach 1
+CLAIM                      Procedure(STRING pOrder, STRING pFilter),VIRTUAL                         ! approach 2
 DELETE                     Procedure(),VIRTUAL
 DELETE                     Procedure(String pFilter),VIRTUAL
 GET                        Procedure(BIGINT pFilePointer),VIRTUAL
@@ -1105,9 +1154,12 @@ _WatchBuffLoad             Procedure(),VIRTUAL
 _WatchCheck                Procedure(),VIRTUAL
 
 ! Transaction Processing
-LOGOUTCONNECTION           Procedure(),VIRTUAL
+LOGOUTdrv                  Procedure(),VIRTUAL
 COMMIT                     Procedure(),VIRTUAL
 ROLLBACK                   Procedure(),VIRTUAL
+LOGOUTCONNECTION           Procedure(),VIRTUAL
+COMMITCONNECTION           Procedure(),VIRTUAL
+ROLLBACKCONNECTION         Procedure(),VIRTUAL
 ROLLBACK                   Procedure(String pSavePoint),VIRTUAL
 SAVEPOINT                  Procedure(String pSavePoint),VIRTUAL
 STARTTRAN                  Procedure(Long pOpcode),VIRTUAL   ! these can be called from Logout, Commit, and Rollback
@@ -1226,6 +1278,9 @@ GetPROP:Watched            Procedure(),STRING,VIRTUAL  ! Get record watch status
 GetPROP:Alias              Procedure(),STRING,VIRTUAL  ! the alias the SQL Accelerator driver uses when generating SELECT statements for a view.
 SetPROP:Alias              Procedure(String pAlias),VIRTUAL
 GetPROP:AlwaysRebind       Procedure(),STRING,VIRTUAL  ! the toggle that controls whether the SQL Accelerator rebinds memory locations when a NULL state changes.
+GetProp:Collation          Procedure(Long pIndex),String,Virtual
+GetProp:CollationDB        Procedure(Long pIndex),String,Virtual
+SetProp:CollationDB        Procedure(String pCollation),Virtual
 GetPROP:ConnectString      Procedure(),STRING,VIRTUAL  ! returns an SQL database's connection information.
 GetPROP:Handle             Procedure(Long pIndex),STRING,VIRTUAL
 GetPROP:Hdbc               Procedure(),STRING,VIRTUAL  ! returns the current hdbc used by the ODBC driver
@@ -1260,18 +1315,36 @@ SETBLOBPROP:Value          Procedure(Long pIndex, STRING pValue),VIRTUAL
                END
 
 !==================================================================================================
+! Keeping this in a separate class means it'll only allocate memory when a SQL statement, which uses parameters, is executed.
+! Don't want to generate this block on a per-table, per-thread basis if the table is not actually used.
+DriverParmBufferClass  Class(), Type, MODULE('DriverClass.Clw'),LINK('DriverClass.Clw',DRVLM), DLL(DRVDM)
+TempStr                   &StringTheory
+ParmBufferCount           Long
+ParmBufferAddr            Long,Dim(DRIVER:MAXPARAMETERS)
+ParmBufferSize            Long,Dim(DRIVER:MAXPARAMETERS)  ! size of Memory
+ParmBufferLen             Long,Dim(DRIVER:MAXPARAMETERS)  ! Length of data , not including trailing 0
+ParmBufferSqlType         Long,Dim(DRIVER:MAXPARAMETERS)  ! SQL Type equate
+ParmBufferFormat          Long,Dim(DRIVER:MAXPARAMETERS)
+ParmBufferDispose         Byte,Dim(DRIVER:MAXPARAMETERS)  ! Set to 1 if memory new'd by _SetParmBuffer and must be disposed
+Construct                 Procedure()
+Destruct                  Procedure(),Virtual
+Trace                     Procedure(STRING pStr),Virtual
+_SetParmBuffer            Procedure(Long pCount,Long pAddress, Long pLen, Long pSqlType, Long pFormat, Long pOptions, Long pCodePage),Virtual
+_DebugParmBuffer          Procedure(Long pCount),Virtual
+                       End
+
+!==================================================================================================
 DriverFileSQLClass      Class(DriverFileClass), Type, MODULE('DriverClass.Clw'),LINK('DriverClass.Clw',DRVLM), DLL(DRVDM)
 
 ! these properties are not saved, and restored by SaveState / RestoreState
-dbHandle                  long
-!dbConnectionTimeout       long
-!dbExecTimeout             long
 
+DatabaseFieldType         Long,Dim(DRIVER:MAXFILEFIELDS)   ! Index matches the index in the Dictionary, not the column number in the database
+DatabaseFieldSize         Long,Dim(DRIVER:MAXFILEFIELDS)   ! matches the size in the database. Exact if BINARY(n) or VARBINARY(n), Use Max n if VARBINARY(Max). Note that this could be bigger than the declared field size in the dictionary?
+DatabaseFieldPrecision    Byte,Dim(DRIVER:MAXFILEFIELDS)   ! used for time, decimal
 ! these properties are saved, and restored by SaveState / RestoreState
 __SQLSTATESTART           Byte
 opt:LogFileName           &Cstring       ! cString(255)  !/LOGFILE=lfn [mess]
 opt:LogMessage            &Cstring       ! cString(255)
-opt:ZeroDate              Long           ! /ZERODATE=19010101
 opt:AllowDetails          Byte           ! /ALLOWDETAILS=TRUE
 opt:TurboSQL              Byte           ! /TURBOSQL=true
 opt:Master                Byte
@@ -1289,18 +1362,22 @@ INIT                      Procedure(FILE pFile, Long pForce=false),DERIVED
 
 SetDriverOption           Procedure(String pOption, String pValue),STRING,Derived
 _ExecuteSelect            Procedure(),VIRTUAL
-_BindOffset               Procedure(),VIRTUAL
+!_BindOffset               Procedure(),VIRTUAL
 
 _ClearOrderFieldsInShadowBuffer Procedure(Long pOpCode, Long pFromField),Virtual
 _ClearOrderFieldInShadowBuffer  Procedure(Long pOpCode, Long pDirection, Long pIndex),Virtual
 _ClearField               Procedure(Long pIndex, Byte pHighLow, Long pAddr),Virtual
 _AddSQL                   Procedure(Long pOpcode),Long,Virtual
+_ClaimSQL                 Procedure(? pFIELD, ? pNewValue),Long,Virtual
 _DeleteSQL                Procedure(),Long,Virtual
 _DeleteSQL                Procedure(String pFilter),Long,Virtual
 _DuplicateSql             Procedure(KEY pKey),Long,Virtual
 _GetSQL                   Procedure(KEY pKey),Long,Virtual
+_LogoutSql                Procedure(),Virtual
 _PutSql                   Procedure(),Long,Virtual
 _RandomSQL                Procedure(String pFilter, BIGINT pOffset),Long,Virtual
+_RollbackSavePointSql     Procedure(String pSavePoint),Virtual
+_SavePointSql             Procedure(String pSavePoint),Virtual
 _SelectSQL                Procedure(Long pOpcode),Long,Virtual
 _AddOrderToWhere          Procedure(StringTheory pWhere,Byte pOpCode),Virtual
 
@@ -1311,12 +1388,18 @@ TranslateLimitBelow       Procedure(Long pLimit, String pOffset),String,Virtual
 ADD                       Procedure(LONG pLength),DERIVED
 APPEND                    Procedure(LONG pLength),DERIVED
 BYTES                     Procedure(),BIGINT,DERIVED
+CLAIM                     Procedure(STRING pOrder, STRING pFilter, ? pFIELD, ? pNewValue),DERIVED  ! approach 1
+CLAIM                     Procedure(STRING pOrder, STRING pFilter),DERIVED                         ! approach 2
+_ClaimWork                Procedure(Long pApproach, STRING pOrder, STRING pFilter, ? pFIELD, ? pNewValue),VIRTUAL
+COMMITCONNECTION          Procedure(),DERIVED
 GET                       Procedure(KEY pKey),DERIVED
 GET                       Procedure(BIGINT pFilePointer),DERIVED
 GET                       Procedure(BIGINT pFilePointer, LONG pLength),DERIVED
 GET                       Procedure(KEY pKey, BIGINT pKeyPointer),DERIVED
 GETRANDOM                 Procedure(String pFilter),DERIVED
 GETSTATE                  Procedure(Long pSaveBlob),LONG,DERIVED
+LOGOUTCONNECTION          Procedure(),DERIVED
+_MassageOwner               Procedure(String pOwner),String,Virtual
 MERGE                     Procedure(FILE pDestination, LONG pOptions),DERIVED                                        ! New Command
 MERGEFast                 Procedure(FILE pDestination, LONG pOptions),VIRTUAL                                        ! New Command (called via MERGE)
 MERGESlow                 Procedure(FILE pDestination, LONG pOptions),VIRTUAL                                        ! New Command (called via MERGE)
@@ -1327,6 +1410,7 @@ _NextPrevious             Procedure(Long pOpcode),VIRTUAL
 
 POSITION                  Procedure(),STRING,DERIVED
 PREVIOUS                  Procedure(),DERIVED
+PUT                       Procedure(),DERIVED
 PUT                       Procedure(BIGINT pFilePointer),DERIVED
 PUT                       Procedure(BIGINT pFilePointer, LONG pLength),DERIVED
 RECORDS                   Procedure(),BIGINT,DERIVED
@@ -1335,15 +1419,20 @@ RECORDS                   Procedure(*? pField1, <*? pField2>, <*? pField3>, <*? 
 RECORDS                   Procedure(KEY pKey),BIGINT,DERIVED
 REMOVE                    Procedure(),DERIVED
 RESTORESTATE              Procedure(Long pState, Byte pBuffer),DERIVED
+ROLLBACK                  Procedure(String pSavePoint),DERIVED
+ROLLBACKCONNECTION        Procedure(),DERIVED
 _SET                      Procedure(Byte pSetMethod, BigInt pPointer,Key pSetKey, Key pSetKeyKey),DERIVED
+SAVEPOINT                 Procedure(String pSavePoint),DERIVED
 SKIP                      Procedure(BIGINT pCount),DERIVED
 SQL                       Procedure(String pSql,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),DERIVED
+SwitchToMaster            Procedure(String pDbid,String pDbName, String pSep, *String pDbNameWas),Long,VIRTUAL
+SwitchBack                Procedure(),VIRTUAL
 _UpdateSql                Procedure(String pFilter,*? pField1,String pValue1,<*? pField2>,<String pValue2>,<*? pField3>,<String pValue3>,<*? pField4>,<String pValue4>,<*? pField5>,<String pValue5>,<*? pField6>,<String pValue6>,<*? pField7>,<String pValue7>,<*? pField8>,<String pValue8>,<*? pField9>,<String pValue9>,<*? pField10>,<String pValue10>),VIRTUAL
 UPDATE                    Procedure(String pFilter,*? pField1,String pValue1,<*? pField2>,<String pValue2>,<*? pField3>,<String pValue3>,<*? pField4>,<String pValue4>,<*? pField5>,<String pValue5>,<*? pField6>,<String pValue6>,<*? pField7>,<String pValue7>,<*? pField8>,<String pValue8>,<*? pField9>,<String pValue9>,<*? pField10>,<String pValue10>),DERIVED
 UPDATE                    Procedure(Key pKey,*? pField1,String pValue1,<*? pField2>,<String pValue2>,<*? pField3>,<String pValue3>,<*? pField4>,<String pValue4>,<*? pField5>,<String pValue5>,<*? pField6>,<String pValue6>,<*? pField7>,<String pValue7>,<*? pField8>,<String pValue8>,<*? pField9>,<String pValue9>,<*? pField10>,<String pValue10>),DERIVED
 
 !Properties that are really commands
-CREATEDB                  Procedure(String pDatabaseName),DERIVED
+CREATEDB                  Procedure(String pDatabaseName, String pOptions),DERIVED
 CONNECT                   Procedure(Long pOptions=0),DERIVED
 DISCONNECT                Procedure(),DERIVED
 
@@ -1359,35 +1448,35 @@ GETPROP:User              Procedure(),STRING,DERIVED
 !==================================================================================================
 ! Views tend to have local, not global, scope, so the Ram constraints on the structure are less significant.
 !Region ----------  Types ----------
-ViewTreeType      Queue,Type
-ParentFile          &File              ! file for the parent node
-File                &File              ! file for this node
-TableName           Cstring(128)       ! we might not have a FILE object, but just a table name.
-Driver              Cstring(50)        ! file driver name for this node
-Alias               Cstring(DRIVER:MAXALIASLENGTH)
-Index               Long
+ViewTreeType                  Queue,Type
+ParentFile                      &File              ! file for the parent node
+File                            &File              ! file for this node
+TableName                       Cstring(128)       ! we might not have a FILE object, but just a table name.
+Driver                          Cstring(50)        ! file driver name for this node
+Alias                           Cstring(DRIVER:MAXALIASLENGTH)
+Index                           Long
 
-                    ! join properties
-Key                 &key               ! foreign key
-SqlJoinExpression   &Cstring           ! set by developer at runtime
-LinkingExpr         &Cstring           ! custom expression
-NumLinkingFields    short
-LinkingField        short,dim(DRIVER:MAXJOINLINKINGFIELDS)     ! up to 255 linking fields in the join.
-JoinType            byte               ! driver:leftjoin, driver:innerjoin,driver:rightjoin,driver:fulljoin,driver:crossjoin,driver:selfjoin
-Relation            byte               ! driver:one, driver:many
-Hint                cstring(255)
+                                ! join properties
+Key                             &key               ! foreign key
+SqlJoinExpression               &Cstring           ! set by developer at runtime
+LinkingExpr                     &Cstring           ! custom expression
+NumLinkingFields                short
+LinkingField                    short,dim(DRIVER:MAXJOINLINKINGFIELDS)     ! up to 255 linking fields in the join.
+JoinType                        byte               ! driver:leftjoin, driver:innerjoin,driver:rightjoin,driver:fulljoin,driver:crossjoin,driver:selfjoin
+Relation                        byte               ! driver:one, driver:many
+Hint                            cstring(255)
 
 ! project
-AutoProject         Byte                                    ! sum of  (driver:projectfields , driver:ProjectBlobs) or driver:ProjectNone
-NumFields           Short                                   ! Number of Projected fields for this node (not including ProjectSQL)
-Field               Short,dim(DRIVER:MAXPROJECTEDFIELDS)    ! Field number in the associated file.   up to 2048 projected fields per file
-Dynamic             Long                                    ! the first dynamic field added by code
-Name                Astring,dim(DRIVER:MAXPROJECTEDFIELDS)  ! Override of File Column Name. User can set it via {prop:name}
+AutoProject                     Byte                                    ! sum of  (driver:projectfields , driver:ProjectBlobs) or driver:ProjectNone
+NumFields                       Short                                   ! Number of Projected fields for this node (not including ProjectSQL)
+Field                           Short,dim(DRIVER:MAXPROJECTEDFIELDS)    ! Field number in the associated file.   up to 2048 projected fields per file
+Dynamic                         Long                                    ! the first dynamic field added by code
+Name                            Astring,dim(DRIVER:MAXPROJECTEDFIELDS)  ! Override of File Column Name. User can set it via {prop:name}
 
 ! joins
-numchildren         short
-children            &ViewTreeType
-                  End
+numchildren                     short
+children                        &ViewTreeType
+                              End
 
 !EndRegion: Types
 
@@ -1513,6 +1602,8 @@ GetProp:Alias                   Procedure(Long pFileNumber),String,Virtual
 GetProp:AutoProject             Procedure(Long pIndex),String,Virtual
 SetProp:AutoProject             Procedure(Long pIndex, Byte pValue),Virtual
 _ClearPropsWalker               Procedure(ViewTreeType pNode),Virtual
+GetProp:Collation               Procedure(Long pIndex),String,Virtual
+GetProp:CollationDB             Procedure(Long pIndex),String,Virtual
 GetProp:Field                   Procedure(Long pIndex),String,Virtual
 GetProp:Fields                  Procedure(Long pIndex),String,Derived
 GetProp:File                    Procedure(Long pIndex),String,Virtual
@@ -1535,7 +1626,7 @@ SetPROP:OrderInSelect           Procedure(Byte pValue),VIRTUAL
 GetProp:Project                 Procedure(Long pIndex),String,Virtual
 GetPROP:SQLJoinExpression       Procedure(Long pIndex),STRING,VIRTUAL  ! You can use PROP:SQLJoinExpression to structure your VIEWs using native SQL code rather than Clarion code.
 SetPROP:SQLJoinExpression       Procedure(Long pIndex,String pValue),VIRTUAL  ! You can use PROP:SQLJoinExpression to structure your VIEWs using native SQL code rather than Clarion code.
-
+GetProp:TransactionStatus       Procedure(),Long,DERIVED
                               End
 
 !==================================================================================================
@@ -1553,6 +1644,12 @@ _OrderParmNumber                Long
 Construct                       Procedure()
 Destruct                        Procedure(),Virtual
 
+GetPROP:Database                Procedure(),STRING,DERIVED         ! Get database name from connection string
+GetPROP:Server                  Procedure(),STRING,DERIVED         ! Get server name from connection string
+GetPROP:User                    Procedure(),STRING,DERIVED         ! Get user name from connection string
+GetPROP:DatabaseName            Procedure(),STRING,VIRTUAL         ! Get database name - ie SQLITE, PostgreSQL etc.
+GetPROP:Driver                  Procedure(),STRING,VIRTUAL
+
 AddFixedToOrderBy               Procedure(),Virtual
 BuildProjectList                Procedure(),Virtual
 _BuildProjectListWalker         Procedure(ViewTreeType pNode),Virtual
@@ -1565,7 +1662,7 @@ BuildOrderByUnique              Procedure(),Virtual
 _BuildOrderByUniqueWalker       Procedure(ViewTreeType pNode),Virtual
 SetOrderByFromQueue             Procedure(),Virtual
 _ClearOrderFieldsInShadowBuffer Procedure(Long pOpCode),Virtual
-_BindOffset                     Procedure(),Virtual
+!_BindOffset                     Procedure(),Virtual
 _ExecuteSelect                  Procedure(),VIRTUAL
 _CalcLimitAndOffset             Procedure(*Long rLimit, *Long rOffset),VIRTUAL
 _PrependFixedToWhere            Procedure(Long pIndex),VIRTUAL
@@ -1590,6 +1687,7 @@ _ProjectFieldWalker             Procedure(ViewTreeType pNode,*? pField),Long,Vir
 _ClearDynamicProjects           Procedure(),Virtual
 _ClearDynamicProjectsWalker     Procedure(ViewTreeType pNode),Virtual
 _NextPrevious                   Procedure(Long pOpcode),Virtual
+InTransaction                   Procedure(),LONG,DERIVED
 
 CLEARPROPS                      Procedure(),Derived
 NEXT                            Procedure(),Derived
@@ -1709,7 +1807,7 @@ Pool                            Long
 Options                         Long
 Handle                          Long
 Counter                         Long
-Transaction                     Byte
+Transaction                     Long
                               End
 
 DriverConnectionPoolClass     Class(),Type,MODULE('DriverClass.Clw'),LINK('DriverClass.Clw',DRVLM), DLL(DRVDM)
@@ -1721,7 +1819,7 @@ Trace                           Procedure(STRING pStr),Virtual
 GetConnection                   Procedure(String pConnectString, Long pPool, Long pOptions),Long,VIRTUAL
 SetConnection                   Procedure(String pConnectString, Long pPool, Long pOptions,Long pHandle),VIRTUAL
 Disconnect                      Procedure(Long pHandle),Long,VIRTUAL
-SetTransaction                  Procedure(Long pHandle, Byte pValue),VIRTUAL
+SetTransaction                  Procedure(Long pHandle, Long pValue),VIRTUAL
 GetTransaction                  Procedure(Long pHandle),Long,VIRTUAL
                               End
 !==================================================================================================

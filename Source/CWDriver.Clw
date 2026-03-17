@@ -1,10 +1,10 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
-!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
-!   Released under MIT License
-!------------------------------------------------------------------------------------------------
-! Object based drivers introduces new FILE and VIEW commands. This module acts as a simple
-! bridge so those commands can be called just like any other FILE or VIEW command.
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
+!   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm          !
+!   Released under MIT License                                                                  !
+!-----------------------------------------------------------------------------------------------!
+! Object based drivers introduces new FILE and VIEW commands. This module acts as a simple      !
+! bridge so those commands can be called just like any other FILE or VIEW command.              !
 !------------------------------------------------------------------------------------------------
   Member()
   Include('errors.clw'),once
@@ -13,7 +13,63 @@
   Map
     Module('rtl')
       ClaSetError(Long pError),name('Cla$seterror') ,dll(dll_mode)
+      ClaError(),STRING,NAME('Cla$StackErrstr'),dll(dll_mode)
     End
+  End
+
+!------------------------------------------------------------------------------------------------
+! tweak builtins.clw
+ERROR2               Procedure()
+  code
+  Case ErrorCode()
+  of ConstraintErr           !Equate(19)    !  Returned by traditional SQLite driver
+    return 'Constraint Error'
+  of BadOwnerErr             !Equate(82)    !  "Invalid Owner"              ! Not declared in errors.clw, but used For FileErrorCode in SQLITE driver
+    return 'Invalid Owner'
+  of BadFilterErr            !Equate(120)   !  "Invalid Filter"
+    return 'Invalid Filter'
+  of BadProjectErr           !Equate(121)   !  "Invalid Project List"
+    return 'Invalid Project List'
+  of OldDatabaseErr          !Equate(122)   !  "Database Too Old"           ! Used when database version < required version
+    return 'Database Too Old'
+  of UnsafeSQLErr            !Equate(123)   !  "Unsafe SQL"                 ! Trap old use of unsanitized prop:sql calls
+    return 'Unsafe SQL'
+  of SQLErr                  !Equate(124)   !  "Invalid SQL"                ! A Prop:Sql contained invalid SQL
+    return 'Invalid SQL'
+  of InvalidSavePointErr     !Equate(125)   !  "Invalid Savepoint"          ! Rollback to a savepoint failed
+    return 'Invalid Savepoint'
+  of BadFieldErr             !Equate(126)   !  "Field does not belong to file"  ! used in SUBSET and RECORDS and CREATERELATIONS
+    return 'Field does not belong to file'
+  of BadJoinFileErr          !Equate(127)   !  "Node in join list has no FILE or TABLENAME"
+    return 'Node in join list has no FILE or TABLENAME'
+  of InvalidFieldErr         !Equate(128)   !  "One or more fields are not valid"
+    return 'One or more fields are not valid'
+  of RestrictedDeleteErr     !Equate(129)   !  "Delete Failed because Child Records Exist"
+    return 'Delete Failed because Child Records Exist'
+  of ForeignKeyFailedErr     !Equate(130)   !  "An Insert or Update failed because of a Foreign Key constraint"
+    return 'An Insert or Update failed because of a Foreign Key constraint'
+  of NotNullFailedErr        !Equate(131)   !  "An Insert or Update failed because A not-null field is null"
+    return 'An Insert or Update failed because A not-null field is null'
+  of DataTruncatedErr        !Equate(132)   !  "Data retrieved from the database could not fit in the Clarion field"
+    return 'Data retrieved from the database could not fit in the Clarion field'
+  of FieldMismatchErr        !Equate(133)   !  "The returned SQL data type cannot be morphed into the Clarion field"
+    return 'The returned SQL data type cannot be morphed into the Clarion field'
+  of MissingFilterErr        !Equate(134)   !  "Missing Filter"
+    return 'Missing Filter'
+  of BadExpressionErr        !Equate(135)   !  "Bad Expression"
+    return 'Bad Expression'
+  of MissingPrimaryKeyErr    !Equate(136)   !  "Table Does Not Have A Primary Key"
+    return 'Table Does Not Have A Primary Key'
+  of ObjectExistsErr         !Equate(137)   !  "There is already an object named '...' in the database."
+    return 'There is already an object with that name in the database'
+  of OrphanExistsErr         !Equate(138)   !  "A new relationship cannot be made because orphans already exist in the table."
+    return 'A new relationship cannot be made because orphans already exist in the table'
+  of ClaimAlreadyActiveErr
+    return 'Claim already active on this table'
+  of UnicodeConversionError
+    return 'Unable to convert to, or from, unicode'
+  Else
+    Return ClaError()
   End
 
 !------------------------------------------------------------------------------------------------
@@ -172,6 +228,58 @@ obj      &DriverFileClass
   Return
 
 !-----------------------------------------------------------------------------------------------
+CLAIM       Procedure(KEY pKey, ? pFIELD, ? pValue, ? pNewValue)     !1a
+obj      &DriverFileClass
+  Code
+  obj &= pKey{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CLAIM()').
+  obj.Claim(pKey, pField, pValue, pNewValue)
+  Return
+
+!-----------------------------------------------------------------------------------------------
+CLAIM       Procedure(KEY pKey, ? pFIELD, ? pValue)    !2a
+obj      &DriverFileClass
+  Code
+  obj &= pKey{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CLAIM()').
+  obj.Claim(pKey, pField, pValue)
+  Return
+
+!-----------------------------------------------------------------------------------------------
+CLAIM       Procedure(FILE pFile, STRING pOrder, STRING pFilter, ? pFIELD, ? pNewValue)    !1b
+obj      &DriverFileClass
+  Code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CLAIM()').
+  obj.Claim(pOrder, pFilter, pField, pNewValue)
+  Return
+
+!-----------------------------------------------------------------------------------------------
+CLAIM       Procedure(FILE pFile, STRING pOrder, STRING pFilter)  !2b
+obj      &DriverFileClass
+  Code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CLAIM()').
+  obj.Claim(pOrder, pFilter)
+  Return
+
+!-----------------------------------------------------------------------------------------------
 CLEARPROPS              Procedure(FILE pFile)
 obj      &DriverFileClass
   Code
@@ -207,7 +315,7 @@ obj      &DriverFileClass
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]COMMIT()').
-  obj.Commit()
+  obj.CommitConnection()
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -246,11 +354,11 @@ obj      &DriverFileClass
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]CREATEDB()').
-  obj.CreateDB('')
+  obj.CreateDB('','')
   Return
 
 !------------------------------------------------------------------------------------------------
-CREATEDB                Procedure(FILE pFile,String pDatabaseName)
+CREATEDB                Procedure(FILE pFile,String pDatabaseName,<String pOptions>)
 obj      &DriverFileClass
   code
   obj &= pFile{prop:object}
@@ -259,7 +367,7 @@ obj      &DriverFileClass
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]CREATEDB(''' & clip(pDatabaseName) & ''')').
-  obj.CreateDB(pDatabaseName)
+  obj.CreateDB(pDatabaseName,pOptions)
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -479,6 +587,11 @@ obj      &DriverFileClass
   Return obj.Exists(pWhat,pName)
 
 !------------------------------------------------------------------------------------------------
+EXISTSDB          Procedure(FILE pFile)
+  code
+  Return EXISTSDB(pFile,'')
+
+!------------------------------------------------------------------------------------------------
 EXISTSDB          Procedure(FILE pFile, String pDatabaseName)
 obj      &DriverFileClass
   code
@@ -634,7 +747,6 @@ obj      &DriverFileClass
     ClaSetError(NoDriverSupport)
     Return
   End
-  obj._transactionPrimary = true
   If obj._logClarion then obj.Log('[CLAR]LOGOUTCONNECTION()') .
   obj.LogoutConnection()
   Return
@@ -1074,7 +1186,7 @@ obj      &DriverFileClass
     Return
   End
   If obj._logClarion then obj.Log('[CLAR]ROLLBACK()') .
-  obj.Rollback()
+  obj.RollbackConnection()
   Return
 
 !------------------------------------------------------------------------------------------------

@@ -1024,11 +1024,13 @@ BUILD                      Procedure(KEY pKey, STRING pComponents),VIRTUAL
 BYTES                      Procedure(),BIGINT,VIRTUAL
 CALL                       Procedure(String pStoredProcedure,<? pParm1>,<? pParm2>,<? pParm3>,<? pParm4>,<? pParm5>,<? pParm6>,<? pParm7>,<? pParm8>,<? pParm9>,<? pParm10>,<? pParm11>,<? pParm12>,<? pParm13>,<? pParm14>,<? pParm15>,<? pParm16>,<? pParm17>,<? pParm18>,<? pParm19>,<? pParm20>),VIRTUAL
 CLEARPROPS                 Procedure(),DERIVED
+CLEARRELATIONS             Procedure(),VIRTUAL
 CLOSE                      Procedure(),DERIVED
 CONNECT                    Procedure(Long pOptions=0),VIRTUAL
 COPY                       Procedure(STRING pNewFileName, Long pOptions),VIRTUAL
 CREATEDB                   Procedure(String pDatabaseName, String pOptions),VIRTUAL
 CREATETABLE                Procedure(),VIRTUAL
+CreateParentTables         Procedure(),VIRTUAL
 _CREATETABLE               Procedure(),VIRTUAL            ! splitting this into a separate method allows it to be called without the parent checks.
 _CreateValidationBoolean   Procedure(),Long,VIRTUAL
 _CreateValidation          Procedure(),VIRTUAL

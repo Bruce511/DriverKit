@@ -68,6 +68,8 @@ ERROR2               Procedure()
     return 'Claim already active on this table'
   of UnicodeConversionError
     return 'Unable to convert to, or from, unicode'
+  of InvalidCodePageErr
+    return 'Invalid Code Page'
   Else
     Return ClaError()
   End
@@ -303,6 +305,19 @@ obj      &DriverViewClass
   End
   If obj._logClarion then obj.Log('[CLAR]CLEARPROPS()').
   obj.ClearProps()
+  Return
+
+!-----------------------------------------------------------------------------------------------
+CLEARRELATIONS              Procedure(FILE pFile)
+obj      &DriverFileClass
+  Code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CLEARRELATIONS()').
+  obj.ClearRelations()
   Return
 
 !------------------------------------------------------------------------------------------------

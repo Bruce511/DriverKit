@@ -3,3 +3,4 @@ rem this command changes the "current directory" to be the location of the BAT f
 cd /d "%~dp0"
 .\obdexport\obdexport.exe -i=.\Source\DriverClass.Inc -e=.\Source\ClaObd.Exp -l=CLAOBD -b=650000H
 .\obdexport\obdexport.exe -a=1 -i=.\Source\CwDriver.Inc -e=.\Source\ClaObd.Exp -l=CLAOBD
+.\obdexport\obdexport.exe -a=1 -i=.\Source\DriverFields.Inc -e=.\Source\ClaObd.Exp -l=CLAOBD

@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -24,11 +24,11 @@
 ShortName   Equate('MEM2')                                                        ! 4 Characters long. If the length is changed, then adjust dll_name and dsi_name below
 LongName    Equate('InMemory2')                                                   ! Spaces Not Welcome
 DriverName  Equate(LongName & '<0>{11}')                                          ! Maintain length as exactly 20 characters
-Copyright   Equate('(c) 2025 by CapeSoft<0>{20}')                                 ! Maintain length as exactly 40 chars
+Copyright   Equate('(c) 2026 by CapeSoft<0>{20}')                                 ! Maintain length as exactly 40 chars
 DriverDesc  Equate('In-Memory2 {20}')                                             ! Maintain length as exactly 30 characters
 DLLName     Equate('CLA'&ShortName&'.DLL<0>')                                     ! Maintain length as exactly 12 characters
 DSIDLLNAME  Equate('CLA'&ShortName&'S.DLL')                                       ! Maintain length as exactly 12 characters
-TDescAddress Equate(00a26768h)
+TDescAddress Equate(00a25a74h)
 
   MAP
     InMemory2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)
@@ -445,7 +445,7 @@ NUM_DRIVER_TYPES        Equate(|
 ! unchanged.
 ! The structure of the type descriptor is [number of opcodes],<opcodes>,[number of types],<types>,0
 boundary1       string('CAP3S0FT')
-TypeDescriptor  String('' |
+TypeDescriptorMem2  String('' |
                  & chr(NUM_DRIVER_OPS)         |
                  & chr(Opcode:ADD)             |
                  & chr(Opcode:ADDfilelen)      |
@@ -655,15 +655,15 @@ Construct                   Procedure()
 InMemory2DriverOnLoadDll.Construct  procedure()
   CODE
 ! these two lines prevent the linker from excluding the TypeDescriptor structure.
-  x# = boundary1 & TypeDescriptor & boundary2      !TypeDescriptor
+  x# = boundary1 & TypeDescriptorMem2 & boundary2      !TypeDescriptor
   Assert(x#=0)  ! x# has to be used :)
 ! ---
 
 ?  dbg = '['&ShortName&']['&x#&'] [' & clip(DriverDesc) & '] DLL Loaded. NUM_DRIVER_OPS=' & NUM_DRIVER_OPS & ' NUM_DRIVER_TYPES=' & NUM_DRIVER_TYPES & ' DRIVER_ATTRIBUTES=' & DRIVER_ATTRIBUTES ; ods(dbg)
 ! this assert attempts to catch any mistakes when setting the opcode, and type lists
-  Assert(Size(TypeDescriptor) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptor) & ' <> ' & NUM_DRIVER_OPS & ' + ' & NUM_DRIVER_TYPES & ' + 3')
+  Assert(Size(TypeDescriptorMem2) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptorMem2) & ' <> ' & NUM_DRIVER_OPS & ' + ' & NUM_DRIVER_TYPES & ' + 3')
   InMemory2DriverGroup.pipeFunctionAddress = address(InMemory2DriverPipe)  ! sets the address for the pipe function below.
-  InMemory2DriverGroup.tdesc = address(TypeDescriptor) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
+  InMemory2DriverGroup.tdesc = address(TypeDescriptorMem2) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
 
 !---------------------------------------------------------------------------------
 InMemory2DriverPipe  Procedure(Long pOpCode, long pClaFCB, long pVarList)
@@ -728,7 +728,7 @@ f             &File,auto
     DriverObject &= (ClaFCB.rblock)
   End
   If DriverObject.TypeDescriptorAddress = 0
-    DriverObject.TypeDescriptorAddress = address(TypeDescriptor)
+    DriverObject.TypeDescriptorAddress = address(TypeDescriptorMem2)
   End
   Return ClaFCB.rblock
 

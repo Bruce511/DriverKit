@@ -37,8 +37,9 @@ cs  cstring(200)                                                 ! helpful for d
       wc_inet_pton(Long pFamily,*CString pAddress,Long pResultAddr),Long,Proc,raw,Pascal,dll(_fp_)
     end
     module('clarun')
-       MemCpy(long dest, long src,  unsigned count), long, proc, name('_memcpy')
-       MemSet(long dest, long char, unsigned count), long, proc, name('_memset')
+       MemCpy(long dest, long src,  unsigned count), long, proc, name('_memcpy'),dll(DLL_Mode)
+       MemSet(long dest, long char, unsigned count), long, proc, name('_memset'),dll(DLL_Mode)
+       MemCmp(long buf1, long buf2, unsigned count), long, name('_memcmp'),dll(DLL_Mode)
     end
   end
 os_inet_pton     long,name('wc_inet_pton')
@@ -255,14 +256,20 @@ DriverGUIDClass.iDriverField.GetFieldType   Procedure()!,STRING ! return a uniqu
 ! Returns 16 (the number of bytes written to the address)
 DriverGUIDClass.iDriverField.FromRecordField  Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize)
 str     string(36)
-result  string(16)
+result  string(16)  ! do not auto
 pos     long
 char    byte
 x       long
   Code
   If pFieldType = ClaString and pFieldSize = 16
-    If pWriteAddress
-      MemCpy(pWriteAddress,pFieldAddress, 16)
+    If MemCmp(pFieldAddress,address(result),16) = 0 ! pField is all spaces
+      If pWriteAddress
+        MemSet(pWriteAddress,0, 16)
+      End
+    Else
+      If pWriteAddress
+        MemCpy(pWriteAddress,pFieldAddress, 16)
+      End
     End
     Return 16
   End
@@ -387,7 +394,7 @@ DriverGUIDSqLiteClass.iDriverField.GetSQLType    Procedure()
 ! -------------------------------------------------------------------
 DriverUUIDPostgresClass.iDriverField.GetSQLType    Procedure()
   code
-  return 'UUID'
+  return 'uuid'
 
 !======================================================================================================================
 ! MS SQL Server uses UNIQUEIDENTIFIER as the storage type
@@ -413,9 +420,13 @@ x         long
   !cs = 'FromRecordField pFieldType=' & pFieldType & ' pFieldSize=' & pFieldSize & ' pWriteSize=' & pWriteSize ; wc_dbg(cs)
   If pFieldSize > size(str) then pFieldSize = size(str).
   If pWriteAddress and pFieldType = ClaString and pFieldSize = 16
-    MemCpy(address(str),pFieldAddress, 16)
-    revstr = str[4] & str[3] & str[2] & str[1]  & str[6] & str[5] & str[8] & str[7]  & str[9 : 16]
-    MemCpy(pWriteAddress,address(revstr), 16)
+    If MemCmp(pFieldAddress,address(result),16) = 0 ! pField is all spaces
+      MemSet(pWriteAddress,0, 16)
+    Else
+      MemCpy(address(str),pFieldAddress, 16)
+      revstr = str[4] & str[3] & str[2] & str[1]  & str[6] & str[5] & str[8] & str[7]  & str[9 : 16]
+      MemCpy(pWriteAddress,address(revstr), 16)
+    End
     Return 16
   End
   MemCpy(address(str),pFieldAddress,pFieldSize)

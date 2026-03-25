@@ -8,7 +8,7 @@
     <AssemblyName>CLASTRL</AssemblyName>
     <OutputName>CLASTRL</OutputName>
     <Model>Lib</Model>
-    <DefineConstants>StringTheoryLinkMode=&gt;1%3bStringTheoryDllMode=&gt;0%3bMD5=&gt;1%3bmaincode=&gt;on</DefineConstants>
+    <DefineConstants>StringTheoryLinkMode=&gt;1%3bStringTheoryDllMode=&gt;0%3bMD5=&gt;1%3bmaincode=&gt;on%3bSTRL=&gt;1</DefineConstants>
     <stack_size>16384</stack_size>
     <CopyCore>True</CopyCore>
   </PropertyGroup>

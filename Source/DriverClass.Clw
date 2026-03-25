@@ -76,7 +76,9 @@ _User                 Cstring(255)
       osSHGetFolderPath(long pHandle, long pCSIDL, long hToken, long pFlags, *CSTRING szPath),long, raw, pascal, name('SHGetFolderPathA'), dll(1)
       osGetCurrentProcessId(),ulong,Pascal,raw,name('GetCurrentProcessId') , dll(1)
       osGetSystemTime(*osSYSTEMTIME lpSystemTime), pascal, raw, name('GetSystemTime'), dll(1)
-      osWNetGetUser( <*CSTRING lpName>, *CSTRING lpUserName, *ULONG lpnLength  ),ulong,proc,raw,pascal,name('WNetGetUserA')
+      osWNetGetUser( <*CSTRING lpName>, *CSTRING lpUserName, *ULONG lpnLength  ),ulong,proc,raw,pascal,name('WNetGetUserA') , dll(1)
+      osIsValidCodePage(Long pCodePage),Long,Raw,Pascal,name('IsValidCodePage'), dll(1)
+      osGetACP(),Long,Raw,Pascal,name('GetACP'), dll(1)
     end
     module('rtl')
       _MemCpy(long dest, long src,  unsigned count), long, proc, name('_memcpy'),dll(DLL_Mode)
@@ -1466,7 +1468,9 @@ ans   String(16),Auto
   Return ans
 
 !-----------------------------------------------------------------
+! this does not conform to
 ! https://en.wikipedia.org/wiki/Universally_unique_identifier#Version_8_(custom)
+! because version and varient are ignored.
 ! ~80 bits of randomness, but text based, not binary
 DriverBaseClass.GenerateUUIDv8  procedure()
 alphabet    String('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ')
@@ -4165,11 +4169,19 @@ DriverBaseClass.GetPROP:ChildrenAffected            PROCEDURE()
 !-----------------------------------------------------------
 DriverBaseClass.GetProp:CodePage  Procedure()
   Code
+  If self.CodePage = 0
+    Return osGetACP()
+  End
   Return self.codePage
 
 !-----------------------------------------------------------
 DriverBaseClass.SetProp:CodePage  Procedure(Long pCodePage)
   Code
+  self.SetError(NoErr)
+  If osIsValidCodePage(pCodePage) = false
+    self.SetError(InvalidCodePageErr)
+    Return
+  End
   self.codePage = pCodePage
   Return
 
@@ -5131,13 +5143,20 @@ cs cString(size(pName)+1),auto
   Return self._WithFieldNamed(cs)
 
 !-----------------------------------------------------------------
+! typically this is just the column name in the database, however sometimes it's a fully qualified name, ie self.FullPathName & '.' & ColumnName
+! Adjusts for this and only compares to the Column Name part.
 DriverFileClass._WithFieldNamed  Procedure(*cString pName)
 node  &FieldGroupType,Auto
 cstr  Cstring(size(pName)),Auto
 x     Long,Auto
+l     Long,Auto
   code
   If size(pName) = 0 then return Driver:Notok.  ! Basically checking for a null ptr.
   cstr = upper(pName)
+  l = len(self.FullPathName)
+  If len(cstr) > l+1 and cstr[1 : l+1] = upper(self.FullPathName) & '.'
+    cstr = sub(cstr,l+2,255)
+  End
   If len(cstr) = 0 then return Driver:Notok.
   Loop x = 1 to self.SharedProperties.FieldList.nodes
     node &= self._withFieldNode(x)
@@ -5619,7 +5638,6 @@ TimeIsLong      Long
      pAddr += 4
   End
   self._parseFieldsWalker(pAddr,lgGroupFields,index,0,0,0,1) ! The number of fields is 1, cause this is the group record, which is just 1 field.
-
   Loop index = 1 to self.SharedProperties.FieldList.nodes - 3
     node &= self._withFieldNode(index)
     if node &= null then cycle.
@@ -6077,6 +6095,7 @@ str          StringTheory
       of 'COLLATE'
         pNode.collate = val
       of 'UUID4'
+      orof 'UUID'
         If (pNode.Type = ClaSTRING and pNode.length >= 16) or |
            (pNode.Type = ClaPSTRING and pNode.length >= 17) or |
            (pNode.Type = ClaCSTRING and pNode.length >= 37)       ! can't story binary guid in Cstring.
@@ -6099,7 +6118,6 @@ str          StringTheory
           self.trace('ERROR: Field type not compatible with UUID7. Use STRING(16) or PSTRING(17). ' & pNode.Name)
         End
       of 'UUID8'
-      orof 'UUID'
         Case pNode.Type
         Of ClaSTRING
         OrOf ClaPSTRING
@@ -7724,6 +7742,15 @@ thiskey byte
   Return
 
 !-----------------------------------------------------------------
+! This clears the relations queue for the table. Can be called before CREATE to
+! make sure no relationships are created for the table, and no cascading CREATE occurs.
+! it DOES NOT remove any relationships already in the database.
+DriverFileClass.CLEARRELATIONS Procedure()
+  code
+  Free(self.Relations)
+  Return
+
+!-----------------------------------------------------------------
 DriverFileClass.HASRELATION    PROCEDURE(File pParentFile)
 x  Long
   code
@@ -7842,9 +7869,28 @@ DriverFileClass.CALL             Procedure(String pStoredProcedure,<? pParm1>,<?
 ! clear fields based on type. If memos and blobs clear those too.
 ! also calls ClearProps
 DriverFileClass.CLEARFILE        PROCEDURE(Long pWhat)
-x  long
+x         long,auto
+y         long,auto
+addr      long,auto
+strchar   byte,auto
+cstrchar  byte,auto
+numchar   byte,auto
   Code
   If self._opened = 0 then self._UpdateFileStrings().
+  case pWhat
+  of -1
+    strchar = 0
+    numchar = 0
+    cstrchar = 0
+  of 1
+    strchar = 255
+    numchar = 255
+    cstrchar = 255
+  else
+    strchar = 32
+    numchar = 0
+    cstrchar = 0
+  end
   Loop x = 1 to self.SharedProperties.FieldList.nodes
     self.Fields &= self._withFieldNode(x)
     If not self.Fields.Interface &= null
@@ -7852,17 +7898,22 @@ x  long
     Else
       Case self.Fields.Type
       of ClaSTRING
-        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,32, self.Fields.Size * self.Fields.DimProduct)
+        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,strchar, self.Fields.Size * self.Fields.DimProduct)
       of ClaCSTRING
-        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,0, self.Fields.Size * self.Fields.DimProduct)
+        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,cstrchar, self.Fields.Size * self.Fields.DimProduct)
       of ClaPSTRING
-        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,0, self.Fields.Size * self.Fields.DimProduct)
+        addr = self.ClaFCB.rec_buf + self.Fields.Offset
+        loop y = 1 to self.Fields.DimProduct
+          MemSet(addr,0, 1)
+          MemSet(addr+1,strchar, self.Fields.Size -1)
+          addr += self.Fields.Size
+        end
       of ClaGROUP
         If self.Fields.Dims
           !!!todo clear Group Arrays
         End
       Else
-        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,0, self.Fields.Size * self.Fields.DimProduct)
+        MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,numchar, self.Fields.Size * self.Fields.DimProduct)
       End
     End
   End
@@ -7870,7 +7921,7 @@ x  long
     Get(self.Blobs,x)
     self.SetBlob(x,'')
   End
-  self.ClearProps()
+  !self.ClearProps()     ! removed in 1.16, because CLEAR is often called inside ADD loops.
   Return
 
 !-----------------------------------------------------------------
@@ -7945,6 +7996,23 @@ DriverFileClass.COPY             PROCEDURE(STRING pNewFileName, Long pOptions)
 DriverFileClass.CreateDB      PROCEDURE(String pDatabaseName, String pOptions)
   code
   self.SetError(NoDriverSupport)
+  Return
+
+!-----------------------------------------------------------------
+DriverFileClass.CreateParentTables      PROCEDURE()
+x    Long,Auto
+obj  &DriverFileClass
+  Code
+  Loop x = 1 to Records(self.relations)
+    Get(self.relations,x)
+    If self.relations.ParentFile &= null then cycle.
+    obj &= self.relations.ParentFile{prop:object}
+    If not obj &= null
+      If obj.Exists('') = false
+        obj.CreateTable()
+      End
+    End
+  End
   Return
 
 !-----------------------------------------------------------------
@@ -8645,8 +8713,8 @@ count             Long,auto
       mapColumns[y] = y
     End
   End
-  ! if there was no project list specified, then the poject list is set to the columns in the CSV, and list is parsed.
-  If self.project = ''
+  ! if there was no project list specified, then the project list is set to the columns in the CSV, and list is parsed.
+  If SaveProjectList.Length() = 0
     self.SetProp:Project(ProjectList.GetValue())
     self.ParseProject()                          ! load in prop:project. If this is set then only the specified columns will be imported.
   End
@@ -8677,6 +8745,7 @@ ImportPage  Routine
       header = 0
       cycle                                ! if there is a header record, in the first page, then cycle it here.
     End
+    self.ClearFile(0)
     Lne.SetValue(str.GetLine(x))
     Lne.Split(self.Separator,'"','"')
 
@@ -8696,8 +8765,7 @@ ImportPage  Routine
         CsvCell.Top(5)
         CsvCell.JsonDecode()
       End
-
-      If mapColumns[y] > 0 and self._withField(mapColumns[y]) = Driver:ok          ! leve this in, fields must be loaded for SetPropText
+      If mapColumns[y] > 0 and self._withField(mapColumns[y]) = Driver:ok          ! leave this in, fields must be loaded for SetPropText
         If CsvCell.GetValue() = self.NullString and self.fields.NotNull
           CsvCell.SetValue('')
         End
@@ -9867,7 +9935,7 @@ DriverFileClass.SEARCH                     Procedure(String pSearchString,<*? pF
 ! Classes that need to derive SET should therefor just derive this one method.
 DriverFileClass._SET             PROCEDURE(Byte pSetMethod, BigInt pPointer,Key pSetKey, Key pSetKeyKey)
   Code
-  !self.trace('_set')
+  !self.trace('DriverFileClass._SET _set pSetMethod=' & pSetMethod & ' pPointer=' & pPointer)
   If self._CheckOpen() = false then Return.
   If pPointer < -1
     self.SetError(BadRecErr)
@@ -10539,8 +10607,9 @@ DriverFileClass.GETNULLS         PROCEDURE()
 x  long
   Code
   Loop x = 1 to self.SharedProperties.FieldList.nodes
-    !self.trace('x=' & x & ' ns=' & size(self._nullstr))
+    !self.trace('x=' & x & ' ns=' & size(self._nullstr) & ' fullpathname=' & self.FullPathName)
     self.Fields &= self._withFieldNode(x)
+    if self.Fields &= null then cycle.
     If self._nullstr[x] = '.' and self._FieldIsBlank() = false
       self._nullstr[x] = '+'
     End
@@ -12534,7 +12603,6 @@ DriverFileClass.GETKEYPROP:Type      PROCEDURE(KEY pKey)
 !-----------------------------------------------------------------
    !!!todo - update this for unicode ; see GetStringTypeW
 DriverBaseClass._Sanitize      Procedure(String pStr, Long pContext)
-x               Long
   Code
   self.tempstr.SetValue(pStr,st:clip)
   case band(pContext, 01111111b)
@@ -12552,9 +12620,7 @@ x               Long
   of driver:SqlSavepoint
     self.tempstr.KeepCharRanges('A-Z0-9a-z')
   end
-  return self.tempstr.GetValue()
-
-
+  Return self.tempstr.GetValue()
 
 !=============================================================================
 !  DriverFileSQLClass
@@ -15449,7 +15515,6 @@ F            &File
       obj.ResultToFieldNumber(self.Result,pRow,index , self.ViewMapFieldNumber[Index], pOptions)
     End
   End
-
   If self.readonly = false
     Loop index = 1 to self.Files
       obj &= (self.FileObject[index])
@@ -17449,7 +17514,6 @@ DriverViewSQLClass._SET                       Procedure(Long pOpcode)
   If Errorcode() then Return.
 !  ! -- put it all together
   self.SqlCode.SetValue(self._GenerateSelect())
-  !self.SqlCode.trace()
   Return
 
 !-----------------------------------------------------------------
@@ -17807,11 +17871,11 @@ DriverResultSetClass.iResultSet.SetColumnName         Procedure(Long pColumn,Str
   End
   self.Columns.Column = pColumn
   Get(self.Columns,self.Columns.Column)
-  If errorcode()
-    self.Columns.Name = pName
+  If ErrorCode()
+    self.Columns.Name = upper(pName)
     Add(self.Columns)
   Else
-    self.Columns.Name = pName
+    self.Columns.Name = upper(pName)
     Put(self.Columns)
   End
   Return
@@ -17866,17 +17930,18 @@ DriverResultSetClass.iResultSet.GetColumnName         Procedure(Long pColumn)
 
 !-----------------------------------------------------------------
 DriverResultSetClass.iResultSet.GetColumnNamed        Procedure(String pName)
-x   long,auto
-l   long,auto
+x  Long,auto
+l  Long,auto
   Code
-  l = len(clip(pName))
-  if l < 1 then return 0.
+  l = Len(clip(pName))
+  If l < 1 Then Return 0.
+  pName = Upper(pName)
   Loop x = 1 to self.NumColumns
-    If self.ColumnsName[x]= pName[1 : l] then Return x.
+    If upper(self.ColumnsName[x]) = pName[1 : l] then Return x.
   End
   self.Columns.Name = pName[1 : l]
   Get(self.Columns,self.Columns.Name)
-  If Errorcode() = 0
+  If Errorcode() = NoError
     Return self.Columns.Column
   End
   Return 0

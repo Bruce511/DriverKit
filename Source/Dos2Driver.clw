@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -25,7 +25,9 @@
   PROGRAM
 
   Omit('***',_C100_)
+    Omit('%%%',DLL_Mode=0)
   PRAGMA('link(winex.lib)')
+    !%%%
   !***
 
 ! When you change LongName, to be unique for your driver, then adjust it in the EXP file as well.
@@ -35,12 +37,12 @@ ShortName      Equate('DOS2')                                                   
 ! LongName is used when selecting a driver in the dictionary
 LongName       Equate('DOS2')                                     !unsafe to change[1] ! Spaces Not Welcome  ! if changing the length, check length in usage.
 DriverName     Equate(LongName & '<0>{16}')                                            ! Maintain length as exactly 20 characters
-Copyright      Equate('(c) 2025 by CapeSoft<0>{20}')                                   ! Maintain length as exactly 40 chars
+Copyright      Equate('(c) 2026 by CapeSoft<0>{20}')                                   ! Maintain length as exactly 40 chars
 ! Driver Desc is used in "registered file drivers" list
 DriverDesc     Equate('DOS2 (Binary) {17}')                                            ! Maintain length as exactly 30 characters. Space padded
 DLLName        Equate('CLA'&ShortName&'.DLL<0>')                                       ! Maintain length as exactly 12 characters
 DSIDLLNAME     Equate('CLA'&ShortName&'S.DLL')                                         ! Maintain length as exactly 12 characters
-TDescAddress   Equate(00a083fch)       !00854BB4h
+TDescAddress   Equate(00a087cch)       !00854BB4h
 
   MAP
     Dos2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)
@@ -405,8 +407,8 @@ NUM_DRIVER_TYPES        Equate(|
 ! unchanged.
 ! The structure of the type descriptor is [number of opcodes],<opcodes>,[number of types],<types>,0
 boundary1       string('CAP3S0FT')
-TypeDescriptor  String( '' |
-                 & chr(NUM_DRIVER_OPS)         |
+TypeDescriptorDOS2  String( '' |
+                 & chr(NUM_DRIVER_OPS)         |           
                  & chr(Opcode:ADD)             |
                  & chr(Opcode:ADDfilelen)      |
                  & chr(Opcode:APPEND)          |
@@ -592,15 +594,15 @@ Construct              Procedure()
 Dos2DriverOnLoadDll.Construct  procedure()
   CODE
 ! these two lines prevent the linker from excluding the TypeDescriptor structure.
-  x# = boundary1 & TypeDescriptor & boundary2      !TypeDescriptor
+  x# = boundary1 & TypeDescriptorDOS2 & boundary2      !TypeDescriptor
   Assert(x#=0)  ! x# has to be used :)
 ! ---
 
 ?  dbg = '['&ShortName&']['&x#&'] [' & clip(DriverDesc) & '] DLL Loaded. NUM_DRIVER_OPS=' & NUM_DRIVER_OPS & ' NUM_DRIVER_TYPES=' & NUM_DRIVER_TYPES & ' DRIVER_ATTRIBUTES=' & DRIVER_ATTRIBUTES ; ods(dbg)
 ! this assert attempts to catch any mistakes when setting the opcode, and type lists
-  Assert(Size(TypeDescriptor) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptor) & ' <> Ops=' & NUM_DRIVER_OPS & ' + Types=' & NUM_DRIVER_TYPES & ' + 3')
+  Assert(Size(TypeDescriptorDOS2) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptorDOS2) & ' <> Ops=' & NUM_DRIVER_OPS & ' + Types=' & NUM_DRIVER_TYPES & ' + 3')
   Dos2DriverGroup.pipeFunctionAddress = address(Dos2DriverPipe)  ! sets the address for the pipe function below.
-  Dos2DriverGroup.tdesc = address(TypeDescriptor) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
+  Dos2DriverGroup.tdesc = address(TypeDescriptorDOS2) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
 
 !---------------------------------------------------------------------------------
 Dos2DriverPipe  Procedure(Long pOpCode, long pClaFCB, long pVarList)
@@ -666,7 +668,7 @@ f             &File,auto
     DriverObject &= (ClaFCB.rblock)
   End
   If DriverObject.TypeDescriptorAddress = 0
-    DriverObject.TypeDescriptorAddress = address(TypeDescriptor)
+    DriverObject.TypeDescriptorAddress = address(TypeDescriptorDOS2)
   End
   Return ClaFCB.rblock
 !---------------------------------------------------------------------------------

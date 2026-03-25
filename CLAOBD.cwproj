@@ -37,6 +37,7 @@
   <ItemGroup>
     <Compile Include="CLAOBD.clw" />
     <Compile Include="CwDriver.Clw" />
+    <Compile Include="DriverFields.Clw" />
     <None Include="CLAOBD.exp" />
   </ItemGroup>
   <ItemGroup>

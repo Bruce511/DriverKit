@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------------------------
-!   CapeSoft Clarion File Driver Kit classes are copyright © 2025 by CapeSoft                   !
+!   CapeSoft Clarion File Driver Kit classes are copyright © 2026 by CapeSoft                   !
 !   Docs online at : https://capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm
 !   Released under MIT License
 !------------------------------------------------------------------------------------------------
@@ -26,11 +26,11 @@
 ShortName    Equate('LIT2')                                                        ! 4 Characters long. If the length is changed, then adjust dll_name and dsi_name below
 LongName     Equate('SQLite2')                                                     ! Spaces Not Welcome
 DriverName   Equate(LongName & '<0>{13}')                                          ! Maintain length as exactly 20 characters
-Copyright    Equate('(c) 2025 by CapeSoft<0>{20}')                                 ! Maintain length as exactly 40 chars
+Copyright    Equate('(c) 2026 by CapeSoft<0>{20}')                                 ! Maintain length as exactly 40 chars
 DriverDesc   Equate('SQLite2 {23}')                                                ! Maintain length as exactly 30 characters
 DLLName      Equate('CLA'&ShortName&'.DLL<0>')                                     ! Maintain length as exactly 12 characters
 DSIDLLNAME   Equate('CLA'&ShortName&'S.DLL')                                       ! Maintain length as exactly 12 characters
-TDescAddress Equate(00a527bch)
+TDescAddress Equate(00a51ac4h)
 
   MAP
     SQLite2DriverPipe(Long pOpCode, long pClaFCB, long pVarList),long,name(LongName)
@@ -397,7 +397,7 @@ NUM_DRIVER_TYPES        Equate(|
 ! unchanged.
 ! The structure of the type descriptor is [number of opcodes],<opcodes>,[number of types],<types>,0
 boundary1       string('CAP3S0FT')
-TypeDescriptor  String('' |
+TypeDescriptorSQLite2  String('' |
                  & chr(NUM_DRIVER_OPS)         |
                  & chr(Opcode:ADD)             |
                  & chr(Opcode:ADDfilelen)      |
@@ -582,15 +582,15 @@ Construct                   Procedure()
 SQLite2DriverOnLoadDll.Construct  procedure()
   CODE
 ! these two lines prevent the linker from excluding the TypeDescriptor structure.
-  x# = boundary1 & TypeDescriptor & boundary2      !TypeDescriptor
+  x# = boundary1 & TypeDescriptorSQLite2 & boundary2      !TypeDescriptor
   Assert(x#=0)  ! x# has to be used :)
 ! ---
 
 ?  dbg = '['&ShortName&']['&x#&'] [' & clip(DriverDesc) & '] DLL Loaded. NUM_DRIVER_OPS=' & NUM_DRIVER_OPS & ' NUM_DRIVER_TYPES=' & NUM_DRIVER_TYPES & ' DRIVER_ATTRIBUTES=' & DRIVER_ATTRIBUTES & ' Drv_FCB=' & size(Drv_FCB) ; ods(dbg)
 ! this assert attempts to catch any mistakes when setting the opcode, and type lists
-  Assert(Size(TypeDescriptor) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptor) & ' <> ' & NUM_DRIVER_OPS & ' + ' & NUM_DRIVER_TYPES & ' + 3')
+  Assert(Size(TypeDescriptorSQLite2) = NUM_DRIVER_OPS +  NUM_DRIVER_TYPES + 3, Size(TypeDescriptorSQLite2) & ' <> ' & NUM_DRIVER_OPS & ' + ' & NUM_DRIVER_TYPES & ' + 3')
   SQLite2DriverGroup.pipeFunctionAddress = address(SQLite2DriverPipe)  ! sets the address for the pipe function below.
-  SQLite2DriverGroup.tdesc = address(TypeDescriptor) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
+  SQLite2DriverGroup.tdesc = address(TypeDescriptorSQLite2) ! ! unfortunately this address is post-load, and so not the address we are looking for at compile time.
 
 !---------------------------------------------------------------------------------
 SQLite2DriverPipe  Procedure(Long pOpCode, long pClaFCB, long pVarList)
@@ -627,9 +627,7 @@ Result        Long
 !---------------------------------------------------------------------------------
 SQLite2DriverPipeView  Procedure(Long pOpCode, Long pClaVCB, long pVarList)
 ViewObject  &DriverViewSQlite2Class,auto
-!vcb         &Cla_VCBBLK,auto
   code
-  !vcb &= (pClaVCB)
 ?  !dbg = '[' & ShortName & '] Driver View Pipe: [' & pOpCode & '] ' & ' pClaVCB=' & pClaVCB & ' pVarList = ' & pVarList ; ods(dbg)
   ViewObject &= (SQLite2DriverSetObjectView(pOpCode,pClaVCB,pVarList))
   If not ViewObject &= null
@@ -657,7 +655,7 @@ f             &File,auto
     DriverObject &= (ClaFCB.rblock)
   End
   If DriverObject.TypeDescriptorAddress = 0
-    DriverObject.TypeDescriptorAddress = address(TypeDescriptor)
+    DriverObject.TypeDescriptorAddress = address(TypeDescriptorSQLite2)
   End
   Return ClaFCB.rblock
 

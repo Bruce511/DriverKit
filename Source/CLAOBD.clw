@@ -7,7 +7,8 @@
   PROGRAM
 
   Include('DriverClass.Inc'),Once
-
+  Include('DriverFields.Inc'),Once
+  
   MAP
   END
 

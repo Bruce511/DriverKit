@@ -7,12 +7,9 @@
   PROGRAM
 
   Include('StringTheory.Inc'),Once
-
+    
   MAP
   END
 
   PRAGMA('compile(ojmd5.c)')
-  Omit('***',_C90_)
-  PRAGMA('link(winex.lib)')
-  !***
   CODE

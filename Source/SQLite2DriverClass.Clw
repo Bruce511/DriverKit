@@ -2375,6 +2375,7 @@ utfstr  &string
           len = pDbLength
         Else
           utfstr &= pDbAddress & ':' & pDbLength
+          len = 0 ! len is the length returned by Utf8ToAnsi
           strx &= self.tempstr.Utf8ToAnsi(utfstr,len,self.codepage)    ! len is the ANSI len after the conversion.
           If strx &= null
             self.SetFileError(UnicodeConversionError,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ') From utf-8 To Ansi val=[' & utfstr & ']')
@@ -2895,13 +2896,7 @@ allSql        StringTheory
   If self.opt:dummy then Return.   ! Dummy Tables are not created.
   If self.CheckConnect() = Driver:notok then Return.
   ! before this table can be created, all the parent tables need to be created.
-  Loop x = 1 to Records(self.relations)
-    Get(self.relations,x)
-    If self.relations.ParentFile &= null then cycle.
-    If Exists(self.relations.ParentFile) = FALSE
-      Create(self.relations.ParentFile)
-    End
-  End
+  self.CreateParentTables()
 
   primaryset = 0
   If self._withPrimaryKey() = Driver:ok
@@ -3336,6 +3331,7 @@ cmd  StringTheory
   If self._inTransaction or self._InStream
     self.SetError(LogActiveErr)
   ElsIf self.dbHandle
+    self._ParameterOpcode = Opcode:NONE
     ! synchronous
     self.SqlCode.SetValue('PRAGMA synchronous;')
     If self._ExecuteSql() = Driver:ok

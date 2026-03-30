@@ -1805,6 +1805,9 @@ _WithPage                 Procedure(Long pPageNumber),Long,Virtual
 !==================================================================================================
 DriverConnectionsQueueType    Queue,Type
 Connection                      Cstring(255)
+Server                          Cstring(100)
+Database                        Cstring(100)
+User                            Cstring(100)
 Pool                            Long
 Options                         Long
 Handle                          Long
@@ -1820,6 +1823,8 @@ Destruct                        Procedure(),VIRTUAL
 Trace                           Procedure(STRING pStr),Virtual
 GetConnection                   Procedure(String pConnectString, Long pPool, Long pOptions),Long,VIRTUAL
 SetConnection                   Procedure(String pConnectString, Long pPool, Long pOptions,Long pHandle),VIRTUAL
+SetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pDatabase, *CString pUser),VIRTUAL
+GetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pDatabase, *CString pUser),VIRTUAL
 Disconnect                      Procedure(Long pHandle),Long,VIRTUAL
 SetTransaction                  Procedure(Long pHandle, Long pValue),VIRTUAL
 GetTransaction                  Procedure(Long pHandle),Long,VIRTUAL

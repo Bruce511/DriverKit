@@ -343,13 +343,14 @@ tm  Long,auto
   code
   tm = pTime
   If tm = 0 then return '00:00:00.000'.
-  Return self.TempFormat.FormatTime(tm,self.TimePicture) !& '.' & Format((tm-1) % 100,'@n02') & '0'
+  Return self.TempFormat.FormatTime(tm,self.TimePicture)
 
 !-----------------------------------------------------------------
 DriverBaseClass.FormatTimeStamp            Procedure(String pStr,Long pGroupPattern)
 gr  group,auto
 dt    date
 tm    time
+off   long
     End
 gr2 group,auto
 dt    date
@@ -365,6 +366,13 @@ tm    long
     End
   code
   case pGroupPattern
+  of driver:GroupOverTimeStampTZ
+    gr = pStr
+    If gr.off >= 0
+      Return self.FormatDate(gr.dt) & self.DateTimeSeparator & self.FormatTime(gr.tm) & ' +' & self.TempFormat.FormatTime(gr.off,'@t01Z')
+    Else
+      Return self.FormatDate(gr.dt) & self.DateTimeSeparator & self.FormatTime(gr.tm) & ' -' & self.TempFormat.FormatTime((gr.off*-1),'@t01Z')
+    End
   of driver:GroupOverTimeStamp2
     gr2 = pStr
     gr.dt = gr2.dt
@@ -3751,7 +3759,7 @@ DriverBaseClass.ClearProps            PROCEDURE()
   self.SetProp:AlwaysQuote(false)
   self.SetProp:NullString('\N')  ! null:null
   self.SetProp:DateTimeSeparator(' ')
-  self.SetProp:DatePicture('@D010/')
+  self.SetProp:DatePicture('@D010-')
   self.SetProp:TimePicture('@T093')
 
   self.SearchFilter         = ''
@@ -5617,6 +5625,7 @@ lgGroupFields   Long
 lgGroupDef      Long
 DateIsLong      Long
 TimeIsLong      Long
+GroupLength     Long
   Code
   self.SharedProperties.FieldList  &= new(ListType)
   peek(pAddr + 6 , self.SharedProperties.FieldList.Nodes)
@@ -5643,12 +5652,13 @@ TimeIsLong      Long
     if node &= null then cycle.
     !node.SqlTimeStamp = 0
     ! check for magic Clarion OVER DateTime
-    If node.Type <> ClaSTRING or node.Length <> 8 or node.Over then cycle.          ! String(8)
+    If node.Type <> ClaSTRING or (node.Length <> 8 and node.Length <> 12) or node.Over then cycle.          ! String(8)/ String(12)
     node &= self._withFieldNode(index+1)
     if node &= null then cycle.
-    If node.Type <> ClaGROUP or node.Length <> 8 or node.Over <> index then cycle.  ! Group
+    If node.Type <> ClaGROUP or (node.Length <> 8 and node.Length <> 12) or node.Over <> index then cycle.  ! Group
     DateIsLong = 0
     TimeIsLong = 0
+    GroupLength = node.Length
 
     node &= self._withFieldNode(index+2)
     if node &= null then cycle.
@@ -5660,8 +5670,16 @@ TimeIsLong      Long
     If node.Type <> ClaTIME and node.Type <> ClaLONG then cycle.                    ! Time or Long
     If node.Type = ClaLONG then TimeIsLong = 1.
 
+    If GroupLength = 12
+      node &= self._withFieldNode(index+4)
+      If node &= null then cycle.
+      If node.Type <> ClaLONG then cycle.                                           ! Long. Has to be Long because value may be negative
+    End
+
     node &= self._withFieldNode(index)
-    If DateIsLong = 0 and TimeIsLong = 0
+    If GroupLength = 12
+      node.SqlTimeStamp = driver:GroupOverTimeStampTz
+    ElsIf DateIsLong = 0 and TimeIsLong = 0
       node.SqlTimeStamp = driver:GroupOverTimeStamp
     ElsIf DateIsLong = 0 and TimeIsLong = 1
       node.SqlTimeStamp = driver:GroupOverTimeStamp2
@@ -8854,6 +8872,7 @@ x  long
     self.SetError(BadNameErr)
     Return
   End
+  If self._logClarion then self.Log('[CLAR]OPENing(' & self.FullPathName & ',' & pAccessMode & ')').
 
   ! first apply System-wide driver string for all files of this driver
   compile('!***',_C100_=1)
@@ -9919,7 +9938,7 @@ rTextLen     Long
 !-----------------------------------------------------------------
 !!! Derive
 ! Some field types are stored in the database as "text" (or other raw value). Use this method
-! to deformat that text. Specifically for DATETIME, DATE, TIME, DECIMAL, PDECIMAL types.
+! to deformat that text. Specifically for DATETIME, DATETIMETZ, DATE, TIME, DECIMAL, PDECIMAL types.
 DriverFileClass.DeformatText           Procedure(String pText,Long pGroupPattern)
   Code
   Return pText
@@ -11915,7 +11934,7 @@ strdf   string(16),auto
     srl = pStr.GetValue()
     memcpy(Addr,address(srl),4)
   of ClaString
-    If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStamp4
+    If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStampTZ
       pStr.SetValue(self.DeformatText(pStr.GetValue(),self.fields.SqlTimeStamp))
     End
     If pStr.Length() <> self.Fields.size then pStr.SetLength(self.Fields.size).
@@ -12186,7 +12205,7 @@ x     long
     Return srl
   of ClaSTRING
     st &= (addr) & ':' &  self.Fields.Size
-    If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStamp4
+    If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStampTz
       cstr = self.FormatTimeStamp(st,self.fields.SqlTimeStamp)
       Return cstr
     End
@@ -12286,6 +12305,7 @@ tml   long
 tms   string(4),over(tm)
 str   string(36)
 x     long ,Auto
+offset  long,auto
   code
   If pArrayIndex < 1 then pArrayIndex = 1.
   addr = self.ClaFCB.rec_buf + self.Fields.Offset + ((pArrayIndex -1) * self.Fields.Size)
@@ -12313,9 +12333,27 @@ x     long ,Auto
     memcpy(addr,address(srl),4)
   of ClaSTRING
     st &= (addr) & ':' &  self.Fields.Size
-    If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStamp4
+    If self.fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.fields.SqlTimeStamp <= driver:GroupOverTimeStampTZ
       rl = self.tempDeformat.DeformatUnixTimeStamp(pText)
       case self.fields.SqlTimeStamp
+      of driver:GroupOverTimeStampTZ
+        lg = instring(' +',pText,1,1)
+        if lg
+          offset = self.tempDeformat.DeformatTime(sub(pText,lg+2,5))
+        else
+          lg = instring(' -',pText,1,1)
+          if lg
+            offset = -1 * self.tempDeformat.DeformatTime(sub(pText,lg+2,5))
+          else
+            offset = 0
+          end
+        end
+        dt = self.tempDeformat.UnixToClarionDate(rl)   ! dt is a Date, auto-converted from the Long, returned by UnixToClarionDate
+        tm = self.tempDeformat.UnixToClarionTime(rl)   ! tm is a Time, auto-converted from the Long, returned by UnixToClarionDate
+        memcpy(addr,address(dt),4)
+        memcpy(addr+4,address(tm),4)
+        memcpy(addr+8,address(offset),4)
+
       of driver:GroupOverTimeStamp
         dt = self.tempDeformat.UnixToClarionDate(rl)   ! dt is a Date, auto-converted from the Long, returned by UnixToClarionDate
         tm = self.tempDeformat.UnixToClarionTime(rl)   ! tm is a Time, auto-converted from the Long, returned by UnixToClarionDate
@@ -12860,6 +12898,7 @@ DriverFileSqlClass.COMMITCONNECTION         PROCEDURE()
 !-----------------------------------------------------------------
 DriverFileSQLClass.CONNECT     PROCEDURE(Long pOptions=0)
   Code
+  !self.trace('DriverFileSQLClass.CONNECT')
   If self.dbHandle <> 0
     Self.Disconnect()
   End
@@ -14208,7 +14247,9 @@ str     StringTheory
 lne     StringTheory
 x       Long
   code
-  self.Disconnect()
+  If self.dbHandle
+    self.Disconnect()
+  End
   If Errorcode() then Return driver:notok.
   self._UpdateFileStrings()
   self.Owner = self._MassageOwner(self.Owner)
@@ -17872,10 +17913,12 @@ DriverResultSetClass.iResultSet.SetColumnName         Procedure(Long pColumn,Str
   self.Columns.Column = pColumn
   Get(self.Columns,self.Columns.Column)
   If ErrorCode()
-    self.Columns.Name = upper(pName)
+    !self.Columns.Name = upper(pName)
+    self.Columns.Name = pName
     Add(self.Columns)
   Else
-    self.Columns.Name = upper(pName)
+    !self.Columns.Name = upper(pName)
+    self.Columns.Name = pName
     Put(self.Columns)
   End
   Return
@@ -18294,6 +18337,39 @@ DriverConnectionPoolClass.SetConnection             Procedure(String pConnectStr
   End
   PopErrors()
   Return
+
+!-----------------------------------------------------------------
+DriverConnectionPoolClass.SetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pDatabase, *CString pUser)
+  code
+  If self.Connections &= null then Return.
+  PushErrors()
+  self.connections.Connection = lower(clip(pConnectString))
+  self.connections.Pool = pPool
+  self.connections.Options = pOptions
+  Get(self.connections,self.connections.Connection,self.connections.Pool,self.connections.Options)
+  If Errorcode() = NoError
+    Self.Connections.Server = pServer
+    Self.Connections.Database = pDatabase
+    Self.Connections.User = pUser
+    Put(Self.Connections)
+  End
+  PopErrors()
+
+!-----------------------------------------------------------------
+DriverConnectionPoolClass.GetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pDatabase, *CString pUser)
+  code
+  If self.Connections &= null then Return.
+  PushErrors()
+  self.connections.Connection = lower(clip(pConnectString))
+  self.connections.Pool = pPool
+  self.connections.Options = pOptions
+  Get(self.connections,self.connections.Connection,self.connections.Pool,self.connections.Options)
+  If Errorcode() = NoError
+    pServer =  Self.Connections.Server
+    pDatabase = Self.Connections.Database
+    pUser = Self.Connections.User
+  End
+  PopErrors()
 
 !-----------------------------------------------------------------
 DriverConnectionPoolClass.Disconnect                Procedure(Long pHandle)

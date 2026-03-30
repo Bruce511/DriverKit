@@ -125,13 +125,14 @@ driver:BufferPrimed       Equate(3)
 
 driver:all                Equate('*')
 
-driver:GroupOverTimeStamp   Equate(1)
-driver:GroupOverTimeStamp2  Equate(2)
-driver:GroupOverTimeStamp3  Equate(3)
-driver:GroupOverTimeStamp4  Equate(4)
-driver:StringToTimeStamp    Equate(8)
-driver:StringToTimeStamp2   Equate(9)
-driver:StringToTimeStampTZ  Equate(10)
+driver:GroupOverTimeStamp    Equate(1)   ! date/time
+driver:GroupOverTimeStamp2   Equate(2)   ! date/long
+driver:GroupOverTimeStamp3   Equate(3)   ! long/time
+driver:GroupOverTimeStamp4   Equate(4)   ! long,long
+driver:GroupOverTimeStampTZ  Equate(5)   ! date/time/long   ! has to be long, because offset can be < 0
+driver:StringToTimeStamp     Equate(8)
+driver:StringToTimeStamp2    Equate(9)
+driver:StringToTimeStampTZ   Equate(10)
 
 Watch:off               Equate(0)
 Watch:on                Equate(1)

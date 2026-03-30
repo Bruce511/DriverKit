@@ -2792,7 +2792,7 @@ result  long
 DriverFileSQLite2Class.ClearProps              PROCEDURE()
   code
   parent.ClearProps()
-  self.SetProp:DatePicture('@D010-')    ! SQLite Diver uses - for dates, not /, so SQLite2 driver follows.
+  !self.SetProp:DatePicture('@D010-')    ! SQLite Diver uses - for dates, not /, so SQLite2 driver follows.
 
 !-----------------------------------------------------------------
 DriverFileSQLite2Class.COPY             PROCEDURE(STRING pNewTableName, Long pOptions)

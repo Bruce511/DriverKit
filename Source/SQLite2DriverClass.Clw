@@ -1642,6 +1642,7 @@ DriverFileSQLite2Class.SetOrderByFromQueue            Procedure()
 OrderBy      Stringtheory
 x            Long,Auto
   code
+  parent.SetOrderByFromQueue()
   Loop x = 1 to Records(self.OrderQueue)                       ! Turn the OrderBy queue into SQLite SQL code.
     Get(self.OrderQueue,x)
     OrderBy.Append(self.OrderQueue.Clause,,',')
@@ -2197,6 +2198,11 @@ utfstr  &string
     orof ClaPDECIMAL
       !!!todo support integers past long
       strmem = lg
+      If len(clip(strmem)) > self.Fields.DecimalSize - self.Fields.DecimalPlaces and self.opt:ignoretruncation = false
+        self.SetError(DataTruncatedErr)
+        self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & self.Fields.DecimalSize - self.Fields.DecimalPlaces & ')' & ' value: ' & lg)
+        Return
+      End
       self._StringToDec(strmem,self.Fields.Type, address(strmem), self.Fields.DecimalSize, self.Fields.DecimalPlaces)
       memcpy(pClarionAddress,address(strmem),pClarionLength)
 
@@ -2366,13 +2372,13 @@ utfstr  &string
       End
       memcpy(pClarionAddress,address(strmem),8)
     Else
+      Len = pDbLength
       If pDbLength
         If pClarionType = ClaBLOB
         ElsIf pClarionType <> ClaMEMO and pFieldLabel and self.fields.Binary
           str &= pDbAddress & ':' & pDbLength
           strx &= new String(pDbLength)
           strx = str
-          len = pDbLength
         Else
           utfstr &= pDbAddress & ':' & pDbLength
           len = 0 ! len is the length returned by Utf8ToAnsi
@@ -2484,15 +2490,13 @@ utfstr  &string
 !endregion
 !region -     ClaCSTRING
       of ClaCSTRING
-          len = pDbLength
+          !len = pDbLength
           If pClarionLength < len + 1 and self.opt:ignoretruncation = false
-            !str &= pDbAddress & ':' & pDbLength
             self.SetFileError(DataTruncatedErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbLength & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionLength & ')' & ' value: ' & strx)
             self.SetError(DataTruncatedErr)
             Return
           End
           If len > pClarionLength-1 then len = pClarionLength-1.
-          !memcpy(pClarionAddress,pDbAddress,len)
           memcpy(pClarionAddress,Address(strx),len)
           memset(pClarionAddress+len,0,1)
           StrLen = Len
@@ -2501,7 +2505,7 @@ utfstr  &string
 !region -     ClaSTRING , CLAMEMO
       of ClaSTRING
       orof ClaMEMO
-          len = pDbLength
+          !len = pDbLength
           If pClarionLength < len and self.opt:ignoretruncation = false
             !str &= pDbAddress & ':' & pDbLength
             self.SetError(DataTruncatedErr)
@@ -2518,7 +2522,7 @@ utfstr  &string
 !endregion
 !region -     ClaPSTRING
       of ClaPSTRING
-          len = pDbLength
+          !len = pDbLength
           If pClarionLength < len + 1 and self.opt:ignoretruncation = false
             !str &= pDbAddress & ':' & pDbLength
             self.SetError(DataTruncatedErr)

@@ -10,7 +10,7 @@
 ! For new Opcodes and FieldTypes see Driver.Inc                                                 !
 !------------------------------------------------------------------------------------------------
 
-Driver:Version  Equate('1.16')
+Driver:Version  Equate('1.18')
 
 !Region ----------  Equates ----------
 ! BIGINT: use this for now as a 52 bit integer. In later clarion versions could become a int64

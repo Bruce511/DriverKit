@@ -169,7 +169,7 @@ SqlUUID               Byte          ! Field is created as a server-side UUID typ
 ! -- extended name attibutes
 Binary                Byte
 Boolean               Byte          ! Validation
-FieldCase             Byte         ! 0 or driver:ForceCase or driver:ForceNocase
+FieldCase             Byte          ! 0 or driver:ForceCase or driver:ForceNocase
 GreaterThan           &string       ! Possibly > or >=
 LessThan              &string       ! Possibly < or <=
 NotEqual              &string

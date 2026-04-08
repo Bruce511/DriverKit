@@ -3958,13 +3958,18 @@ DriverBaseClass.ResultToExplain  Procedure(iResultSet pResult)
 !  and are of the form name=value
 ! value can be anything, including TRUE or FALSE
 DriverBaseClass.SEND             PROCEDURE(STRING pMessage)
-str  StringTheory
-lne  StringTheory
-x    Long
-ans  String(255)
+ans  String(255),auto
   Code
   If pMessage = '' then Return ''.
-  !self.trace('DriverBaseClass.SEND ' & pMessage)
+  do SendWork
+  Return ans
+
+SendWork  routine
+  data
+str  StringTheory
+lne  StringTheory
+x    Long,Auto
+  code
   str.SetValue(pMessage,st:clip)
   str.Split(' ','"','"')
   Loop x = 1 to str.Records()
@@ -3975,7 +3980,6 @@ ans  String(255)
       ans = self.SetDriverOption(lne.Before('='),lne.After('='))
     End
   End
-  Return ans
 
 !-----------------------------------------------------------------
 ! SetDriverOption is called in reverse order. ie Driver, then generic class, then base class.
@@ -7658,6 +7662,9 @@ DriverFileClass.BuildOrderBy  Procedure()
 !!! derive
 DriverFileClass.SetOrderByFromQueue            Procedure()
   code
+  If Records(self.OrderQueue) = 0
+    self.BuildOrderByKey(self.primarykey)
+  End
 
 !-----------------------------------------------------------------
 ! The OrderBy property is an amalgamation of the prop:order and the prop:SqlOrder
@@ -17915,7 +17922,7 @@ DriverResultSetClass.iResultSet.SetColumnName         Procedure(Long pColumn,Str
   If ErrorCode()
     !self.Columns.Name = upper(pName)
     self.Columns.Name = pName
-    Add(self.Columns)
+    Add(self.Columns,self.Columns.Column)
   Else
     !self.Columns.Name = upper(pName)
     self.Columns.Name = pName
@@ -18211,11 +18218,10 @@ strmem &String,Auto
   self.ColumnsNameMax     =  self.state.ColumnsNameMax
   self.ColumnsName        =  self.state.ColumnsName
   Free(self.Columns)
-
   Loop x = 1 to records(self.state.Columns)
     get(self.state.Columns,x)
     self.Columns = self.state.Columns
-    Add(self.Columns)
+    Add(self.Columns,self.Columns.Column)
   End
   Loop x = 1 to Records(self.state.CellPages)
     Get(self.state.CellPages,x)

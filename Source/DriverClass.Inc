@@ -40,6 +40,11 @@ DRIVER:MAXFILESINVIEW        Equate(100)
 DRIVER:MAXOWNER              Equate(256)
 DRIVER:MAXALIASLENGTH        Equate(32)
 DRIVER:MAXPARAMETERS         Equate(4096)
+
+Dos:FILE_BEGIN               Equate(0)
+Dos:FILE_CURRENT             Equate(1)
+Dos:FILE_END                 Equate(2)
+
 !EndRegion: Equates
 
 !Region ----------  Types ----------
@@ -51,10 +56,12 @@ name                astring      ! external key name
 attributes          cstring(256) ! extended name attributes
 label               aString      ! cstring(128)   ! // label name for key
 dbName              aString      ! the external name, as it is in the database, prefix is included with _
+collate             aString      ! the Collation for the key as set in the database. This is a simplification for now; each field in the key could have a different collation.
 index               byte
 dup                 byte
 opt                 byte
-nocase              byte
+!nocase              byte        ! renamed to KeyCase, was true/false
+keycase             byte         ! driver:Case / driver:Nocase
 primary             byte
 cluster             byte
 components          byte            ! // number of components for key
@@ -162,14 +169,16 @@ InOverGroup           Long          ! The index of the Group, which is OVER some
 Interface             &iDriverField ! custom field type
 SourceSize            Long          ! cached from iDriverField
 Primary               Byte          ! Is in the primary key
-InCase                Byte          ! if 255 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
+InCaseKey             Byte          ! If in a case sensitive key then true.  Only String types
+InNoCaseKey           Byte          ! If in a case insensitive key then true. Only String types (Note that both this, and the above, could be true).
+CollateCase           Byte          ! Set when creating a field, and when validating a table.  driver:Case or driver:NoCase
 SqlTimeStamp          Byte          ! Field is a String(8), with an OverGroup, containing Date and Time fields.
 SqlUUID               Byte          ! Field is created as a server-side UUID type
 
 ! -- extended name attibutes
 Binary                Byte
 Boolean               Byte          ! Validation
-FieldCase             Byte          ! 0 or driver:ForceCase or driver:ForceNocase
+FieldCase             Byte          ! 0 or driver:Case or driver:Nocase
 GreaterThan           &string       ! Possibly > or >=
 LessThan              &string       ! Possibly < or <=
 NotEqual              &string
@@ -267,7 +276,7 @@ Value                        &String
 FieldNode                    &FieldGroupType
 BlobIndex                    Long
 Offset                       Long
-Source                       Byte
+Source                       Byte   ! when a node, then driver:FromPrimaryKeyPosition, driver:FromBuffer, driver:FromShadow. When not a node then ClaString, ClaReal, ClaLong in Value
                            End
                          End
 
@@ -316,7 +325,8 @@ Value                pstring(256)
 OrderQueueType     Queue,type
 Clause               Cstring(100)
 Fixed                Byte
-Nocase               Byte
+Binary               Byte   ! is the field marked as binary
+Fieldcase            Byte   ! is the field marked as case sensitive or not
 IsCalc               Byte
 IsString             Byte
 Direction            Byte ! Driver:Ascending, Driver:Descending
@@ -419,8 +429,10 @@ Search                     &Cstring
 ! -----------------------------------------------------------------------------
 ! This block contain properties which need to be copied when doing a GETSTATE and RESTORESTATE
 ! no pointers allowed in here.
-__BASESTATESTART           byte                        ! do NOT move me
+__BASESTATESTART           Byte                        ! do NOT move me
 opt:ZeroDate               Long           ! /ZERODATE=19010101
+opt:PropSqlMatchByNumber   Byte
+_MatchByNumber             Byte           ! may be turned on by prop:sql and then off again.
 ResultRow                  BIGINT
 _ResultRow                 BIGINT
 _ResultSetDirection        Byte
@@ -486,9 +498,11 @@ _OrderHasCalc              Byte
 SubsetInFields             Cstring(255)
 SubSetFields               Cstring(255)
 SearchFilter               Cstring(255)
+_SearchExpression          Cstring(255)
 _SearchOrderClause         Cstring(40)
 SearchRank                 Real
-_SearchParameter           Long
+_SearchRankType            Byte
+!_SearchParameter           Long
 _JustSetSearch             Byte
 SubsetPrimaryFile          &File
 HasSubset                  Byte
@@ -559,7 +573,7 @@ BuildWhere                 Procedure(),Virtual
 BuildOrderBy               Procedure(),Virtual
 BuildOrderByProps          Procedure(),Virtual
 AddTokensToOrderBy         Procedure(StringTheory pTokenString),Virtual
-_FillOrderFromLabel        Procedure(String pLabel, Byte pCase),Long,Virtual
+_FillOrderFromLabel        Procedure(*cString pLabel, Byte pCase),Long,Virtual
 
 ! Parse input string to token and queues
 ParseProperty              Procedure(String pProperty, Long pContext,StringTheory rTokenString),Long,Proc,Virtual
@@ -599,7 +613,7 @@ TranslateSub               Procedure(*Cstring pFunc, *CString pParms,string pTok
 TranslateYear              Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms),String,Virtual
 _TranslateYearSQL          Procedure(*CString pField),String,Virtual
 _GetFreeParameter          Procedure(),Long,Virtual
-_SetParameterString        Procedure(Long pCount, String pValue), Virtual
+_SetParameterValue         Procedure(Long pCount, String pValue, Byte pClarionType), Virtual
 _SetParameterField         Procedure(Long pCount, *FieldGroupType pNode, Byte pSource, Long pOffset), Virtual
 _SetParameterNode          Procedure(Long pCount, *FieldGroupType pNode, Byte pSource, Long pOffset), Virtual
 _SetParameterBlob          Procedure(Long pCount, Long pIndex), Virtual
@@ -607,6 +621,7 @@ _DuplicateParameter        Procedure(Long pCount, Long pFrom),Virtual
 _ResetParameterValue       Procedure(Long pIndex, String pValue, Long pLength),Virtual
 _ClearParameterQueue       Procedure(Long pOpcode),Virtual
 _FreeParameterQueue        Procedure(),Virtual
+_GetSearchRankDirection    Procedure(),Byte,Virtual
 
 TranslateLabel             Procedure(*cstring pValue,*byte pReturnType),String,Proc,Virtual
 TranslateConstant          Procedure(*cstring pValue,*long pConstant),Long,Virtual
@@ -878,6 +893,7 @@ _parseFields             Procedure(Long pAddr),Virtual
 _AfterParseFields        Procedure(),Virtual
 _parseFieldsB            Procedure(FieldGroupType pNode),Virtual
 _parseFieldsWalker       Procedure(*Long pAddr,Long pFields,*Long pIndex,Long pLastRealOffSet,Long pLastRealLength,Long pInOveredGroup,Long pLevel),Virtual
+_SetCollateCase          Procedure(FieldGroupType pNode),Virtual
 
 _parseBlobs              Procedure(Byte pIndex),VIRTUAL
 _parseKeys               Procedure(Byte pIndex),VIRTUAL
@@ -943,7 +959,7 @@ BuildOrderByKey           Procedure(Key pKey),Virtual
 BuildPropOrderByKey       Procedure(Key pKey),String,Virtual
 BuildOrderByUnique        Procedure(),Virtual
 SetOrderByFromQueue       Procedure(),Virtual
-_FillOrderFromLabel       Procedure(String pLabel, Byte pCase),Long,Derived
+_FillOrderFromLabel       Procedure(*cString pLabel, Byte pCase),Long,Derived
 
 ParseProject              Procedure(),Virtual
 _ProjectField             Procedure(),Virtual
@@ -1530,13 +1546,13 @@ _withNodeFieldWalker            Procedure(ViewTreeType pNode, Long pIndex,Long p
 _withNodeFile                   Procedure(File pFile),long,VIRTUAL
 _withNodeFileWalker             Procedure(ViewTreeType pNode,File pFile),long,VIRTUAL
 _withNodeTableName              Procedure(String pTableName),long,VIRTUAL
-_withNodeTableNameWalker        Procedure(ViewTreeType pNode, String pTableName),long,VIRTUAL
+_withNodeTableNameWalker        Procedure(ViewTreeType pNode, *cString pTableName),long,VIRTUAL
 _withNodeFieldLabelAlias        Procedure(String pAliasDotLabel),long,VIRTUAL
 _withNodeFieldLabelAliasWalker  Procedure(ViewTreeType pNode, *CString pAlias, *Cstring pLabel),long,VIRTUAL
 
 _countNodes                     Procedure(ViewTreeType pNode),Long,Virtual
 _CountFields                    Procedure(),Virtual
-_FillOrderFromLabel             Procedure(String pLabel, Byte pCase),Long,Derived
+_FillOrderFromLabel             Procedure(*cString pLabel, Byte pCase),Long,Derived
 _SetViewFieldColumn             Procedure(String pLabel, String pValue),Virtual
 _SetViewFieldWalker             Procedure(ViewTreeType pNode,String pLabel, String pValue,Long pFileNumber),Long,Virtual
 _ForceAutoProjectNow            Procedure(ViewTreeType pNode),Virtual
@@ -1654,12 +1670,12 @@ GetPROP:Driver                  Procedure(),STRING,VIRTUAL
 
 AddFixedToOrderBy               Procedure(),Virtual
 BuildProjectList                Procedure(),Virtual
-_BuildProjectListWalker         Procedure(ViewTreeType pNode),Virtual
+_BuildProjectListWalker         Procedure(ViewTreeType pNode,StringTheory OneFileProjectList),Virtual
 BuildFrom                       Procedure(),Virtual
 BuildJoinList                   Procedure(),Virtual
 _BuildJoinListWalker            Procedure(ViewTreeType pNode, String pParentAlias),Virtual
 BuildOrderBy                    Procedure(),Derived
-BuildOrderByUniquexx            Procedure(),Virtual
+!BuildOrderByUniquexx            Procedure(),Virtual
 BuildOrderByUnique              Procedure(),Virtual
 _BuildOrderByUniqueWalker       Procedure(ViewTreeType pNode),Virtual
 SetOrderByFromQueue             Procedure(),Virtual
@@ -1668,7 +1684,7 @@ _ClearOrderFieldsInShadowBuffer Procedure(Long pOpCode),Virtual
 _ExecuteSelect                  Procedure(),VIRTUAL
 _CalcLimitAndOffset             Procedure(*Long rLimit, *Long rOffset),VIRTUAL
 _PrependFixedToWhere            Procedure(Long pIndex),VIRTUAL
-_AppendOrderQueueToWhere        Procedure(*Long pCount),VIRTUAL
+_AddOrderToWhere                Procedure(*Long pCount),VIRTUAL
 
 CheckConnect                    Procedure(),Long,Virtual
 _GenerateSelect                 Procedure(),String,Virtual

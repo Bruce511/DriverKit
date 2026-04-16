@@ -69,6 +69,7 @@ _User                 Cstring(255)
       osCreateFile(*cstring lpFileName, long dwDesiredAccess, long dwSharedMode, long lpSecurityAttributes, |
                     long dwCreationDisposition, long dwFlagsAndAttributes, long hTemplateFile), long, raw, pascal, name('CreateFileA'), dll(1)
       osSetEndOfFile(long hFile),long, proc, raw, pascal, name('SetEndOfFile'), dll(1)
+      osSetFilePointer(long hFile, long pDistance, long pAddr, Long pMethod),long, proc, raw, pascal, name('SetFilePointer'), dll(1)
       osWriteFile(long hFile, long lpBuffer, long nNumberOfBytesToWrite, *long lpNumberOfBytesWritten, |
                   long lpOverlapped), long, proc, raw, pascal, name('WriteFile'), dll(1)
       osFlushFileBuffers(long hFile), long, pascal, name('FlushFileBuffers'), dll(1)
@@ -232,15 +233,30 @@ cMsg    cstring(size(pMessage)+1)
   Return
 
 !-----------------------------------------------------------------
-DriverBaseClass._memchk    PROCEDURE(long pSrc, byte pchar, Long pCount)
-x  long,auto
-b  byte,auto
+DriverBaseClass._memchk    PROCEDURE(Long pSrc, Byte pChar, Long pCount)
+x       Long,auto
+bt      Byte,auto
+lg      Long,auto
+lgChar  Long,auto
+lgCharX Byte,Dim(4),over(lgChar)
   code
-  loop x = 1 to pCount
-    Peek(pSrc,b)
-    If b <> pChar then return false.
+  If pCount >= 4
+    lgCharX[1]  = pChar
+    lgCharX[2]  = pChar
+    lgCharX[3]  = pChar
+    lgCharX[4]  = pChar
+  End
+  Loop while pCount >= 4
+    Peek(pSrc,lg)
+    If lg <> lgChar then Return false.
+    pSrc += 4
+    pCount -= 4
+  End
+  Loop x = 1 to pCount
+    Peek(pSrc,bt)
+    If bt <> pChar then return false.
     pSrc += 1
-  end
+  End
   Return true
 
 !!-----------------------------------------------------------------
@@ -478,9 +494,9 @@ sTmp          like(Cla_StrDesc),auto
 
 !-----------------------------------------------------------------
 DriverBaseClass._GetString    Procedure(*Cla_StrDesc pStr)
-str     &string,auto
-a       long,auto
-b       byte,auto
+str     &String,auto
+a       Long,auto
+b       Byte,auto
   code
   If pStr.len = 0 then return ''.
   If pStr.len = -1
@@ -557,7 +573,7 @@ hi        long
 neg     Byte
 bigd    Decimal(20) ! 19 digits plus sign
   code
-  If band(bigi.hi,10000000h) then neg = true.
+  If band(bigi.hi,80000000h) then neg = true.
   If Neg
     ! convert the number to positive, by inverting all the bits, and adding 1
     BigI.hi = BXOR(BigI.hi,0FFFFFFFFh)
@@ -569,7 +585,7 @@ bigd    Decimal(20) ! 19 digits plus sign
       BigI.lo += 1
     End
   End
-  bigd = (bigi.hi * 0FFFFFFFFh) + bigi.lo
+  bigd = (bigi.hi * 100000000h) + bigi.lo
   If neg then Bigd = BigD * -1.
   pClaString = bigd
   Return Len(pClaString)
@@ -582,7 +598,7 @@ hi        long
         end
 neg     Byte
   Code
-  If band(bigi.hi,10000000h) then neg = true.
+  If band(bigi.hi,80000000h) then neg = true.
   !self.trace('_i64Fit neg=' & neg)
   Case pClaType
   Of ClaByte
@@ -827,8 +843,6 @@ DriverBaseClass.InterpretProperty  Procedure(long pProperty)
     return 'PROP:DriverVersion'
   of prop:OBD
     return 'PROP:OBD'
-  of Prop:NotDistinct
-    return 'PROP:NotDistinct'
   of PROP:DuplicateKey
     return 'PROP:DuplicateKey'
   of PROP:DynamicFile
@@ -975,8 +989,6 @@ DriverBaseClass.InterpretProperty  Procedure(long pProperty)
     return 'PROP:PageSize'
   of Prop:Paging
     return 'PROP:Paging'
-  of Prop:Pointer
-    return 'Prop:Pointer'
   of PROP:Places
     return 'PROP:Places'
   of Prop:Pointer
@@ -1537,8 +1549,8 @@ DriverBaseClass.CheckVersionDb        PROCEDURE(Long pMajorRqd, Long pMinorRqd, 
 DriverBaseClass.CheckVersionClient        PROCEDURE(Long pMajorRqd, Long pMinorRqd, Long pBuildRqd)
   code
   If self.ClientVersionMajor < pMajorRqd or |
-    self.ClientVersionMajor = pMajorRqd and self.DBVersionMinor < pMinorRqd or |
-    self.ClientVersionMajor = pMajorRqd and self.DBVersionMinor = pMinorRqd and self.DBVersionBuild < pBuildRqd
+    self.ClientVersionMajor = pMajorRqd and self.ClientVersionMinor < pMinorRqd or |
+    self.ClientVersionMajor = pMajorRqd and self.ClientVersionMinor = pMinorRqd and self.ClientVersionBuild < pBuildRqd
       self.SetError(FileSystemErr)
       self.SetFileError(OldDatabaseErr,'Old Database Version ' & self.ClientVersionMajor & '.' & self.ClientVersionMinor & '.' & self.ClientVersionBuild & '. Needs ' & pMajorRqd & '.' & pMinorRqd & '.' & pBuildRqd & ' or later.')
       return driver:notOk
@@ -1768,7 +1780,7 @@ cansimplify  byte,Auto
       of token:label
         Get(self.LabelQueue,tn)
         If errorcode() = 0
-          already = self._FillOrderFromLabel(self.LabelQueue.Label,false)
+          already = self._FillOrderFromLabel(self.LabelQueue.Label,driver:Nocase)
         End
 
       of token:function
@@ -1780,7 +1792,7 @@ cansimplify  byte,Auto
               ln = self.FunctionQueue.Parms[2 : 5]
               Get(self.LabelQueue,ln)
               If errorcode() = 0
-                already = self._FillOrderFromLabel(self.LabelQueue.Label,true)
+                already = self._FillOrderFromLabel(self.LabelQueue.Label,driver:Case)
               End
             End
           End
@@ -1810,7 +1822,7 @@ cansimplify  byte,Auto
   Return
 
 !-----------------------------------------------------------------
-DriverBaseClass._FillOrderFromLabel              Procedure(String pLabel, Byte pCase)
+DriverBaseClass._FillOrderFromLabel              Procedure(*cString pLabel, Byte pCase)
   code
   return 0
 
@@ -1820,11 +1832,9 @@ DriverBaseClass._FillOrderFromLabel              Procedure(String pLabel, Byte p
 ! The View class adds the Fixed values (as determined by the SET call) before this, and the paging after.
 DriverBaseClass.BuildWhere              Procedure()
 where   StringTheory
- code
+  code
   If self.SearchFilter
-    If self.ParseProperty(self.SearchFilter,driver:searchfilter,self.TokenStr) = driver:ok
-      where.SetValue(self._ExpandExpression(self.TokenStr.GetValue()))
-    End
+    where.SetValue(self.SearchFilter)
   End
 
   If (self.SqlFilter &= NULL or self.SqlFilter = '') and (self.Filter &= NULL or self.Filter = '')
@@ -1876,7 +1886,7 @@ DriverBaseClass.ParseProperty             Procedure(*Cstring pProperty, Long pCo
 x            Long,Auto
   code
   rTokenString.SetValue('')
-  !self.trace('DriverBaseClass.ParseProperty ' & pProperty)
+  !self.trace('DriverBaseClass.ParseProperty ' & pProperty & ' pContext=' & pContext)
   self._ParseContext = pContext
   If pProperty = '' then Return driver:ok.
   self.SetError(NoError)
@@ -1893,11 +1903,8 @@ x            Long,Auto
     Free(self.FunctionQueue)
     Free(self.ExpressionQueue)
   End
-
   rTokenString.SetValue(self._Tokenize(pProperty,pContext))
-
   If ErrorCode() then Return driver:notok.
-
   Loop x = 1 to Records(self.ExpressionQueue)
     get(self.ExpressionQueue,x)
     self.tempstr.SetValue(self.ExpressionQueue.Expression)
@@ -1909,16 +1916,22 @@ x            Long,Auto
       If Errorcode() then Return driver:notok.
     End
   End
-
   ! operator translations work directly on the token string.
-  self.OperatorsToFunction(rTokenString)
-  If Errorcode() then Return driver:notok.
-
-  If pContext = driver:order or pContext = driver:order + driver:append
+  Case pContext
+  Of driver:filter
+  Orof driver:sqlfilter
+  Orof driver:expression
+    self.OperatorsToFunction(rTokenString)
+    If Errorcode()
+      Return driver:notok
+    End
+  Of driver:order
+  Orof driver:order + driver:append
      ! clarion order is + field , -field
      ! sql order is Field ASC, Field DESC
      self.TranslateOrder(rTokenString)
   End
+
   !self._ViewTokens()
   Return driver:ok
 
@@ -1985,7 +1998,7 @@ p            long
 as           long
 len          long,Auto
 inquote      byte
-tokenString  cString(4096)
+tokenString  cString(4096)         !!!todo think about replacing this with variable length
 tempstring   cstring(4096)
   code
   !self.trace('  Tokenize ' & pStr)
@@ -2016,11 +2029,24 @@ tempstring   cstring(4096)
     of ','
       do PushOperator
       Cycle
-    of '-' orof '/' orof '*' orof '%' orof '^' orof '&'     ! term separators
+    of '&'
+      case pContext
+      of driver:searchfilter
+      orof driver:searchtext
+      orof driver:searchterm
+      orof driver:searchparameter
+        do PushConditionOperator   ! AND
+        Cycle
+      else
+        do PushOperator            ! ConCat
+        Cycle
+      End
+
+    of '-' orof '/' orof '*' orof '%' orof '^'      ! term separators
       do PushOperator
       Cycle
 
-    of '=' orof '<' orof '>' orof '~' orof '!'                                ! next block is conditional operators
+    of '=' orof '<' orof '>' orof '~' orof '!' orof '|'                                ! next block is conditional operators
       do PushConditionOperator
       Cycle
 
@@ -2121,7 +2147,9 @@ PushQuote routine
   y = self._FindMatching(pStr,x)
   If y
     self.ValueQueue.Value = pStr[x : y] & '<0>'
-    If pContext = driver:searchfilter
+    Case pContext
+    of driver:searchfilter
+    orof driver:searchparameter
       self.ValueQueue.Parm = 1
     Else
       self.ValueQueue.Parm = 0
@@ -2169,6 +2197,7 @@ PushOperator   routine
     tokenString = tokenString & token:power
   of '&'
     tokenString = tokenString & token:concat
+    if len > x and pStr[x+1] = '&' then x+=1.   ! handle && as &
   end
   x += 1
 
@@ -2188,12 +2217,14 @@ PushConditionOperator  routine
   y = x + 1
   self.ConditionQueue.Condition =  pStr[x]
   Loop
+    if y > len then break.
     Case pStr[y]
     of ' '
       y += 1 ! whitespace doesn't terminate a condition. < = is as legal as <=
       cycle
-    of '=' orof '<' orof '>'
+    of '=' orof '<' orof '>' orof '|' orof '&'
       self.ConditionQueue.Condition = self.ConditionQueue.Condition & pStr[y]
+      if len > y and pStr[y+1] = self.ConditionQueue.Condition then y+= 1.
       y += 1
       break
     else
@@ -2207,7 +2238,7 @@ PushValue  routine
   self.ValueQueue.Value = ''
   y = x
   loop
-    If y > len(pStr) then break.
+    If y > len then break.
     Case pStr[y]
     Of '0' to '9' orof '.' orof 'e' orof 'E'
       self.ValueQueue.Value = self.ValueQueue.Value & pStr[y]
@@ -2241,6 +2272,12 @@ PushCondition  routine
   of '~'
   orof '!'
     self.ConditionQueue.Condition = 'NOT'
+  of '||'
+  orof '|'
+    self.ConditionQueue.Condition = 'OR'
+  of '&&'
+  orof '&'
+    self.ConditionQueue.Condition = 'AND'
   of '~='
   orof '!='
   orof '=~'
@@ -2273,7 +2310,8 @@ PushConditionNot  routine
   y = x + 3
   ! Clarion allows some forms of conditional operators that are not SQL standard. For simplicity
   ! this is as good a time as any to translate them into their standard form
-  loop
+  Loop
+    If y > len then break.
     Case pStr[y]
     of ' ' ! whitespace doesn't terminate a NOT. NOT =  is legal
       y += 1
@@ -2307,13 +2345,13 @@ PushLabel  routine
   self.LabelQueue.Label = ''
   y = x
   Loop
-    If y > len(pStr) then break.
+    If y > len then break.
     Case pStr[y]
     Of '('                              ! name has ended this is a function call.
       do PushFunction                   ! takes ExpressionQueue.Expression so far, and carries on.
       exit
     Of ' ' ! name has ended, if next non-white-space is a ( then this is a function call.
-      loop z = y+1 to len(pStr)
+      loop z = y+1 to len
         If pStr[z] = ' ' then cycle.
         If pStr[z] ='('                 ! name has ended this is a function call.
           y = z
@@ -2324,7 +2362,14 @@ PushLabel  routine
       End
       Break
       ! it is legal to end the expresion with a name, so carry on from here if the loop ended either way
-    Of '+' orof '-' orof '/' orof '*' orof '%' orof ')' orof '>' orof '<<' orof '=' orof '~' orof ','
+    Of '*'
+      case pContext
+      of driver:searchterm
+        self.LabelQueue.Label = self.LabelQueue.Label &  pStr[y]
+        y += 1
+      End
+      break
+    Of '+' orof '-' orof '/' orof '%' orof ')' orof '>' orof '<<' orof '=' orof '~' orof ',' orof '&' orof '|' orof '!'
       break                             ! y is the char after the Label name
 
     Else                                !of 'A' to 'Z' orof 'a' to 'z' orof '0' to '9' orof '_' orof ':' orof '.' also any non latin alphabets
@@ -2333,8 +2378,15 @@ PushLabel  routine
       Cycle
     End
   End
-  Add(self.LabelQueue)
-  tokenString = tokenString & token:label & format(records(self.LabelQueue),@n04) & ' '
+  If pContext = driver:searchterm
+    self.ValueQueue.Value = '''' & self.LabelQueue.Label & ''''
+    self.ValueQueue.Parm = 1
+    Add(self.ValueQueue)
+    tokenString = tokenString & token:value & format(records(self.ValueQueue),@n04) & ' '
+  Else
+    Add(self.LabelQueue)
+    tokenString = tokenString & token:label & format(records(self.LabelQueue),@n04) & ' '
+  End
   x = y
 
 PushFunction  routine
@@ -2371,9 +2423,9 @@ ans    long
   of 'CONCAT'
     ! so to start we have the operator in pToken. The previous token is the first parameter. i points to the operator token
     ! first thing to see if if there's a "chain" of concatenated parameters.
-    loop
+    Loop
       i = pStr.Instring(pToken,1,1)
-      If i = 0 then break.
+      If i < 7 then break.   ! if there's no token, or it's the first token, then we mustn't functionalize it.
       chain = 0
       j = i
       Loop
@@ -2405,7 +2457,7 @@ ans    long
       ! now replace the whole chain into a call to the function
       pStr.ReplaceSlice(i-6, i+10 + chain * 12, token:function & format(records(self.FunctionQueue),'@n04'))
       ans = true
-    end
+    End
   Else
     Loop
       i = pStr.Instring(pToken,1,1)
@@ -2485,7 +2537,7 @@ nest        long
 DriverBaseClass._ExpandExpression      Procedure(String pTokenString, <String pPrefix>,<String pSuffix>)
 x      long,auto
 i      long,auto
-ans    cstring(4096)
+ans    cstring(4096)              !!!todo think about replacing this with variable length
 ts     cstring(4096),auto
   code
   ts = pTokenString
@@ -2531,12 +2583,21 @@ Label      Cstring(4096)
   case Token[1]
   of token:value
     Get(self.ValueQueue,t)
-    If self.ValueQueue.Parm
+    If self._ParseContext = driver:searchtext   ! not adding parameters at this point, just displaying text (without quotes)
+      If sub(self.ValueQueue.Value,1,1) = ''''
+        Return sub(self.ValueQueue.Value,2,len(clip(self.ValueQueue.Value))-2)
+      End
+      Return self.ValueQueue.Value
+    ElsIf self.ValueQueue.Parm
       self._ParameterCount += 1
       If sub(self.ValueQueue.Value,1,1) = ''''
-        self._SetParameterString(self._ParameterCount,sub(self.ValueQueue.Value,2,len(clip(self.ValueQueue.Value))-2))
+        self._SetParameterValue(self._ParameterCount,sub(self.ValueQueue.Value,2,len(clip(self.ValueQueue.Value))-2),ClaString)
+      ElsIf not Numeric(self.ValueQueue.Value)
+        self._SetParameterValue(self._ParameterCount,self.ValueQueue.Value,ClaString)
+      ElsIf sub(self.ValueQueue.Value,1,1) = '.'
+        self._SetParameterValue(self._ParameterCount,self.ValueQueue.Value,ClaReal)
       else
-        self._SetParameterString(self._ParameterCount,self.ValueQueue.Value)
+        self._SetParameterValue(self._ParameterCount,self.ValueQueue.Value,ClaLong)
       end
       Return self._genparm(self._ParameterCount)
     End
@@ -2568,7 +2629,12 @@ Label      Cstring(4096)
   of token:operator
     case token
     of token:plus
-      return ' + '
+      Case self._ParseContext
+      Of driver:searchtext
+        Return ' AND '
+      Else
+        Return ' + '
+      End
     of token:minus
       return ' - '
     of token:divide
@@ -2711,7 +2777,7 @@ DriverBaseClass.OperatorsToFunction  Procedure(StringTheory pStr)
 ans  long
   code
   ans += self._Functionize(pStr,token:power,'POWER')     ! pretty much all use POWER
-  ans += self._Functionize(pStr,token:concat,'CONCAT')   ! CONCAT widly supported. Treats null as blank string
+  ans += self._Functionize(pStr,token:concat,'CONCAT')   ! CONCAT widely supported. Treats null as blank string
   !ans += self._Functionize(pStr,token:mod,'MOD')        ! Most dont need MOD
   Return ans
 
@@ -3326,7 +3392,7 @@ OnePage  routine
   End
 
 !-----------------------------------------------------------------
-DriverBaseClass._SetParameterString         Procedure(Long pCount, String pValue)
+DriverBaseClass._SetParameterValue         Procedure(Long pCount, String pValue, Byte pClarionType)
 x   long,auto
   code
   x = self._GetFreeParameter()
@@ -3334,6 +3400,7 @@ x   long,auto
   Clear(self.ParameterQueue.ParameterArray[x])
   self.ParameterQueue.ParameterArray[x].OpCode = self._ParameterOpcode
   self.ParameterQueue.ParameterArray[x].Count = pCount
+  self.ParameterQueue.ParameterArray[x].Source = pClarionType
   self._ResetParameterValue(x,pValue, size(pValue) )
   Return
 
@@ -3401,16 +3468,21 @@ y        Long,Auto
   If self.ParameterQueue &= NULL
     self.trace('DriverBaseClass._DuplicateParameter : self.ParameterQueue is null')
   End
-  !self.trace('DriverBaseClass._DuplicateParameter 0 recs=' & records(self.ParameterQueue) & ' err=' & errorcode())
   Loop y = 1 to records(self.ParameterQueue)
     Get(self.ParameterQueue,y)
     Loop x = 1 to Maximum(self.ParameterQueue.ParameterArray,1)
       If self.ParameterQueue.ParameterArray[x].OpCode = self._ParameterOpcode and self.ParameterQueue.ParameterArray[x].Count = pFrom
         ! got it
-        node &= self.ParameterQueue.ParameterArray[x].FieldNode
-        source = self.ParameterQueue.ParameterArray[x].Source
-        offset = self.ParameterQueue.ParameterArray[x].Offset
-        self._SetParameterNode(pCount,node,source,offset)
+        If not self.ParameterQueue.ParameterArray[x].FieldNode &= null
+          node &= self.ParameterQueue.ParameterArray[x].FieldNode
+          source = self.ParameterQueue.ParameterArray[x].Source
+          offset = self.ParameterQueue.ParameterArray[x].Offset
+          self._SetParameterNode(pCount,node,source,offset)
+        ElsIf self.ParameterQueue.ParameterArray[x].BlobIndex
+          self._SetParameterBlob(pCount,self.ParameterQueue.ParameterArray[x].BlobIndex)
+        Else
+          self._SetParameterValue(pCount, self.ParameterQueue.ParameterArray[x].Value , self.ParameterQueue.ParameterArray[x].Source)
+        End
         Return
       End
     End
@@ -3481,6 +3553,12 @@ y  long,auto
   End
   PopErrors()
   Free(self.ParameterQueue)
+
+!-----------------------------------------------------------------
+!!! Most databases treat a higher as better. However SQLite treats lower as better, so derive, and override there.
+DriverBaseClass._GetSearchRankDirection  Procedure()
+  code
+  Return driver:Descending
 
 !-----------------------------------------------------------------
 !!! DERIVE
@@ -3765,7 +3843,7 @@ DriverBaseClass.ClearProps            PROCEDURE()
   self.SearchFilter         = ''
   self._SearchOrderClause   = ''
   self.SearchRank           = 0
-  self._SearchParameter     = 0
+  !self._SearchParameter     = 0
   self.fetchsize = 30                 ! a somewhat arbitary value, but is more-or-less the size of a browse list page. Can be set using BUFFER. or prop:FetchSize
 
   Free(self.BindQueue)
@@ -3845,7 +3923,7 @@ UserLen                Ulong,Auto
     If self._logHandle >= 0
       ! set to end of file
       LogCriticalSection.Wait()
-      If osSetEndOfFile(self._logHandle) = 0
+      If osSetFilePointer(self._logHandle, 0, 0, dos:FILE_END)
         self.SetError(FileSystemErr)
         self._WinError()
       Else
@@ -3909,7 +3987,7 @@ DriverBaseClass.LOGGINGON                  Procedure(<String pFileName>,Long pOp
 DriverBaseClass.LOGGINGOFF                 Procedure()
   Code
   If self._LogFile
-    osCloseHandle(self._LogFile)
+    osCloseHandle(self._logHandle)
   End
   self._logClarion = false
   self._logSQL     = false
@@ -3983,12 +4061,11 @@ x    Long,Auto
 
 !-----------------------------------------------------------------
 ! SetDriverOption is called in reverse order. ie Driver, then generic class, then base class.
-! The LOG statement may appear multiple times as it flows through this call tree, however that cannot be helped.
 ! Note that these Base class options apply to FILE and VIEW structures.
 DriverBaseClass.SetDriverOption  Procedure(String pOption, String pValue)
   Code
   !self.trace('SetDriverOption ' & pOption & ' = ' & pValue)
-  If self._logOptions then self.Log('[OPTN]' & clip(pOption) & ' =[' & clip(pValue & ']')).
+  If self._logOptions then self.Log('[OPTN]' & clip(pOption) & ' =[' & clip(pValue) & ']').
 
   Case upper(pOption)
   of '/DUMMY'
@@ -4024,7 +4101,7 @@ DriverBaseClass.SetDriverOption  Procedure(String pOption, String pValue)
     of 'GPF'
       self.opt:unsafe = 3
     else
-      self.opt:unsafe = pValue
+      If pValue <> '' Then self.opt:unsafe = pValue.
     End
     Return self.opt:unsafe
   End
@@ -4789,9 +4866,12 @@ ExecuteSql  routine
   self._ResultSetDirection = Opcode:NEXT
   self._SetDirection = Opcode:NEXT
   self._HasBeenPropSql = true
-
+  If self.opt:PropSqlMatchByNumber
+    self._MatchByNumber = true
+  End
   If self._ExecuteSql() = driver:ok
   End
+  self._MatchByNumber = false
 
 !-----------------------------------------------------------------
 DriverBaseClass.GetProp:TimePicture         PROCEDURE()
@@ -4844,7 +4924,7 @@ DriverBaseClass.GetProp:SqlFilter     PROCEDURE()
 DriverBaseClass.SetProp:SqlFilter    PROCEDURE(String pValue)
   code
   If self.SqlFilter &= null and pValue = '' then return.
-  If self.SqlFilter &= null or size(self.SqlFilter) > size(pValue)
+  If self.SqlFilter &= null or size(self.SqlFilter) < size(pValue)
     Dispose(self.SqlFilter)
     self.SqlFilter &= new Cstring(size(pValue)+1)
   End
@@ -4866,7 +4946,7 @@ DriverBaseClass.GetProp:SqlOrder     PROCEDURE()
 DriverBaseClass.SetProp:SqlOrder    PROCEDURE(String pValue)
   code
   If self.SqlOrder &= null and pValue = '' then return.
-  If self.SqlOrder &= null or size(self.SqlOrder) > size(pValue)
+  If self.SqlOrder &= null or size(self.SqlOrder) < size(pValue)
     Dispose(self.SqlOrder)
     self.SqlOrder &= new Cstring(size(pValue)+1)
   End
@@ -5018,7 +5098,6 @@ r          byte
   End
   self.recbuf &= (self.ClaFCB.rec_buf) &':' & self.ClaFCB.rec_len
   self.reclen = self.ClaFCB.rec_len
-
   ! shadow buffer
   self.ShadowBuffer &= New String(self.ClaFCB.rec_len)
 
@@ -5037,7 +5116,6 @@ r          byte
 
 ! Prime object properties from pFILE
   self._UpdateFileStrings()
-
   ! first apply System-wide driver string for all files of this driver
   compile('!***',_C100_=1)
   self.Send(System{'Driver:' & self.GetPROP:Driver()})       ! available from Clarion 10.11975 --- October 27, 2015
@@ -5457,7 +5535,7 @@ dbName       pString(254)  ! the name, as it is in the database. If from the lab
 
     self.keys.dup = Choose(band(desc.key_attr,Cla_Dup)=Cla_Dup,true,false)
     self.keys.opt = Choose(band(desc.key_attr,Cla_Opt)=Cla_Opt,true,false)
-    self.keys.nocase = Choose(band(desc.key_attr,Cla_NoCase)=Cla_NoCase,true,false)
+    self.keys.KeyCase = Choose(band(desc.key_attr,Cla_NoCase)=Cla_NoCase,driver:Nocase,driver:Case)
     If band(desc.key_attr,Cla_Primary) = Cla_Primary
       self.primarykey &= (self.keys.keyptr)
       self.keys.primary = true
@@ -5489,7 +5567,7 @@ dbName       pString(254)  ! the name, as it is in the database. If from the lab
 ! This method is called by AddTokensToOrderBy for tokens that are marked as labels.
 ! if the field is already in the order, then the index of the already field is returned.
 ! If the field is added to the order, then it returns 0.
-DriverFileClass._FillOrderFromLabel              Procedure(String pLabel, Byte pCase)
+DriverFileClass._FillOrderFromLabel              Procedure(*CString pLabel, Byte pCase)
 column     cstring(255)
 LabelType  byte
   code
@@ -5498,6 +5576,8 @@ LabelType  byte
   column = self.TranslateLabel(column,LabelType)
   self._NoAlias = false
   self.OrderQueue.IsString = false
+  self.OrderQueue.Binary = false
+  self.OrderQueue.FieldCase = pCase
   case LabelType
   of driver:field
     If self._WithFieldNamed(column) = driver:ok   ! Ordering by a table field
@@ -5514,13 +5594,10 @@ LabelType  byte
       Case self.Fields.type
       of ClaCSTRING orof ClaPSTRING orof ClaSTRING
         self.OrderQueue.IsString = true
-        If self.Fields.Binary
-          self.OrderQueue.Nocase = false
-        Else
-          self.OrderQueue.Nocase = pCase
-        End
+        self.OrderQueue.Binary = self.Fields.Binary
+        self.OrderQueue.FieldCase = self.Fields.FieldCase
       Else
-        self.OrderQueue.Nocase = true ! was false?
+        self.OrderQueue.Binary = true
       End
       self.OrderQueue.IsCalc     = false
       self.OrderQueue.FileIndex  = 1
@@ -5536,7 +5613,8 @@ LabelType  byte
       self.OrderQueue.IsString = true
     End
     self.OrderQueue.Clause     = column
-    self.OrderQueue.Nocase = pCase
+    self.OrderQueue.Binary     = false
+    self.OrderQueue.FieldCase  = pCase
     self.OrderQueue.IsCalc     = false
     self.OrderQueue.FileIndex  = -1
     self.OrderQueue.FieldIndex = -Pointer(self.BindQueue)
@@ -5605,6 +5683,7 @@ node     &FieldGroupType!,Auto
   code
   pIndex = abs(pIndex)
   If pIndex < 1 or pIndex > self.SharedProperties.FieldList.nodes
+    Node &= null
     return Node
   End
   Peek(address(self.SharedProperties.FieldList.nodelist) + ((pIndex-1) * 4),NodePtr)  ! nodelist is a dynamic array of longs
@@ -5789,7 +5868,6 @@ InOveredGroup   Long
     If band(pNode.Attribute,ClaAttrDim)             ! it is an array
       Peek(pAddr,pNode.Dims)                        ! number of dimensions
       pAddr += 1
-      !self.trace('pNode.Dims=' & pNode.Dims & ' max=' & maximum(pNode.dim,1) & ' attr=' & pNode.Attribute)
       Loop c = 1 to pNode.Dims
         If c <= maximum(pNode.dim,1)
           pNode.Dim[c] = self._GetVariableLengthNumber(pAddr,HighBit2)
@@ -5880,18 +5958,25 @@ column    cstring(254)
   End
 
   ! Is this field a string type, and also in any nocase key?
-  pNode.InCase = 255
   case pNode.Type
   of ClaSTRING
   orof ClaPSTRING
   orof ClaCSTRING
     If self._FieldInCaseKey(pNode.Index)
-      pNode.InCase = 1
-    ElsIf self._FieldInNoCaseKey(pNode.Index)
-      pNode.InCase = 0
+      pNode.InCaseKey = true ! driver:InCaseSensitiveKey
     End
+    If self._FieldInNoCaseKey(pNode.Index)
+      pNode.InNoCaseKey =  true ! driver:InNoCaseKey
+    End
+    self._SetCollateCase(pNode)
   End
   Return
+
+!-----------------------------------------------------------------
+! This follows the rules as defined for the specific driver.
+!!! derive
+DriverFileClass._SetCollateCase    Procedure(FieldGroupType pNode)
+  code
 
 !-----------------------------------------------------------------
 DriverFileClass._parseKeyNameAttributes    Procedure()
@@ -5939,7 +6024,7 @@ ThisTypeSet  Byte,Auto
       of 'BINARY'
         self.blobs.Binary = true
       of 'CASE'
-        self.blobs.fieldcase = driver:ForceCase
+        self.blobs.fieldcase = driver:Case
       of 'CHECKFORNULL'
       orof 'CHECK FOR NULL'
         self.blobs.CheckForNull = true
@@ -5949,7 +6034,7 @@ ThisTypeSet  Byte,Auto
         self.blobs.HasDefault = true
         self.blobs.DefaultValue = val
       of 'NOCASE'
-        self.blobs.fieldcase = driver:ForceNocase
+        self.blobs.fieldcase = driver:Nocase
       of 'NOTNULL'
       orof 'NOT NULL'
         self.blobs.NotNull = true
@@ -6055,9 +6140,19 @@ str          StringTheory
       of 'BOOLEAN'
         pNode.Boolean = true
       of 'CASE'
-        pNode.fieldcase = driver:ForceCase
+        pNode.fieldcase = driver:Case
       of 'CHECKFORNULL'
         pNode.CheckForNull = true   !!!todo support checkfornull
+      of 'COLLATE'
+        pNode.collate = val
+        Case upper(pNode.collate)
+        of 'BINARY'
+          pNode.Binary = true
+        of 'NOCASE'
+          pNode.fieldcase = driver:Nocase
+        of 'RTRIM'
+          pNode.Binary = true
+        End
       of 'DEFAULT'
         pNode.HasDefault = true
         pNode.DefaultValue = val
@@ -6078,7 +6173,7 @@ str          StringTheory
         self.SharedProperties.HasIdentity = pNode.index
         pNode.IsIdentity = true
       of 'NOCASE'
-        pNode.fieldcase = driver:ForceNocase
+        pNode.fieldcase = driver:Nocase
       of 'NOTNULL'
       orof 'NOT NULL'
         pNode.NotNull = true
@@ -6114,8 +6209,6 @@ str          StringTheory
         ThisTypeSet = true
         pNode.SqlType = val
         self._ParseFieldSQLType(pNode)
-      of 'COLLATE'
-        pNode.collate = val
       of 'UUID4'
       orof 'UUID'
         If (pNode.Type = ClaSTRING and pNode.length >= 16) or |
@@ -6282,7 +6375,7 @@ y  long,Auto
   code
   Loop x = 1 to Records(self.keys)
     Get(self.keys,x)
-    If self.keys.nocase = true then cycle.
+    If self.keys.Keycase = driver:Nocase then cycle.
     Loop y = 1 to self.keys.components
       If self.keys.component[y] = pIndex then return true .
     End
@@ -6296,7 +6389,7 @@ y  long,Auto
   code
   Loop x = 1 to Records(self.keys)
     Get(self.keys,x)
-    If self.keys.nocase = false then cycle.
+    If self.keys.Keycase = driver:case then cycle.
     Loop y = 1 to self.keys.components
       If self.keys.component[y] = pIndex then return true .
     End
@@ -6448,7 +6541,7 @@ e         Cstring(4096)
       Else
         pReturnType = driver:parameter
         self._ParameterCount += 1
-        self._SetParameterString(self._ParameterCount,v)
+        self._SetParameterValue(self._ParameterCount,v,ClaString)
         Return self._genparm(self._ParameterCount)
       End
     End
@@ -6480,9 +6573,43 @@ ModColumn  routine
   End
 
 !-----------------------------------------------------------------
+! In MSSQL the operators in the MATCH command are not Case sensitive.
+! a naked NOT is not permitted. must be AND NOT. OR NOT is not supported
+! NOT operators should come after earlier operators
 DriverFileClass.TranslateSearch  Procedure(String pSearchString)
+str   StringTheory
+x     Long,Auto
   code
-  Return pSearchString
+  str.SetValue(pSearchString,st:clip)
+  str.Replace('"','''')
+
+  ! Parse it into tokens so it can be manipulated
+  self.ParseProperty(str.GetValue(), driver:searchterm,str)     ! turns the labels into parameters
+  ! do necessary manipulations
+  Loop
+    If str.sub(1) = token:condition or str.sub(1) = token:operator
+      str.Top(6)                                                                                      !remove all leading operators or conditions
+    ElsIf str.sub(str.length() - 5) = token:condition or str.sub(str.length() - 5) = token:operator
+      str.Tail(6)                                                                                     !remove all trailing operators or conditions
+    Else
+      Break
+    End
+  End
+
+  ! manipulation done, so move it back into a single string (ie a single token)
+  If str.Length() = 6
+    Return str.GetValue()
+  End
+
+  self._ParseContext = driver:searchtext
+  str.SetValue('''' & self._ExpandExpression(str.GetValue()) & '''')
+  str.trace()
+
+  ! now push the single string into the token list so it can be a parameter
+  ! returns the token list for that one parameter
+  self.ParseProperty(str.GetValue(), driver:searchparameter,str)
+  self._ParseContext = 0
+  Return str.GetValue()
 
 !-----------------------------------------------------------------
 DriverFileClass._TranslateLabelOverDateSQL  Procedure(FieldGroupType pNode)
@@ -6592,7 +6719,7 @@ DriverFileClass._BeforeRead            Procedure(Long pOpCode)
     self.SearchFilter         = ''
     self._SearchOrderClause   = ''
     self.SearchRank           = 0
-    self._SearchParameter     = 0
+    !self._SearchParameter     = 0
 
   of Opcode:NEXT
   orof Opcode:PREVIOUS
@@ -7640,6 +7767,7 @@ DriverFileClass.BuildOrderBy  Procedure()
   If self._SearchOrderClause
     Clear(self.OrderQueue)
     self.OrderQueue.Clause = self._SearchOrderClause
+    self.OrderQueue.Direction = self._GetSearchRankDirection()
     Add(self.OrderQueue)
   End
   self._SupplementalOrderFields = 0
@@ -7684,8 +7812,9 @@ x long
         of ClaSTRING
         orof ClaCSTRING
         orof ClaPSTRING
-          self.OrderQueue.Nocase     = self.keys.Nocase
-          self.OrderQueue.IsString = true
+          self.OrderQueue.Binary    = self.fields.binary
+          self.OrderQueue.Fieldcase = self.fields.Fieldcase
+          self.OrderQueue.IsString  = true
         End
         Self.OrderQueue.Uuid       = self.fields.uuid
         self.OrderQueue.IsCalc     = false
@@ -7719,7 +7848,7 @@ ans StringTheory
         of ClaSTRING
         orof ClaCSTRING
         orof ClaPSTRING
-          If self.keys.Nocase
+          If self.keys.Keycase = driver:Nocase
             ans.append('UPPER(' & self.FullPathName & '.' & self.Fields.Column & ')')
           else
             ans.append(self.FullPathName & '.' & self.Fields.Column)
@@ -8464,7 +8593,7 @@ x  Long,Auto
 y  Long,Auto
   code
   If pState = 0
-    Loop x = 1 to records(self.state)
+    Loop x = 1 to Records(self.state)
       Get(self.state,x)
       do FreeOneState
     End
@@ -8546,26 +8675,52 @@ len  Long,Auto
   self.state.FullPathName  = self.FullPathName
   self.state.owner         = self.owner
   self.state.status        = self.Status()
+  Add(self.state)
   self.state.Record       &= new string(self.ClaFCB.rec_len)
+  If self.state.Record &= NULL
+    Self.SetError(NoMemErr)
+    Return self.state.id
+  End
+  Put(self.state)   ! got this far, so save queue record with mem pointer
   MemCpy(address(self.state.Record),self.ClaFCB.rec_buf,self.ClaFCB.rec_len)
-
   If Records(self.blobs)
     self.state.BlobPointers &= new BlobPointersQueueType
+    If self.state.BlobPointers &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state)   ! got this far, so save queue record with blob pointer
     Loop x = 1 to records(self.blobs)
       Get(self.blobs,x)
       If self.blobs.Memo ! memos are saved even if blobs aren't
         self.state.BlobPointers.index = x
         len = len(clip(self.file{prop:value,-x}))
         self.state.BlobPointers.memory &= new String(len)
+        If len > 0 and self.state.BlobPointers.memory &= NULL
+          Self.SetError(NoMemErr)
+          Return self.state.id
+        End
         self.state.BlobPointers.memory = clip(self.file{prop:value,-x})
-        add(self.state.BlobPointers)
+        Add(self.state.BlobPointers)
+        If Errorcode()
+          Self.SetError(NoMemErr)
+          Return self.state.id
+        End
       ElsIf pSaveBlob
         self.state.BlobPointers.index = x
         len = self.file{prop:size,-x}
-        if len
+        If len
           self.state.BlobPointers.memory &= new String(len)
+          If len > 0 and self.state.BlobPointers.memory &= NULL
+            Self.SetError(NoMemErr)
+            Return self.state.id
+          End
           self.state.BlobPointers.memory = self.file{prop:value,-x}
-          add(self.state.BlobPointers)
+          Add(self.state.BlobPointers)
+          If Errorcode()
+            Self.SetError(NoMemErr)
+            Return self.state.id
+          End
         End
       End
     End
@@ -8574,60 +8729,118 @@ len  Long,Auto
   ! BASE object properties
   len = address(self.__BASESTATEEND) - address(self.__BASESTATESTART)
   self.State.Level1 &= new String(len)
+  If self.State.Level1 &= NULL
+    Self.SetError(NoMemErr)
+    Return self.state.id
+  End
+  Put(self.state) ! store away the new pointer
   MemCpy(address(self.State.Level1),address(self.__BASESTATESTART),len)
 
   ! Base Object Pointers
   If not self.PropertyQueue &= null
     self.state.PropertyQueue &= new PropertyQueueType  ! custom properties
+    If self.state.PropertyQueue &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     Loop x = 1 to Records(self.PropertyQueue)
       Get(self.PropertyQueue,x)
       self.state.PropertyQueue = self.PropertyQueue
       Add(self.State.PropertyQueue)
+      If Errorcode()
+        Self.SetError(NoMemErr)
+        Return self.state.id
+      End
     End
   End
   If not self.OrderQueue &= null
     self.state.OrderQueue &= new OrderQueueType  ! custom properties
+    If self.state.OrderQueue &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     Loop x = 1 to Records(self.OrderQueue)
       Get(self.OrderQueue,x)
       self.state.OrderQueue = self.OrderQueue
       Add(self.State.OrderQueue)
+      If Errorcode()
+        Self.SetError(NoMemErr)
+        Return self.state.id
+      End
     End
   End
   If not self.BindQueue  &= null
     self.state.BindQueue &= new BindQueueType  ! custom properties
+    If self.state.BindQueue &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     Loop x = 1 to Records(self.BindQueue)
       Get(self.BindQueue,x)
       self.state.BindQueue = self.BindQueue
       Add(self.State.BindQueue)
+      If Errorcode()
+        Self.SetError(NoMemErr)
+        Return self.state.id
+      End
     End
   End
 
   ! FILE object properties
   len = address(self.__FILESTATEEND)- address(self.__FILESTATESTART)
   self.State.Level2 &= new String(len)
+  If self.state.Level2 &= NULL
+    Self.SetError(NoMemErr)
+    Return self.state.id
+  End
+  Put(self.state) ! store away the new pointer
+
   MemCpy(address(self.State.Level2),address(self.__FILESTATESTART),len)
 
   ! File Object Pointers
   If not self._ProjectClauses &= null
     self.State._ProjectClauses &= new StringTheory
+    If self.state._ProjectClauses &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     self.State._ProjectClauses.SetValue(self._ProjectClauses)
   End
 
   If Not self.Project &= null
     self.State.Project &=  new Cstring(size(self.Project))
+    If self.state.Project &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     self.State.Project = self.Project
   End
 
   If Not self.ShadowBuffer &= null
     self.State.ShadowBuffer &=  new String(size(self.ShadowBuffer))
+    If self.state.ShadowBuffer &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     self.State.ShadowBuffer = self.ShadowBuffer
   End
 
   If Not self.WatchBuffer &= null
     self.State.WatchBuffer &=  new String(size(self.WatchBuffer))
+    If self.state.WatchBuffer &= NULL
+      Self.SetError(NoMemErr)
+      Return self.state.id
+    End
+    Put(self.state) ! store away the new pointer
     self.State.WatchBuffer = self.WatchBuffer
   End
-  Add(self.state)
+  Put(self.state)
   self.SetError(e)      ! GetState should not alter errorcode.
   Return self.state.id
 
@@ -9658,13 +9871,21 @@ x         Long,Auto
 changed   Byte        ! do not Auto
 Len       Long,Auto
   code
-  !self.trace('DriverFileClass.RESTORESTATE ' & pState & ' buffer=' & pBuffer)
+  !self.trace('DriverFileClass.RESTORESTATE state=' & pState & ' buffer=' & pBuffer)
+  If self.state &=  Null
+    self.SetError(FileSystemErr) ! DOS Driver sets Error 90, via GPF, so mimic that here for now.
+    self.SetFileError(NoRecErr,'Call to RestoreState : State ID not valid. [' & pState & ']')
+    self.Trace('Error: Call to RestoreState : State Queue is Null. [' & pState & ']')
+    self.state.id = 0
+    Return
+  End
   self.state.id = pState
   Get(self.state,self.State.id)
   ! check if pState number valid
   If Errorcode()
     self.SetError(FileSystemErr) ! DOS Driver sets Error 90, via GPF, so mimic that here for now.
     self.SetFileError(NoRecErr,'Call to RestoreState : State ID not valid. [' & pState & ']')
+    self.Trace('Error: Call to RestoreState : State ID not valid. [' & pState & ']')
     self.state.id = 0
     Return
   End
@@ -9782,7 +10003,6 @@ Len       Long,Auto
   else
     self.WatchBuffer = self.state.WatchBuffer
   End
-
   ! Base Object Properties
   len = address(self.__BASESTATEEND) - address(self.__BASESTATESTART)
   MemCpy(address(self.__BASESTATESTART),address(self.State.Level1),len)
@@ -12579,7 +12799,7 @@ DriverFileClass.GETKEYPROP:Name           PROCEDURE(KEY pKey)
 DriverFileClass.GETKEYPROP:NoCase           PROCEDURE(KEY pKey)
   code
   if self._withKey(pKey) = driver:ok
-    return choose(self.keys.nocase = true, '1','')
+    return choose(self.keys.KeyCase = driver:Nocase, '1','')
   end
   return ''
 !-----------------------------------------------------------------
@@ -12673,9 +12893,11 @@ DriverBaseClass._Sanitize      Procedure(String pStr, Long pContext)
 !-----------------------------------------------------------------
 DriverFileSQLClass.CONSTRUCT                 PROCEDURE()
   Code
-  self.LoginTimeout = 10            ! could probably be less.
-  self.opt:BusyTimeout = 5          ! might need to be more? perhaps a lot more?  In seconds
-  self.opt:zerodate = -1            ! null
+  self.LoginTimeout = 10                 ! could probably be less.
+  self.opt:BusyTimeout = 5               ! might need to be more? perhaps a lot more?  In seconds
+  self.opt:zerodate = -1                 ! null
+  self.opt:PropSqlMatchByNumber = false  ! only necessary for cases where actual tables are used as dummy tables.
+  Return
 
 !-----------------------------------------------------------------
 DriverFileSQLClass.DESTRUCT                  PROCEDURE()
@@ -12697,18 +12919,21 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
       do checkBoolean
       self.opt:AllowDetails = pValue
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return self.opt:AllowDetails
   of '/LOGFILENAME'
     If pValue <> ''
       if self.opt:LogFileName &= null then self.opt:LogFileName &= new Cstring(255).
       self.opt:LogFileName = clip(pValue)
     End
-    If self.opt:LogFileName &= null then return '' else return self.opt:LogFileName.
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self.opt:LogFileName &= null then Return '' else return self.opt:LogFileName.
   of '/LOGMESSAGE'
     If pValue <> ''
       if self.opt:LogMessage &= null then self.opt:LogMessage &= new Cstring(255).
       self.opt:LogMessage = clip(pValue)
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return ''
   of '/MASTER'
     case upper(pValue)
@@ -12723,11 +12948,14 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
     of 'STRICTDICT'
       self.opt:master = driver:strictdict
     end
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    Return self.opt:master
   of '/TURBOSQL'
     if pValue <> '' then
       do checkBoolean
       self.opt:TurboSQL = pValue
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return self.opt:TurboSQL
   of '/ZERODATE'
     case upper(pValue)
@@ -12738,8 +12966,22 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
     of 'FALSE' orof '0'
       self.opt:zerodate = 0
     else
-      self.opt:zerodate = pValue
+      If pValue then self.opt:zerodate = pValue.
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    Return self.opt:zerodate
+  of '/PROPSQLMATCHBYNUMBER'
+    case upper(pValue)
+    of ''
+    orof '1'
+    orof 'TRUE'
+      self.opt:PropSqlMatchByNumber = True
+    of '0'
+    orof 'FALSE'
+      self.opt:PropSqlMatchByNumber = False
+    End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    Return self.opt:PropSqlMatchByNumber
   End
   Return parent.SetDriverOption(pOption,pValue)
 
@@ -13062,9 +13304,11 @@ Where       StringTheory
 ! If the setkey form was used then the shadow buffer is clear for the first page, but may be primed for future pages.
 ! This method doesn't use the shadow buffer value - that's plugged in later via parameters
 DriverFileSQLClass._AddOrderToWhere   Procedure(StringTheory pWhere,Byte pOpCode)
-x              long
-con            cstring(3)
-RecsOrderBy    long
+x              Long,auto
+lg             Long,auto
+rl             Real,auto
+con            Cstring(3),auto
+RecsOrderBy    Long,Auto
 orc            StringTheory
   code
   pWhere.SetValue('')
@@ -13082,10 +13326,9 @@ orc            StringTheory
         con = clip(con) & '='
       end
       If self.OrderQueue.FieldIndex = 0
-        self._ParameterCount += 1
-        self._SearchParameter = self._ParameterCount   !!!todo currently the only order queue clause supported here is rank_fts
         If x = 1
           ! first term in the prop:order is the search rank parameter
+          self._ParameterCount += 1
           pWhere.append('(' & self.OrderQueue.Clause & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
         Else
           ! some other term in the order is the rank parameter
@@ -13095,8 +13338,18 @@ orc            StringTheory
           Else
             pWhere.append(' OR (' & self._reparm(orc,self._ParameterCount))
           End
+          self._ParameterCount += 1
           pWhere.append(' AND ' &  self.OrderQueue.Clause & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
         End
+        case self._SearchRankType
+        of ClaLong
+          If self._GetSearchRankDirection() = driver:Ascending Then Clear(lg,-1) Else Clear(lg,1).
+          self._SetParameterValue(self._ParameterCount,lg,ClaLong)
+        Else
+          If self._GetSearchRankDirection() = driver:Ascending Then Clear(rl,-1) Else Clear(rl,1).
+          self._SetParameterValue(self._ParameterCount,rl,ClaReal)
+        End
+
         If self.AllowParameterRepeats
           orc.append(self.OrderQueue.Clause & ' = '& self._genparm(self._ParameterCount) ,st:noclip,' AND ')
         Else
@@ -13104,8 +13357,7 @@ orc            StringTheory
         End
 
       ElsIf self._WithField(self.OrderQueue.FieldIndex) = driver:ok
-        If x = 1 !or fp = false
-          !fp = true
+        If x = 1
           self._ParameterCount += 1
           self._SetParameterNode(self._ParameterCount,self.fields,driver:FromShadow,0)
           pWhere.append('(' & self._GetAlias(driver:withdot) & self.Fields.Column & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
@@ -13141,8 +13393,10 @@ from                Cstring(255)
 tok                 StringTheory
 
   Code
-  !self.trace('DriverFileSQLClass._SelectSQL pOpcode=' & pOpcode)
   self._ClearParameterQueue(Opcode:Set)
+  If self._SearchJoin
+    If self._ExpandExpression(self._SearchExpression).
+  End
   self._WhereParmNumber = 1
   self._setdirection = pOpcode
   !self._ParameterOpcode = Opcode:SET
@@ -13412,15 +13666,6 @@ decString  string(36)
     End
   End
   Return
-
-!-----------------------------------------------------------------
-!DriverFileClass.CloneCStringPtr   Procedure(Long ppSource,Long ppDest)
-!cstr  &cstring!,over(ppDest)
-!  Code
-!  If ppSource <> 0
-!    cstr &= new Cstring(size(pSource))
-!    cstr = pSource
-!  End
 
 !-----------------------------------------------------------------
 DriverFileSQLClass.GETSTATE               Procedure(Long pSaveBlob)
@@ -13709,10 +13954,9 @@ DriverFileSQLClass.NEXT         PROCEDURE()
 ! Previous is still walking through the result set "forwards", it just has a different sort order.
 ! changing direction inside the current result set is cheap.
 DriverFileSQLClass._NextPrevious             Procedure(Long pOpcode)
-rows    long,Auto
-dbg     stringtheory
+rows    Long,Auto
   Code
-  !self.trace('DriverFileSQLClass._NextPrevious self._justset=' & self._justset & ' self.ResultRow=' & self.ResultRow & ' self._ResultSetDirection=' & self._ResultSetDirection & ' pOpcode=' & pOpcode & ' self.fetchsize=' & self.fetchsize & ' errorcode=' &
+  !self.trace('DriverFileSQLClass._NextPrevious self._justset=' & self._justset & ' self.ResultRow=' & self.ResultRow & ' self._ResultSetDirection=' & self._ResultSetDirection & ' pOpcode=' & pOpcode & ' self.fetchsize=' & self.fetchsize )
   Loop 2 times
     ! first check results to see if a row is waiting there.
     If self._justset = false
@@ -13766,7 +14010,6 @@ dbg     stringtheory
       ! -- put it all together
       self._GenerateSelect(pOpcode)
       If Errorcode() <> NoError then Return.
-
       Case Self.SetMethod
       Of driver:SetFilePos
       Orof driver:SetKeyPos
@@ -14175,7 +14418,7 @@ DriverFileSQLClass._SET             PROCEDURE(Byte pSetMethod, BigInt pPointer,K
   self._SearchJoin = ''
   self.SearchFilter = ''
   self._SearchOrderClause = ''
-  self._SearchParameter = 0
+  !self._SearchParameter = 0
   self.SetProp:Where('')
 
   FileSETObject &= self  ! FileSetObject is a module level, threaded parameter. It notes the most recent object to do a SET. This is used by EXCEPT, UNION and INTERSECT
@@ -14952,14 +15195,15 @@ obj  &DriverFileClass
 
 !-----------------------------------------------------------------
 DriverViewClass._ClearParameterQueue           Procedure(Long pOpcode)
-x    long
-obj  &DriverFileClass
+x    long,Auto
+obj  &DriverFileClass,Auto
   code
   Loop x = 1 to self.Files
     obj &= (self.FileObject[x])
     If obj &= null then cycle.
     obj._ClearParameterQueue(pOpcode)
   End
+  parent._ClearParameterQueue(pOpcode)
   self._ParameterCount = 0
   If not self.ParmBufferX &= null
     self.ParmBufferX.ParmBufferCount = 0
@@ -15300,11 +15544,11 @@ Obj     &DriverFileClass  ,Auto
 x       Long              ,Auto
 y       Long              ,Auto
 PosLen  Long              ,Auto
-RowStr  String(4)     ,Auto
+RowStr  String(4)         ,Auto
 RowNum  Long,Over(RowStr)
-SizPos  Long,Auto
+SizPos  Long              ,Auto
 srStr   String(8),over(self.searchrank)
-hash    string(16),Auto
+hash    string(16)        ,Auto
   code
   SizPos = Size(self.Position)
   RowNum = 0
@@ -15506,7 +15750,7 @@ index  Long,Auto
 DriverViewClass._BuildMapWalker  Procedure(ViewTreeType pNode,*Long pIndex)
 x            Long,Auto
 y            Long,Auto
-obj          &DriverFileClass
+obj          &DriverFileClass,Auto
   code
   If pNode &= null then Return.
   If pNode.File &= null then Return.
@@ -15544,6 +15788,9 @@ F            &File
   Code
   PushErrors()
   !For each field move it from the results into the appropriate record
+  If self._RecordsViewMap = 0
+    self.BuildMap()
+  End
   If self._RecordsViewMap = 0
     cols = self.Result.Columns()
     Loop index = 1 to cols
@@ -15840,17 +16087,18 @@ x  long
 !-----------------------------------------------------------------
 ! Given a fixed table name, find that table in the view tree
 DriverViewClass._withNodeTableName              Procedure(String pTableName)
+TableName   Cstring(128),Auto
   code
-  pTableName = lower(pTableName)
+  TableName = lower(pTableName)
   self.node &= null
-  If self._withNodeTableNameWalker(self.tree,pTableName) = Driver:ok
+  If self._withNodeTableNameWalker(self.tree,TableName) = Driver:ok
     Return Driver:ok
   End
   Return driver:notok
 
 !-----------------------------------------------------------------
-DriverViewClass._withNodeTableNameWalker           Procedure(ViewTreeType pNode, String pTableName)
-x  long
+DriverViewClass._withNodeTableNameWalker           Procedure(ViewTreeType pNode, *CString pTableName)
+x  Long,Auto
   code
   Loop x = 1 to Records(pNode)
     Get(pNode,x)
@@ -16360,14 +16608,15 @@ obj1      &DriverFileClass ! ,Auto
   Return obj1.GetProp:TransactionStatus()
 
 !-----------------------------------------------------------------
-DriverViewClass._FillOrderFromLabel              Procedure(String pLabel, Byte pCase)
-column  cstring(255)
-obj     &DriverFileClass
-x       Long
-i       Long
-already Long
+DriverViewClass._FillOrderFromLabel              Procedure(*cString pLabel, Byte pCase)
+obj          &DriverFileClass
+UpperLabel   String(Size(pLabel)),Auto
+x            Long,Auto
+i            Long,Auto
+already      Long
   code
   i = instring('.',pLabel,1,1)
+  UpperLabel = Upper(pLabel)
   Loop x = 1 to self.Files
     obj &= (self.FileObject[x])
     If obj &= null then cycle.
@@ -16377,12 +16626,12 @@ already Long
     ElsIf obj._WithFieldNamed(pLabel) = Driver:ok
       do FillFields
       Break
-    elsif i > 1 and upper(pLabel[1:i-1]) = upper(self.GetProp:Alias(x))
+    elsif i > 1 and UpperLabel[1:i-1] = upper(self.GetProp:Alias(x))
       If obj._WithFieldNamed(sub(pLabel,i+1,255)) = Driver:ok
         do FillFields
         Break
       End
-    elsif i > 1 and upper(pLabel[1:i-1]) = upper(obj.FullPathName)
+    elsif i > 1 and UpperLabel[1:i-1] = upper(obj.FullPathName)
       If obj._WithFieldNamed(sub(pLabel,i+1,255)) = Driver:ok
         do FillFields
         Break
@@ -16404,14 +16653,12 @@ FillFields  routine
   self.OrderQueue.Clause     = self.GetProp:Alias(x) & '.' & obj.Fields.Column
   Case obj.Fields.type
   of ClaCSTRING orof ClaPSTRING orof ClaSTRING
-    If obj.fields.Binary
-      self.OrderQueue.Nocase = false
-    Else
-      self.OrderQueue.Nocase = pCase
-    End
+    self.OrderQueue.binary = obj.fields.Binary
+    self.OrderQueue.FieldCase = obj.fields.FieldCase
     self.OrderQueue.IsString = true
   Else
-    self.OrderQueue.Nocase = false
+    self.OrderQueue.Binary = true
+    self.OrderQueue.FieldCase = pCase
     self.OrderQueue.IsString = false
   End
   self.OrderQueue.IsCalc     = false
@@ -16502,10 +16749,11 @@ DriverViewSQLClass.ClearProps  Procedure()
 
 !-----------------------------------------------------------------
 DriverViewSQLClass.BuildProjectList          Procedure()
+OneFileProjectList  StringTheory
   code
   self._fieldcounter = 0
   self.ProjectList.SetValue('')
-  self._BuildProjectListWalker(self.tree)
+  self._BuildProjectListWalker(self.tree,OneFileProjectList)
   ! all the fields have been done, now add the _ProjectClauses if there are any
   If not self._ProjectClauses &= NULL and self._ProjectClauses.length() > 0
     self.ProjectList.append(self._ProjectClauses.GetValue(),,',')
@@ -16513,17 +16761,16 @@ DriverViewSQLClass.BuildProjectList          Procedure()
   Return
 
 !-----------------------------------------------------------------
-DriverViewSQLClass._BuildProjectListWalker    Procedure(ViewTreeType pNode)
-x         long
-y         long
-z         long
-obj       &DriverFileSQLClass,auto
-usename   cstring(256)
-expr      cstring(256)
+DriverViewSQLClass._BuildProjectListWalker    Procedure(ViewTreeType pNode,StringTheory OneFileProjectList)
+x         long,Auto
+y         long,Auto
+z         long,Auto
+obj       &DriverFileSQLClass,Auto
+usename   cstring(256) ,Auto
+expr      cstring(256) ,Auto
 i         long
 as        byte
 count     long
-OneFileProjectList  StringTheory
 AllFields  byte
 PutNode    byte
   code
@@ -16639,7 +16886,8 @@ PutNode    byte
       Put(pNode)
     End
     If not pNode.children &= null
-      self._BuildProjectListWalker(pNode.Children)
+      self._BuildProjectListWalker(pNode.Children,OneFileProjectList)
+      ! not that cannot use OneFileProjectList in this loop after this point - it has been changed by above call.
     End
   End
   Return
@@ -16919,6 +17167,7 @@ DriverViewSQLClass.BuildOrderBy            Procedure()
   If self._SearchOrderClause
     Clear(self.OrderQueue)
     self.OrderQueue.Clause = self._SearchOrderClause
+    self.OrderQueue.Direction = self._GetSearchRankDirection()
     Add(self.OrderQueue)
   End
   self.BuildOrderByProps()                                 ! prop:order and prop:SqlOrder
@@ -16951,14 +17200,14 @@ DriverViewSQLClass.BuildOrderByUnique          Procedure()
 !-----------------------------------------------------------------
 ! make sure each many to one child file in the view has sufficient fields in the order to make it unique.
 DriverViewSQLClass._BuildOrderByUniqueWalker    Procedure(ViewTreeType pNode)
-k       long,Auto
-x       long,Auto
-y       long,Auto
-obj     &DriverFileClass
+k            Long,Auto
+x            Long,Auto
+y            Long,Auto
+obj          &DriverFileClass
 CheckCase    Byte,Auto
 UniqueFound  Byte,Auto
-Suggest      Long,Auto
-Missing      Long,Auto
+Suggest      Long,Auto      ! if not enough uniqueness then suggest this key
+Missing      Long,Auto      ! this field in the suggested unique key is missing.
   Code
   If pNode &= null then return.
   Loop x = 1 to Records(pNode)
@@ -16993,7 +17242,7 @@ Missing      Long,Auto
         self.OrderQueue.FileIndex = pNode.Index
         self.OrderQueue.FieldIndex = obj.keys.component[y]
         Get(self.OrderQueue,self.OrderQueue.FileIndex,self.OrderQueue.FieldIndex)
-        If ErrorCode() or (checkcase = true and  obj.keys.nocase <> self.OrderQueue.Nocase)
+        If ErrorCode() !or (checkcase = true and obj.keys.KeyCase <> self.OrderQueue.Fieldcase)
           UniqueFound = false
           If y > 1 and errorcode()
             suggest = k
@@ -17043,66 +17292,13 @@ addToOrderQueue  routine
     of ClaSTRING
     orof ClaCSTRING
     orof ClaPSTRING
-      If obj.fields.binary or obj.fields.uuid
-        self.OrderQueue.Nocase     = false
-      Else
-        self.OrderQueue.Nocase     = obj.keys.Nocase
-      End
+      self.OrderQueue.Binary     = obj.fields.binary
+      self.OrderQueue.FieldCase  = obj.fields.FieldCase
       self.OrderQueue.IsString = true
     End
     Self.OrderQueue.Uuid       = obj.fields.uuid
     self.OrderQueue.IsCalc     = false
     self.OrderQueue.FileIndex  = pNode.Index
-    self.OrderQueue.FieldIndex = obj.keys.component[y]
-    If obj.keys.descending[y]
-      self.OrderQueue.Direction   = driver:Descending
-    End
-    Add(self.OrderQueue)
-  End
-  Exit
-
-DriverViewSQLClass.BuildOrderByUniqueXX      Procedure()
-key     &key
-y       long
-x       long
-fil     long
-obj     &DriverFileClass
-
-  Code
-  Loop fil = 1 to self.Files
-    obj &= (self.FileObject[fil])
-    if obj &= null then cycle.
-    If obj._withPrimaryKey() = Driver:ok
-      Loop y = 1 to obj.keys.components
-        self.OrderQueue.FileIndex = fil
-        self.OrderQueue.FieldIndex = obj.keys.component[y]
-        Get(self.OrderQueue,self.OrderQueue.FileIndex,self.OrderQueue.FieldIndex)
-        If errorcode()
-          do addToOrderQueue
-        End
-      End
-    End
-  End
-  Return
-
-addToOrderQueue  routine
-  Clear(self.OrderQueue)
-  If obj._WithField(obj.keys.component[y]) = Driver:ok
-    self.OrderQueue.Clause     = self.GetProp:Alias(fil) & '.' & obj.Fields.Column
-    Case obj.Fields.Type
-    of ClaSTRING
-    orof ClaCSTRING
-    orof ClaPSTRING
-      If obj.fields.binary
-        self.OrderQueue.Nocase     = false
-      Else
-        self.OrderQueue.Nocase     = obj.keys.Nocase
-      End
-      self.OrderQueue.IsString = true
-    End
-    Self.OrderQueue.Uuid = obj.fields.uuid
-    self.OrderQueue.IsCalc     = false
-    self.OrderQueue.FileIndex  = fil
     self.OrderQueue.FieldIndex = obj.keys.component[y]
     If obj.keys.descending[y]
       self.OrderQueue.Direction   = driver:Descending
@@ -17512,7 +17708,7 @@ DriverViewSQLClass._SET                       Procedure(Long pOpcode)
   code
   self._setdirection = pOpcode
   self._ParameterOpcode = Opcode:SET
-  self._ClearParameterQueue(Opcode:Set)
+  !self._ClearParameterQueue(Opcode:Set)
   self.NewResultSet(driver:DontFreeRam)
   !!!todo make a list of the fields in the group by. Only these fields can be projected UNLESS the field has been aggregated in prop:name or prop:project
   If self._justset
@@ -17528,11 +17724,9 @@ DriverViewSQLClass._SET                       Procedure(Long pOpcode)
   self.BuildJoinList()                     ! parameters in here
   If Errorcode()  then Return.
   self.BuildMap()
-
   If self._ViewFixedFields
     self.AddFixedToOrderBy()
   End
-
   !-- OrderBy
   Self.BuildOrderBy()                  ! set self.orderby
   If Errorcode()  then Return.
@@ -17547,7 +17741,7 @@ DriverViewSQLClass._SET                       Procedure(Long pOpcode)
   self._pagingfieldsadded = false
   If self.Limit = 0 and self.Paging = true and self._OrderHasCalc = false
     self._OrderParmNumber = self._ParameterCount
-    self._AppendOrderQueueToWhere(self._ParameterCount)     ! Add the OrderBy fields to the where clause to create WherePage  ! parameters in here
+    self._AddOrderToWhere(self._ParameterCount)     ! Add the OrderBy fields to the where clause to create WherePage  ! parameters in here
   else
     self.setProp:WherePage('')
   End
@@ -17574,7 +17768,6 @@ offset  long
 cte     StringTheory
 where   StringTheory
   code
-
   !!!todo implement prop:NotDistinct here
 
   self._CalcLimitAndOffset(limit,offset)
@@ -17678,8 +17871,8 @@ DriverViewSQLClass._PrependFixedToWhere                       Procedure(Long pIn
 x      long
 obj    &DriverFileClass
 ans    StringTheory
-vff    long
-v      cString(255)
+vff    long,Auto
+v      cString(255),Auto
   code
   If pIndex = 0 then return.
   vff = abs(pIndex)
@@ -17692,7 +17885,7 @@ v      cString(255)
       self._ParameterCount += 1
       obj._ParameterOpcode = self._ParameterOpcode
       v = clip(obj.GetProp:Value(obj.fields.index))
-      obj._SetParameterString(self._ParameterCount,v)  ! fixing the parameter to a value as it is at the SET, not based on the shadow buffer.
+      obj._SetParameterValue(self._ParameterCount,v,obj.fields.type)  ! fixing the parameter to a value as it is at the SET, not based on the shadow buffer.
       If pIndex < 0
         ans.append(obj.Fields.Column & ' = ' & obj._genparm(self._ParameterCount),,' AND ')
         self.OrderQueue.Fixed = true
@@ -17718,7 +17911,7 @@ v      cString(255)
 !!! derive
 ! This one is derived because the SQL code is backend dependent.
 ! making the *filter* case sensitive varies a lot between databases.
-DriverViewSQLClass._AppendOrderQueueToWhere  Procedure(*Long pCount)
+DriverViewSQLClass._AddOrderToWhere  Procedure(*Long pCount)
   code
 
 
@@ -18510,8 +18703,8 @@ cstr  Cstring(size(pStr)+101)
 
 !-----------------------------------------------------------------
 DriverParmBufferClass._DebugParmBuffer     Procedure(Long pCount)
-x  Long
-dbg  stringtheory
+x    Long,Auto
+dbg  StringTheory
   code
   self.trace(' Addr     | Size | Len | Type | Format | Dispose | Count=' & pCount)
   Loop x = 1 to pCount
@@ -18559,6 +18752,7 @@ bt         Byte
 
   ! ANSI conversion. This always needs to be copied and disposed. Incoming values MUST already be null terminated
   ElsIf Band(pOptions,driver:AnsiToUtf8)
+    !self.trace('Writing ANSI - converting to utf-8 first')
     If self.ParmBufferAddr[pCount] and self.ParmBufferDispose[pCount]                ! maybe dispose the old one
       str3 &= (self.ParmBufferAddr[pCount]) & ':' & self.ParmBufferSize[pCount]
       Dispose(str3)
@@ -18576,7 +18770,6 @@ bt         Byte
         StrUtfLen = 0
       else
         strUtf &= self.TempStr.AnsiToUtf8(str3,strUtfLen,pCodePage)
-        !self.trace('strUtfLen=' & strUtfLen & ' strutf=[' & StrUtf & ']')
       End
       self.ParmBufferAddr[pCount] = address(strUtf)
       self.ParmBufferSize[pCount] = strUtfLen

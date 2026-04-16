@@ -42,8 +42,8 @@ cs  cstring(200)                                                 ! helpful for d
        MemCmp(long buf1, long buf2, unsigned count), long, name('_memcmp'),dll(DLL_Mode)
     end
   end
-os_inet_pton     long,name('wc_inet_pton')
-os_inet_ntop     long,name('wc_inet_ntop')
+os_inet_pton     long,name('wc_inet_pton')  ! global, not threaded
+os_inet_ntop     long,name('wc_inet_ntop')  ! global, not threaded
 
   include('DriverFields.Inc'),Once
 
@@ -173,9 +173,9 @@ DriverIP6Class.iDriverField.GetFieldType   Procedure()!,STRING ! return a unique
 ! Note: An incoming blank string equates to <0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0> which in turn equates back as ::
 DriverIP6Class.iDriverField.FromRecordField     Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pWriteAddress, Long pWriteSize)
 str         string(39)
-cstr        cstring(40)
-blk         string(16)
-Result      Long
+cstr        cstring(40),Auto
+blk         string(16),Auto
+Result      String(16)
   Code
   If os_Inet_Pton = 0 then LoadApiFunctions().
   Clear(blk,-1) ! clear to nulls
@@ -341,7 +341,7 @@ char   byte
     memcpy(pFieldAddress,address(str),pFieldSize)
   ElsIf pFieldSize <= size(str) and pFieldType = ClaCString
     memcpy(pFieldAddress,address(str),pFieldSize-1)
-    memset(pFieldAddress+pFieldSize,0,1)
+    memset(pFieldAddress+pFieldSize-1,0,1)
   ElsIf pFieldType = ClaString
     memcpy(pFieldAddress,address(str),size(str))
     memset(pFieldAddress+size(str),32,pFieldSize-size(str))
@@ -417,7 +417,7 @@ pos       long
 char      byte
 x         long
   Code
-  !cs = 'FromRecordField pFieldType=' & pFieldType & ' pFieldSize=' & pFieldSize & ' pWriteSize=' & pWriteSize ; wc_dbg(cs)
+  !cs = 'DriverFields:  FromRecordField pFieldType=' & pFieldType & ' pFieldSize=' & pFieldSize & ' pWriteSize=' & pWriteSize ; wc_dbg(cs)
   If pFieldSize > size(str) then pFieldSize = size(str).
   If pWriteAddress and pFieldType = ClaString and pFieldSize = 16
     If MemCmp(pFieldAddress,address(result),16) = 0 ! pField is all spaces
@@ -441,7 +441,7 @@ x         long
     end
     case upper(str[x+1])
     of '0' to '9'
-      char += str[x+1]
+      char += val(str[x+1])-48
     of 'A' to 'F'
       char += val(str[x+1])-55
     end
@@ -471,7 +471,6 @@ char   byte
       revstr = bin[4] & bin[3] & bin[2] & bin[1] & bin[6] & bin[5] & bin[8] & bin[7] & bin[9 : 16]
       MemCpy(pFieldAddress,address(revstr), 16)
     End
-    cs = revstr ; wc_dbg(cs)
     Return self.iDriverField.GetSourceSize()
   End
 
@@ -502,7 +501,7 @@ char   byte
       memcpy(pFieldAddress,address(str),pFieldSize)
     ElsIf pFieldSize <= size(str) and pFieldType = ClaCString
       memcpy(pFieldAddress,address(str),pFieldSize-1)
-      memset(pFieldAddress+pFieldSize,0,1)
+      memset(pFieldAddress+pFieldSize-1,0,1)
     ElsIf pFieldType = ClaString
       memcpy(pFieldAddress,address(str),size(str))
       memset(pFieldAddress+size(str),32,pFieldSize-size(str))

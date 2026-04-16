@@ -87,6 +87,9 @@ driver:parameter        Equate(8)
 driver:join             Equate(9)
 driver:expression       Equate(10)
 driver:searchfilter     Equate(13)
+driver:searchtext       Equate(14)  ! expand the tokens into text for prop:search
+driver:searchterm       Equate(15)  ! parse the labels into parameters
+driver:searchparameter  Equate(16)  ! The search term is bounded by quotes, and tokenised as a parameter, not a constant.
 
 ! driver:sqltable is 10
 ! driver:dosfile is 11
@@ -100,8 +103,12 @@ driver:SqlSavepoint     Equate(13)
 driver:withdot          Equate(1)
 driver:nodot            Equate(0)
 
-driver:ForceCase        Equate(1)
-driver:ForceNocase      Equate(2)
+driver:Case             Equate(1)
+driver:Nocase           Equate(2)
+
+driver:NotInKey             Equate(255)
+driver:InCaseSensitiveKey   Equate(1)
+driver:InNoCaseKey          Equate(0)
 
 driver:LeftJoin         Equate(0)   ! this is the current clarion default when not ,INNER
 driver:InnerJoin        Equate(1)   ! this is the Clarion ,INNER property
@@ -160,7 +167,6 @@ token:concat        equate(token:operator & '0008 ')
 token:asc           equate(token:operator & '0009 ')
 token:desc          equate(token:operator & '0010 ')
 token:as            equate(token:operator & '0011 ')
-
 
 
 !EndRegion: Equates

@@ -36,8 +36,8 @@ __DOSSTATESTART           Byte                        ! do NOT move me
 _hfile                    Long
 _winerror                 Long
 
-_bufferstart              BIGINT  ! the position in the file, where the buffer currently starts
-_bufferend                BIGINT  ! the position in the file, where the buffer currently ends
+_bufferstart              BIGINT  ! the position in the file, where the buffer currently starts    ! 1 based
+_bufferend                BIGINT  ! the position in the file, where the buffer currently ends      ! 1 based
 _buffersize               Long
 _bufferwholefile          Byte
 
@@ -48,7 +48,7 @@ _buffermiss               Long
 
 ! other
 _filesize                 BIGINT  ! allow for files > 4 gigs.  REAL is good for about 4503 terabytes
-diskpointer               BIGINT
+diskpointer               BIGINT  ! 1 based not 0 based
 
 _eof                      Byte
 _bof                      Byte
@@ -70,7 +70,7 @@ _SetDisk                  PROCEDURE(BIGINT pFilePointer),LONG,VIRTUAL
 _CopyBufferIntoRecord     PROCEDURE(BIGINT pFilePointer, BIGINT pBufferPos, LONG pLength),VIRTUAL
 _ReadFromBuffer           PROCEDURE(BIGINT pFilePointer, LONG pLength),LONG,VIRTUAL
 _BufferUpdate             PROCEDURE(BIGINT pFilePointer, LONG pAddr, Long pLength),VIRTUAL
-_ExtendBuffer             PROCEDURE(Long pNewSize),VIRTUAL
+_ExtendBuffer             PROCEDURE(BIGINT pNewSize),Long,VIRTUAL
 _Get                      PROCEDURE(BIGINT pFilePointer, LONG Length),VIRTUAL
 _ExpandName               PROCEDURE(),VIRTUAL
 SetDriverOption           Procedure(String pOption, String pValue),STRING,Derived
@@ -102,6 +102,7 @@ RENAME                    PROCEDURE(STRING pNewFileName),DERIVED
 REOPEN                    PROCEDURE(Long pAccessMode),DERIVED
 RESTORESTATE              PROCEDURE(Long pState, Byte pBuffer),DERIVED
 SEND                      PROCEDURE(STRING pMessage),STRING,PROC,DERIVED
+_SET                      PROCEDURE(Byte pSetMethod, BigInt pPointer,Key pSetKey, Key pSetKeyKey),DERIVED
 UNLOCK                    PROCEDURE(),DERIVED
 
 ! Record Read methods

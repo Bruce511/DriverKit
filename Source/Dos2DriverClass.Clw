@@ -36,6 +36,7 @@
       DosWriteFile(long hFile, long lpBuffer, long nNumberOfBytesToWrite, *long lpNumberOfBytesWritten, |
                      long lpOverlapped), long, proc, raw, pascal, name('WriteFile'),dll(1)
       DosFindFirstFile(*cstring pFileName,Long rFileData), long, proc, raw, pascal, name('FindFirstFileA'),dll(1)
+      DosFindClose(Long pHandle), long, proc, raw, pascal, name('FindClose'),dll(1)
       DosGetFileSizeEx(long hFile,*Int64 FileSize), long, raw, pascal, name('GetFileSizeEx'),dll(1)
       DosSetFilePointerEx(long hFile,Int64 liDistanceToMove,*Int64 lpNewFilePointer,long dwMoveMethod), |
                       long, raw, pascal, proc, name('SetFilePointerEx'),dll(1)
@@ -75,9 +76,6 @@ dos:OPEN_ALWAYS                equate(4)
 dos:OPEN_EXISTING              equate(3)
 dos:TRUNCATE_EXISTING          equate(5)
 dos:INVALID_SET_FILE_POINTER   equate(-1)
-dos:FILE_BEGIN                 equate(0)
-dos:FILE_CURRENT               equate(1)
-dos:FILE_END                   equate(2)
 dos:FILE_ATTRIBUTE_NORMAL      equate(080h)
 dos:HANDLE                     equate(0)
 dos:INVALID_HANDLE_VALUE       equate(-1)
@@ -274,7 +272,7 @@ i long
       If self._ReadDisk(pFilePointer) = Driver:notok or ErrorCode()
         self._bytes = 0
         Break
-      end
+      End
       Cycle  ! try reading from the buffer again
     End
     Break
@@ -295,18 +293,19 @@ bytesread  long
 
   result = DosReadFile(self._hFile, self._buffer, self._buffersize, bytesRead, 0)
   self._diskreads += 1
-  if result = 0
+  If result = 0
     self.SetError(self._ConvertError(dosGetLastError()))
-    return Driver:notok
-  elsif bytesRead = 0
-
-  else
+    Return Driver:notok
+  Elsif bytesRead = 0 and self._buffersize > 0 ! EOF
+    Return Driver:notok
+  Else
     self._bufferstart = pFilePointer
     self._bufferend = pFilePointer + bytesRead - 1
   End
   Return Driver:ok
 
 !-----------------------------------------------------------------
+! pFilePointer is 1 based
 DriverFileDos2Class._WriteDisk        PROCEDURE(BIGINT pFilePointer, Long pLength)!,VIRTUAL
 result       Long
 written      Long
@@ -331,13 +330,22 @@ srclen       Long,Auto
 
     If self._ram &= null
       self._ram &= new String(desired)         ! sourcelength is the disk record length, not the clarion record length
+      If self._ram &= NULL
+        self.SetError(NoMemErr)
+        Return driver:Notok
+      End
     Elsif Len(self._Ram) < desired
       Dispose(self._ram)
       self._ram &= new String(desired)         ! sourcelength is the disk record length, not the clarion record length
+      If self._ram &= NULL
+        self.SetError(NoMemErr)
+        Return driver:Notok
+      End
     End
-    memset(address(self._ram),'<0>',desired)         ! clear to nulls
+    If srcLen <> self.ClaFCB.rec_len
+      memset(address(self._ram),'<0>',desired)         ! clear to nulls
+    End
     ramlength = desired
-
     Loop x = 1 to self.SharedProperties.FieldList.nodes
       self.Fields &= self._WithFieldNode(x)
       If self.Fields.Interface &= NULL
@@ -377,22 +385,28 @@ srclen       Long,Auto
 !-----------------------------------------------------------------
 ! When doing a write to the disk, it's necessary to update the buffer at the same time
 ! so that subsequent reads (from the buffer) get the updated values.
+! pFilePointer is 1 based
 DriverFileDos2Class._BufferUpdate  Procedure(BIGINT pFilePointer, LONG pAddr, Long pLength)
 bufpos  BIGINT
-bufn    Long
+bufn    Long,Auto
   code
   If self._bufferwholefile
     ! make sure buffer is big enough
-    if self._buffersize < pFilePointer + pLength
-      self._ExtendBuffer(pFilePointer + (pLength*10)) ! extend buffer size, and pad with nulls, going to allow some extra space in case this is growing in a loop.
-    end
+    If self._buffersize < pFilePointer + pLength
+      If self._ExtendBuffer(pFilePointer + (pLength*10)) = Driver:Notok  ! extend buffer size, and pad with nulls, going to allow some extra space in case this is growing in a loop.
+        If self._ExtendBuffer(pFilePointer + (pLength*1)) = Driver:Notok
+          self.FreeBuffer()                                              ! Disengage the buffer
+          Return
+        End
+      End
+    End
     ! write new data into buffer
     memcpy(address(self._buffer[pFilePointer]), pAddr, pLength)
-    if self._bufferend < pFilePointer + pLength - 1 then self._bufferend = pFilePointer + pLength - 1.
+    If self._bufferend < pFilePointer + pLength - 1 then self._bufferend = pFilePointer + pLength - 1.
     self._bufferstart = 1
-    return
+    Return
   End
-  If self._buffer &= null then return. ! buffer is not active
+  If self._buffer &= Null then Return. ! buffer is not active
 
   ! ok, to get here the buffer has a fixed size, and is a "window" into the file
   if self._bufferstart = 0   ! nothing in the buffer.
@@ -400,7 +414,7 @@ bufn    Long
     memcpy(address(self._buffer[1]), pAddr, pLength)                ! copy data into buffer.
     self._bufferstart = pFilePointer
     self._bufferend = pFilePointer + pLength - 1
-    return
+    Return
   end
   ! to get here the buffer already has something in it. Check and see if the current write overwites any of the existing buffer
   bufpos = pFilePointer - self._bufferstart + 1
@@ -412,47 +426,59 @@ bufn    Long
   ! does whole new text fits inside buffer
   If self._bufferstart <= pFilePointer and self._buffersize >= bufpos + pLength - 1
     memcpy(address(self._buffer[bufpos]), pAddr, pLength)
-    If self._bufferend < bufpos + pLength - 1 then self._bufferend = bufpos + pLength - 1.
+    If self._bufferend < pFilePointer + pLength - 1 then self._bufferend = pFilePointer + pLength - 1.
     Return
   End
   ! does the new text overlap the buffer completely, both in front and behind
   If pFilePointer < self._bufferstart and pFilePointer + pLength - 1 >  self._bufferstart + self._buffersize
-    bufn = self._bufferstart - pFilePointer + 1
+    bufn = self._bufferstart - pFilePointer
     memcpy(address(self._buffer[1]), pAddr + bufn, self._buffersize)
-    self._bufferend = self._bufferstart  + self._buffersize
+    self._bufferend = self._bufferstart + self._buffersize - 1
     return
   End
   ! start of new text is inside buffer, but end is not
   If self._bufferstart <= pFilePointer
     pLength = self._buffersize - bufpos + 1
     memcpy(address(self._buffer[bufpos]), pAddr, pLength)
-    self._bufferend = self._buffersize
+    self._bufferend = self._bufferstart + self._buffersize - 1
     Return
   End
   ! start of new text is before buffer, but end is inside
   If pFilePointer < self._bufferstart
-    bufn = self._bufferstart - pFilePointer + 1
-    pLength = pLength - bufn + 1
+    bufn = self._bufferstart - pFilePointer
+    pLength = pLength - bufn
     memcpy(address(self._buffer[1]), pAddr + bufn, pLength)
-    If self._bufferend < pLength then self._bufferend = pLength.
+    If self._bufferend < self._bufferstart + pLength - 1 then self._bufferend = self._bufferstart + pLength - 1.
     Return
   End
   Assert(false,'Shouldnt get here')
   Return
 
 !-----------------------------------------------------------------
-DriverFileDos2Class._ExtendBuffer    PROCEDURE(Long pNewSize)
-s  &string,Auto
+DriverFileDos2Class._ExtendBuffer    PROCEDURE(BIGINT pNewSize)
+oldBuffer   &String,Auto
+NewSize     Long,Auto
+Ans         Long,Auto
   Code
-  if pNewSize <= self._buffersize then return.
-  s &= self._buffer
+  If pNewSize <= self._buffersize then Return Driver:ok.
+  If pNewSize > MAXLONG Then Return Driver:NotOk.
+  Ans = Driver:Ok
+  NewSize = pNewSize ! converts the BIGINT to a LONG
+  oldBuffer &= self._buffer
   If pNewSize > 0
     self._buffer &= New String(pNewSize)
-    memcpy(address(self._buffer[1]), address(s), self._buffersize)
-    memset(address(self._buffer[self._buffersize+1]) ,'<0>', pNewSize - self._buffersize)
-    self._buffersize = pNewSize
+    If self._buffer &= Null
+      self.SetError(NoMemErr)
+      self._buffersize = 0
+      Ans = Driver:Notok
+    Else
+      memcpy(address(self._buffer[1]), address(oldBuffer), self._buffersize)
+      memset(address(self._buffer[self._buffersize+1]) ,'<0>', pNewSize - self._buffersize)
+      self._buffersize = pNewSize
+    End
   End
-  Dispose(s)
+  Dispose(oldBuffer)
+  Return Ans
 
 !-----------------------------------------------------------------
 ! A Wrap around the DosSetFilePointerEx function.
@@ -475,7 +501,7 @@ Ptr    like(int64)
         self.DiskPointer = (ptr.hi * MAXULONG) + (ptr.lo) + 1    ! self.DiskPointer is 1 based
       End
     Else
-      Self.DiskPointer = self._bufferend
+      Self.DiskPointer = self._bufferend + 1                     ! _BufferEnd is 1 based, DiskPointer points past end of file
     End
   Else
     If pFilePointer < 0
@@ -494,7 +520,7 @@ Ptr    like(int64)
         self.DiskPointer = (ptr.hi * MAXULONG) + (ptr.lo) + 1   ! self.DiskPointer is 1 based
       End
     Else
-      self.DiskPointer = pFilePointer
+      self.DiskPointer = pFilePointer + 1                       ! self.DiskPointer is 1 based
     End
   End
   Return Driver:ok
@@ -515,7 +541,7 @@ ix  BIGINT,Auto
     ix = pFilePointer - self._bufferstart + 1
     self._CopyBufferIntoRecord(pFilePointer,ix,pLength)
     return Driver:ok
-  Elsif pFilePointer >= self._bufferstart and self.filesize() = self._bufferend
+  Elsif pFilePointer >= self._bufferstart and self._filesize = self._bufferend
     ix = pFilePointer - self._bufferstart + 1
     self._CopyBufferIntoRecord(pFilePointer,ix,self._bufferend-pFilePointer+1)
     return Driver:ok
@@ -603,37 +629,60 @@ DriverFileDos2Class.BOF              PROCEDURE()     !!! new to DOS2
 ! pAhead  - the number of "pages" to read ahead (ie cache) when the buffer is invalid
 ! pTimeout - not used
 DriverFileDos2Class.BUFFER           PROCEDURE(UNSIGNED pPageSize=1, UNSIGNED pBehind=0, UNSIGNED pAhead=0, UNSIGNED pTimeout=0)  !!! new to DOS2
-l  long,over(pPageSize)
+l   Long,over(pPageSize)
+fs  BIGINT,Auto
   Code
   parent.Buffer(pPageSize,pBehind,pAhead,pTimeout)  ! Checks the file is Open
   If Errorcode() then return.
-  Dispose(self._buffer)
-  self._bufferwholefile = false
   If l = Driver:FreeBuffer  ! over(pPageSize)
+    self.FreeBuffer()
+    Return
   ElsIf l = Driver:BufferWholeFile  ! over(pPageSize)
-    If pBehind = 0 or self.FileSize() > pBehind
-      pBehind = self.FileSize()
-    End
-    If pBehind = 0
+    fs = self.FileSize()
+    If pBehind > 0 and pBehind <= DRIVER:MINRAM       ! programmer specified a tiny max, we can bump it up a bit here
       pBehind = DRIVER:MINRAM
-    ElsIf pBehind > DRIVER:MAXRAM
+    ElsIf pBehind > DRIVER:MAXRAM                     ! programmer asked for too much, so we'll reduce it a bit.
       pBehind = DRIVER:MAXRAM
     End
-    self._buffersize = pBehind
-    self._bufferwholefile = true
+    If pBehind = 0                       ! programmer didn't specify max, so default to file size , if it'll fit
+      If fs <= DRIVER:MINRAM
+        self._buffersize = DRIVER:MINRAM
+        self._bufferwholefile = true
+      ElsIf fs <= DRIVER:MAXRAM
+        self._buffersize = fs
+        self._bufferwholefile = true
+      Else
+        self._buffersize = 0             ! file is too big to cache
+        self._bufferwholefile = false
+      End
+    Else
+      If fs <= pBehind
+        self._buffersize = fs
+        self._bufferwholefile = true
+      Else
+        self._buffersize = 0
+        self._bufferwholefile = false
+      End
+    End
   Else
+    self._bufferwholefile = false
     If pPageSize < 1 then pPageSize = 1.
     self._buffersize = (self._SourceSize() * pPageSize) * (pAhead + 1)
   end
-  self._buffer &= null
-  self._buffer &= New String(self._buffersize)
-  If address(self._buffer) = 0
-    self._buffersize = DRIVER:MINRAM
-    self._buffer &= New String(DRIVER:MINRAM)
-    self._bufferwholefile = false
-  End
-  If address(self._buffer)
-    MemSet(address(self._buffer),'<0>', self._buffersize) ! NEW will clear it to spaces, but want it cleared to nulls
+  Dispose(self._buffer)
+  If self._buffersize
+    self._buffer &= New String(self._buffersize)
+    If self._buffer &= Null   ! tried for too much
+      self._buffersize = DRIVER:MINRAM
+      self._buffer &= New String(DRIVER:MINRAM)  ! try less
+      self._bufferwholefile = false
+      If self._buffer &= Null
+        self.SetError(NoMemErr)
+      End
+    End
+    If Not self._buffer &= Null
+      MemSet(address(self._buffer),'<0>', self._buffersize) ! NEW will clear it to spaces, but want it cleared to nulls
+    End
   End
   self._bufferstart = 0
   self._bufferend = 0
@@ -792,9 +841,11 @@ tablename   cstring(255),auto
 DriverFileDos2Class.FILESIZE         PROCEDURE()
 siz                         like(int64)
 FORMAT_MESSAGE_FROM_SYSTEM  equate(1000h)
-result                      long
+result                      long,auto
 ErrMess                     cstring(1024)
 rData                       like(dos:_WIN32_FIND_DATAA)
+handle                      Long,Auto
+LastErr                     Ulong,Auto
   Code
   self.SetError(NoError)
   If self._opened = false
@@ -803,9 +854,10 @@ rData                       like(dos:_WIN32_FIND_DATAA)
     If lower(self.FullPathName) = ':memory:'
       self._filesize = self._bufferend
     Else
-      result = DosFindFirstFile(self.FullPathName,address(rdata))
-      If result <> dos:INVALID_HANDLE_VALUE
+      handle = DosFindFirstFile(self.FullPathName,address(rdata))
+      If handle <> dos:INVALID_HANDLE_VALUE
         self._filesize = rData.nFileSizeHigh * MAXULONG + rData.nFileSizeLow
+        DosFindClose(handle)
       Else
         do SetErr   ! failed
         self.trace('ERROR: dos:INVALID_HANDLE_VALUE [' & self.FullPathName & '] ' &  DosGetLastError() & ' ' & ErrMess)
@@ -816,8 +868,9 @@ rData                       like(dos:_WIN32_FIND_DATAA)
       result = dosGetFileSizeEx(self._hfile,siz)
       If result = 0
         do SetErr   ! failed
+      Else
+        self._filesize = siz.hi * MAXULONG + siz.lo
       End
-      self._filesize = siz.hi * MAXULONG + siz.lo
     Else
       self._Filesize = self._bufferend
     End
@@ -825,9 +878,11 @@ rData                       like(dos:_WIN32_FIND_DATAA)
   Return self._filesize
 
 SetErr  routine
-  result = DosFormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,0,DosGetLastError(),0,ErrMess,size(ErrMess),0)
-  self.SetFileError(DosGetLastError(),ErrMess)
+  LastErr = DosGetLastError()
+  result = DosFormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,0,LastErr,0,ErrMess,size(ErrMess),0)
+  self.SetFileError(LastErr,ErrMess)
   self.SetError(FileSystemErr)
+  self._filesize = 0
 
 !-----------------------------------------------------------------
 DriverFileDos2Class.FLUSH            PROCEDURE()
@@ -845,7 +900,7 @@ DriverFileDos2Class.FREEBUFFER  PROCEDURE()
   self._buffersize = 0
   self._bufferstart = 0
   self._bufferend = 0
-  self._bufferwholefile = FALSE
+  self._bufferwholefile = False
   Return
 
 !-----------------------------------------------------------------
@@ -903,25 +958,43 @@ DriverFileDos2Class.GET              PROCEDURE(KEY pkeyLabel, BIGINT pKeyPointer
 
 !-----------------------------------------------------------------
 DriverFileDos2Class.GETSTATE               Procedure(Long pSaveBlob)
-len  Long,Auto
-i    Long,Auto
-e    Long,Auto
+len       Long,Auto
+StateNum  Long,Auto
   Code
-  e = errorcode()
-  i = parent.GetState(pSaveBlob)   ! creates a new state record
+  StateNum = parent.GetState(pSaveBlob)   ! creates a new state record
+  If Errorcode() = NoMemErr or StateNum = 0
+    If StateNum
+      self.FreeState(StateNum)
+    End
+    Return 0
+  End
+  PushErrors()
   ! object properties
   len = address(self.__DOSSTATEEND) - address(self.__DOSSTATESTART)
   Dispose(self.State.Level2)
   self.State.Level2 &= new String(len)
+  If self.State.Level2 &= Null
+    self.FreeState(StateNum)
+    PopErrors()
+    self.SetError(NoMemErr)
+    Return 0
+  End
   MemCpy(address(self.State.Level2),address(self.__DOSSTATESTART),len)
   ! object pointers
   If not self._buffer &= null
     self.State._buffer &= New String(size(self._buffer))
+    If self.State._buffer &= Null
+      Dispose(self.State.Level2)
+      self.FreeState(StateNum)
+      PopErrors()
+      self.SetError(NoMemErr)
+      Return 0
+    End
     MemCpy(address(self.State._buffer),address(self._buffer),size(self._buffer))
   End
   Put(self.State)
-  self.SetError(e)      ! GetState should not alter errorcode.
-  Return i
+  PopErrors()
+  Return StateNum
 
 !-----------------------------------------------------------------
 DriverFileDos2Class.LOCK             PROCEDURE(LONG pSeconds)
@@ -946,13 +1019,20 @@ e  Long,auto
   Return
 
 !-----------------------------------------------------------------
+DriverFileDos2Class._SET             PROCEDURE(Byte pSetMethod, BigInt pPointer,Key pSetKey, Key pSetKeyKey)
+  code
+  Parent._Set(pSetMethod,pPointer,pSetKey,pSetKeyKey)
+  self._FileSize = self.FileSize()
+  Return
+
+!-----------------------------------------------------------------
 ! reads the next block out of the buffer. If the buffer is exhausted then toss it, and
 ! load a new buffer
 DriverFileDos2Class.NEXT             PROCEDURE()! !
   Code
   Self._BeforeRead(Opcode:Next)
   If Errorcode() then Return.
-  If self.FileSize() = 0 or Self.SetMethod = driver:NotSet
+  If self._FileSize = 0 or Self.SetMethod = driver:NotSet
     self.SetError(BadRecErr)
     self._bytes = 0
     self._bof = true
@@ -970,7 +1050,7 @@ DriverFileDos2Class.NEXT             PROCEDURE()! !
     End
   ElsIf self._justset = false
     self.SetPointer += self._SourceSize()
-  else
+  Else
     self.SetPointer = self.SetPointer
     self._justset = false
   End
@@ -1038,6 +1118,10 @@ len  Long,Auto
   Dispose(self._buffer)
   If not self.state._buffer &= null
     self._buffer &= New String(size(self.state._buffer))
+    If self._buffer &= null
+      Self.SetError(NoMemErr)
+      Return
+    End
     MemCpy(address(self._buffer),address(self.state._buffer),size(self.state._buffer))
   End
   Return
@@ -1057,6 +1141,7 @@ Opened             byte
   If lower(self.FullPathName) = ':memory:'
     ! DOS2 driver supports threaded in-memory file. Data is not shared across threads. In ram, so Ram-size limited.
     self._MemoryTable = true
+    Opened = true
     self._opened = true
     self.Buffer(Driver:BufferWholeFile)
     self._hFile = dos:MEMORYTABLE
@@ -1099,7 +1184,7 @@ DriverFileDos2Class.PREVIOUS         PROCEDURE()! !
   Self._BeforeRead(Opcode:PREVIOUS)
   If Errorcode() then Return.
 
-  If self.FileSize() = 0 or (self._filesize - self._SourceSize() < 0)  or |  ! file is too small for a full record
+  If self._FileSize = 0 or (self._filesize - self._SourceSize() < 0)  or |  ! file is too small for a full record
     self.SetPointer > 0 and self.SetPointer < self._SourceSize()  or |       ! pointer is less than record size
     Self.SetMethod = driver:NotSet
     ! previous will read before the start of the file, so fail.

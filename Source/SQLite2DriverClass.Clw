@@ -26,7 +26,6 @@
         sqlite3_bind_double  (Long pStmt, Long pParm, Real pValue),Long,C,Raw,name('sqlite3_bind_double')   ,dll(1)
         sqlite3_bind_null    (Long pStmt, Long pParm),Long,C,Raw,name('sqlite3_bind_null'),dll(1)
         sqlite3_bind_text    (Long pStmt, Long pParm,Long pAddress, Long pSize, Long pLife),Long,C,Raw,name('sqlite3_bind_text'),dll(1)
-        !sqlite3_bind_textA   (Long pStmt, Long pParm,*String pString, Long pSize, Long pLife),Long,C,Raw,name('sqlite3_bind_text'),dll(1)
         sqlite3_changes      (Long pHandle),long,C,raw,name('sqlite3_changes'),dll(1)
         sqlite3_total_changes(Long pHandle),long,C,raw,name('sqlite3_total_changes'),dll(1)
         sqlite3_step         (Long pStmt),Long,C,Raw,name('sqlite3_step'),dll(1)
@@ -668,24 +667,29 @@ colname       &cstring,Auto
 coltype       long,Auto
 Addr          BIGINT,Auto
 Len           BIGINT,Auto
+ColNumber     Long,Auto ! counting up fields in the destination record when matching by number, ignoring Group and Over.
   code
   row = pResult.IncrementRowNumber()
+  ColNumber = 1
   Loop column = 1 to pColumns
     sqcol = column - 1
     If row = 1
       colname &= sqlite3_column_name(pStmt,sqcol)
       If not colname &= null
         pResult.SetColumnName(column,colname)
-        If self.opt:dummy = false
+        If self.opt:dummy = false and self._MatchByNumber = false
           If self._WithFieldNamed(colname) = Driver:ok
-            pResult.SetColumnIndex(column,self.fields.Index)
+            pResult.SetColumnIndex(column,self.fields.Index) ! explicitly matching by name, don't want it to fall back on match by number here.
           End
         Else
-          pResult.SetColumnIndex(column,column)
+          do SetColIndex    ! explicitly matching by number
         End
       Else
-        pResult.SetColumnIndex(column,column)
+        If self.opt:dummy = false and self._MatchByNumber = false
+          do SetColIndex    ! explicitly matching by number
+        End
       End
+      ColNumber += 1
     End
     coltype = sqlite3_column_type(pStmt,sqcol)
     Case coltype
@@ -715,6 +719,18 @@ Len           BIGINT,Auto
     End
   End
   Return
+
+SetColIndex  Routine
+  Loop
+    If Self._WithField(ColNumber) = driver:ok
+      If self.Fields.Type = ClaGROUP or self.Fields.Over
+        ColNumber += 1
+        Cycle
+      End
+    End
+    pResult.SetColumnIndex(column,ColNumber)
+    Break
+  End
 
 !-----------------------------------------------------------------
 ! in SQLite dates are stored as a text field in @d010- format.
@@ -805,7 +821,6 @@ ans     cstring(255)
 result  long,auto
 mode    string(20)
   Code
-  If self._logOptions then self.Log('[OPTN]' & clip(pOption) & ' =[' & clip(pValue & ']')).
   Case upper(pOption)
   of '/AUTOINC'       ! If the AUTOINCREMENT keyword appears after INTEGER PRIMARY KEY, that changes the automatic ROWID assignment algorithm to prevent the reuse of ROWIDs over the lifetime of the database.
                       ! In other words, the purpose of AUTOINCREMENT is to prevent the reuse of ROWIDs from previously deleted rows.  The AUTOINCREMENT keyword imposes extra CPU, memory, disk space, and
@@ -814,6 +829,7 @@ mode    string(20)
       do checkBoolean
       self.opt:AutoInc = pValue
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return self.opt:AutoInc
   of '/BUSYTIMEOUT'
     If pValue <> ''
@@ -822,27 +838,32 @@ mode    string(20)
         result = sqlite3_busy_timeout(self.dbHandle,self.opt:BusyTimeout * 1000)
       End
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return self.opt:BusyTimeout
   of '/NOPRIMARY'                ! There is no documentation as to what this does. In SQLite2 it adds WITHOUT ROWID to the CREATE statement.
     If pValue <> ''
       do checkBoolean
       self.opt:NoPrimary = pValue
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return self.opt:NoPrimary
   of '/USEPRIMARY'               ! There is no documentation on what this does.
     If pValue <> ''
       do checkBoolean
       self.opt:UsePrimary = pValue
     End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     Return self.opt:UsePrimary
   of '/WHERE'
     self.SetProp:Where(pValue)
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
     return self.GetProp:where()
   of '/WAL'
      If self.Owner = '' then return ''.
      If self.CheckConnect() = Driver:notok then return ''.
      mode = self.send('/pragma_journal_mode=WAL')
      self.send('/pragma_synchronous=NORMAL')
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
      return mode
   else
     If lower(sub(pOption,1,8)) = '/pragma_'
@@ -855,6 +876,7 @@ mode    string(20)
           ans = self.Result.GetCell(1,1)
         End
       End
+      If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
       Return ans
     End
   End
@@ -1646,8 +1668,9 @@ x            Long,Auto
   Loop x = 1 to Records(self.OrderQueue)                       ! Turn the OrderBy queue into SQLite SQL code.
     Get(self.OrderQueue,x)
     OrderBy.Append(self.OrderQueue.Clause,,',')
-    If self.OrderQueue.Nocase and self.orderqueue.IsString = true
-      OrderBy.Append(' COLLATE NOCASE')
+    If self.orderqueue.IsString = true and (self.OrderQueue.Binary or self.OrderQueue.Fieldcase = driver:Case)
+      !OrderBy.Append(' COLLATE BINARY')
+      !OrderBy.Append(' COLLATE NOCASE')
     End
     If self._setdirection = Opcode:NEXT
       If self.OrderQueue.Direction = driver:Descending
@@ -1667,12 +1690,6 @@ x            Long,Auto
   Return
 
 !-----------------------------------------------------------------
-! If the File is in paging mode, then in order to find the next page, all the order values need to be in the filter.
-! uses self.OrderQueue and prop:where as input, self.wherePage as output
-DriverFileSQLite2Class._AppendOrderQueueToWhere  Procedure()
-  code
-
-!-----------------------------------------------------------------
 ! called fromView and File, so avoid using Self.
 DriverFileSQLite2Class._BindParameters  Procedure(Long pStmt, DriverParmBufferClass pParmBuffer, Long pCodePage)
 x       Long,Auto
@@ -1682,14 +1699,16 @@ result  Long,Auto
 Len     Long,Auto
 Count   Long,Auto
 addr    Long,Auto
+rl      Real,Auto
+lg      Long,Auto
   code
   If self.ParameterQueue &= null then return driver:ok.
   If self._ParameterOpcode = 0 then return driver:ok.
   PushErrors()
-  If self._SearchParameter
-    If self._logBind then self.Log('[BIND][sb3]' & self._SearchParameter & ' (real)' & self.SearchRank).
-    result = sqlite3_bind_double(pStmt,self._SearchParameter,self.SearchRank)
-  End
+!  If self._SearchParameter
+!    If self._logBind then self.Log('[BIND][sb3]' & self._SearchParameter & ' (real)' & self.SearchRank).
+!    result = sqlite3_bind_double(pStmt,self._SearchParameter,self.SearchRank)
+!  End
   Loop y = 1 to Records(self.ParameterQueue)
     Get(self.ParameterQueue,y)
     Loop x = 1 to self.ParameterQueue.ParameterArrayIndex
@@ -1697,9 +1716,22 @@ addr    Long,Auto
       If not self.ParameterQueue.ParameterArray[x].Value &= null
         len = len(self.ParameterQueue.ParameterArray[x].Value)
         count = self.ParameterQueue.ParameterArray[x].Count
-        If self._logBind then self.Log('[BIND][sb4]' & self.ParameterQueue.ParameterArray[x].Count & ' (string)' & self.ParameterQueue.ParameterArray[x].Value).
-        pParmBuffer._SetParmBuffer(count,Address(self.ParameterQueue.ParameterArray[x].Value),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,pCodePage)
-        result = sqlite3_bind_text(pStmt,Count ,pParmBuffer.ParmBufferAddr[Count], pParmBuffer.ParmBufferLen[Count] ,SQLITE_STATIC)
+        case self.ParameterQueue.ParameterArray[x].Source
+        of ClaREAL
+          rl = self.ParameterQueue.ParameterArray[x].Value
+          If self._logBind then self.Log('[BIND][sb35]' & self.ParameterQueue.ParameterArray[x].Count & ' (real)' & rl).
+          pParmBuffer._SetParmBuffer(count,Address(rl),8, SQLITE_FLOAT, 0, 0, 0)
+          result = sqlite3_bind_double(pStmt,Count ,rl)
+        of ClaLong
+          lg = self.ParameterQueue.ParameterArray[x].Value
+          If self._logBind then self.Log('[BIND][sb36]' & self.ParameterQueue.ParameterArray[x].Count & ' (long)' & lg).
+          pParmBuffer._SetParmBuffer(count,Address(lg),4, SQLITE_INTEGER, 0, 0,0)
+          result = sqlite3_bind_int(pStmt,Count, lg)
+        Else
+          If self._logBind then self.Log('[BIND][sb4]' & self.ParameterQueue.ParameterArray[x].Count & ' (string)' & self.ParameterQueue.ParameterArray[x].Value).
+          pParmBuffer._SetParmBuffer(count,Address(self.ParameterQueue.ParameterArray[x].Value),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,pCodePage)
+          result = sqlite3_bind_text(pStmt,Count ,pParmBuffer.ParmBufferAddr[Count], pParmBuffer.ParmBufferLen[Count] ,SQLITE_STATIC)
+        End
       Elsif not self.ParameterQueue.ParameterArray[x].FieldNode &= null
         self.Fields &= self.ParameterQueue.ParameterArray[x].FieldNode
         case self.ParameterQueue.ParameterArray[x].Source
@@ -1791,7 +1823,7 @@ hi        Long
 
   code
   If self.null_(self.Fields.index) = true
-    If self._logBind then self.Log('[BIND][sb49]' & pCount & ' (null)').
+    If self._logBind then self.Log('[BIND][sb52]' & pCount & ' (null)').
     result = sqlite3_bind_null(pStmt,pCount)
     self.SetErrorSqlite(result,'[p077]')
     Return
@@ -1870,7 +1902,7 @@ hi        Long
       len = len(cstr)
       If self._logBind then self.Log('[BIND][sb18]' & pCount & ' (cstring(' & len & '))[' & cstr & ']').
       pParmBuffer._SetParmBuffer(pCount,pAddress,len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
-      result = sqlite3_bind_text(pStmt,pCount,pAddress, len,SQLITE_TRANSIENT)
+      result = sqlite3_bind_text(pStmt,pCount,pParmBuffer.ParmBufferAddr[pCount], pParmBuffer.ParmBufferLen[pCount] ,SQLITE_STATIC)
       self.SetErrorSqlite(result,'[p078]')
 
     Of ClaPSTRING
@@ -2068,7 +2100,7 @@ rTextLen      Long
         End
         self.SetBlobCrc()
         Put(self.blobs)
-      elsIf not self.BindQueue &= null
+      ElsIf not self.BindQueue &= null
         self.BindQueue.Name = upper(colname)
         PushErrors()
         Get(self.BindQueue,self.BindQueue.Name)
@@ -2088,7 +2120,7 @@ rTextLen      Long
         !!!todo match field by number, for dummy sql context.
         Self.trace('DriverFileSQLite2Class._ToRecord: Note: Incoming Field not found in structure: ' & colname)
       End
-      If errorcode() then break.
+      If ErrorCode() then break.
     End
   End
 
@@ -2112,6 +2144,8 @@ srl     SReal,Auto
 sh      Short,Auto
 ush     Ushort,Auto
 bt      Byte,Auto
+dt      Date,Auto
+tm      Time,Auto
 cst     Cstring(21),Auto  !bigint range is -9 223 372 036 854 775 808 -- 18 446 744 073 709 551 615
 len     Long,Auto
 strmem  String(36),Auto
@@ -2189,9 +2223,14 @@ utfstr  &string
 !endregion
 !region -     ClaDATE , ClaTIME
     of ClaDATE
-    orof ClaTIME
-      self.SetError(FieldMismatchErr)
-      self.SetFileError(FieldMismatchErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
+      dt = lg
+      memcpy(pClarionAddress,Address(dt),4)
+
+    of ClaTIME
+      tm = lg
+      memcpy(pClarionAddress,Address(tm),4)
+      !self.SetError(FieldMismatchErr)
+      !self.SetFileError(FieldMismatchErr,'Field: ' & clip(pFieldLabel) & ' SQL Type: ' & self.InterpretSQLType(pDbType) & '(' & pDbType & ')' & ' Clarion Type: ' & self.InterpretType(pClarionType) & '(' & pClarionType & ')' & ' value: ' & lg)
 !endregion
 !region -     ClaDECIMAL, ClaPDECIMAL
     of ClaDECIMAL
@@ -2892,7 +2931,7 @@ DriverFileSQLite2Class._CREATETABLE      PROCEDURE()
 col           Long  ,Auto
 x             Long  ,Auto
 primaryset    Byte
-primaryextra  Byte
+!primaryextra  Byte
 comma         Byte
 allSql        StringTheory
   Code
@@ -2909,19 +2948,19 @@ allSql        StringTheory
         primaryset = self.keys.component[1]
       End
     End
-    If self.keys.nocase
-      Loop x = 1 to self.Keys.components
-        If self._WithField(self.keys.component[x]) = driver:ok
-          case self.fields.Type
-          Of ClaSTRING
-          OrOf ClaCSTRING
-          OrOf ClaPSTRING
-            primaryextra = True
-            Break
-          End
-        End
-      End
-    End
+!    If self.keys.KeyCase = driver:Nocase
+!      Loop x = 1 to self.Keys.components
+!        If self._WithField(self.keys.component[x]) = driver:ok
+!          case self.fields.Type
+!          Of ClaSTRING
+!          OrOf ClaCSTRING
+!          OrOf ClaPSTRING
+!            primaryextra = True
+!            Break
+!          End
+!        End
+!      End
+!    End
   End
   ! now we need to create the table.
   self.SqlCode.SetValue('CREATE TABLE ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' (<13,10>' )
@@ -2941,7 +2980,7 @@ allSql        StringTheory
     ElsIf not self.Fields.Interface &= Null
       self.SqlCode.append(' ' & self.Fields.interface.GetSQLType())
     ElsIf self.Fields.DimProduct > 1
-      self.SqlCode.append(' TEXT')
+      self.SqlCode.append(' TEXT COLLATE BINARY')
     Else
       Case self.Fields.Type
       of ClaBYTE
@@ -2962,63 +3001,59 @@ allSql        StringTheory
         self.SqlCode.append(' REAL')
       of ClaCSTRING
         self.SqlCode.append(' TEXT')
-        If self.Fields.collate
-        ElsIf self.fields.FieldCase = driver:ForceNocase
-          self.SqlCode.append(' COLLATE NOCASE')
-        Else
-          case self.fields.InCase                       ! if -1 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
-          of true                                       ! is in a case sensitive key, so leave as case sensitive
-          of false                                      ! is in at least one case-insensitive key, and no case-insensitive keys, so make the default collation NoCase.
-            self.SqlCode.append(' COLLATE NOCASE')
-          of 255                                         ! strings not in any key,  default to leave it alone
-          End
-        End
       of ClaSTRING
         If self.Fields.SqlTimeStamp
           self.SqlCode.append(' DATETIME')    ! will affinity to Numeric, but useful to distinguish will be stored as yyyy-mm-ddThh:mm:ss.sss
+        Elsif self.Fields.uuid = 8
+          self.SqlCode.append(' TEXT')
         ElsIf self.Fields.Binary = true
           self.SqlCode.append(' BLOB')
         Else
           self.SqlCode.append(' TEXT')
-            ! SQLite doesn't allow for COLLATE NOCASE and RTRIM. There's also no database-wide default of Case Insensitive strings like say MsSql.
-            ! For strings in NOCASE keys, default to COLLATE NOCASE, for other strings default to RTRIM
-          If self.Fields.collate
-          ElsIf self.fields.FieldCase = driver:ForceNocase
-            self.SqlCode.append(' COLLATE NOCASE')
-          Else
-            case self.fields.InCase                       ! if -1 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
-            of true                                       ! is in a case sensitive key, so leave as case sensitive
-              self.SqlCode.append(' COLLATE RTRIM')
-            of false                                      ! is in at least one case-insensitive key, and no case-insensitive keys, so make the default collation NoCase.
-              self.SqlCode.append(' COLLATE NOCASE')
-            of 255                                         ! strings not in any key, default to RTRIM
-              self.SqlCode.append(' COLLATE RTRIM')
-            End
-          End
         End
       of ClaPSTRING
         If self.Fields.Binary = true
           self.SqlCode.append(' BLOB')
         Else
           self.SqlCode.append(' TEXT')
-          If self.Fields.collate
-          ElsIf self.fields.FieldCase = driver:ForceNocase
-            self.SqlCode.append(' COLLATE NOCASE')
+        End
+      End
+    End
+    If self.Fields.Collate
+      self.SqlCode.append(' COLLATE ' & self.Fields.Collate)
+    Else
+      case self.Fields.Type
+      of ClaString
+      orof ClaPString
+      orof ClaCString
+        If self.fields.binary or self.Fields.SqlTimeStamp or self.Fields.uuid = 8
+          self.SqlCode.append(' COLLATE BINARY')
+        ElsIf self.fields.fieldcase = driver:NoCase
+          self.SqlCode.append(' COLLATE NOCASE')
+        ElsIf self.fields.fieldcase = driver:Case
+          case self.Fields.Type
+          of ClaCString
+            self.SqlCode.append(' COLLATE BINARY') ! CString can't really store a binary value, as no nulls, but this means "not rtrim, not nocase".
           Else
-            case self.fields.InCase                       ! if -1 then not in any key. If true then in a Case Sensitive key. If False then in a non-sensitive key
-            of true                                       ! is in a case sensitive key, so leave as case sensitive
-            of false                                      ! is in at least one case-insensitive key, and no case-insensitive keys, so make the default collation NoCase.
-              self.SqlCode.append(' COLLATE NOCASE')
-            of 255                                        ! strings not in any key, default to leave it alone
+            self.SqlCode.append(' COLLATE RTRIM')  ! basically binary, with clipped spaces
+          End
+        Else ! no collate, binary, case or nocase setting at field level, so infer from use in keys
+          If self.fields.InCaseKey
+            case self.Fields.Type
+            of ClaCString
+              self.SqlCode.append(' COLLATE BINARY') ! CString can't really store a binary value, as no nulls, but this means "not rtrim, not nocase".
+            Else
+              self.SqlCode.append(' COLLATE RTRIM')  ! basically binary, with clipped spaces
             End
+          ElsIf self.fields.InNocaseKey = true
+            self.SqlCode.append(' COLLATE NOCASE')
+          Else  ! no clues anywhere, default to NOCASE
+            self.SqlCode.append(' COLLATE NOCASE')
           End
         End
       End
     End
     self._CreateValidation()
-    If self.Fields.Collate
-      self.SqlCode.append(' COLLATE ' & self.Fields.Collate)
-    End
     self._CreateDefault(self.Fields.HasDefault, self.Fields.Type, Self.Fields.DefaultValue)
     If self.Fields.index = primaryset
       If self.opt:autoInc !or self.Fields.IsIdentity
@@ -3034,11 +3069,23 @@ allSql        StringTheory
     If comma
       self.SqlCode.append(',<13,10>')
     End
-    If self.blobs.Binary = false
-      self.SqlCode.append(self.blobs.column & ' TEXT COLLATE RTRIM')
+    If self.blobs.Binary
+      self.SqlCode.append(self.blobs.column & ' BLOB')    ! Blobs are always collate binary, it's implied.
     Else
-      self.SqlCode.append(self.blobs.column & ' BLOB')
+      self.SqlCode.append(self.blobs.column & ' TEXT')
+      If self.Blobs.Collate
+        self.SqlCode.append(' COLLATE ' & self.Blobs.Collate)
+      Else
+        If self.Blobs.fieldcase = driver:NoCase
+          self.SqlCode.append(' COLLATE NOCASE')
+        ElsIf self.fields.fieldcase = driver:Case
+          self.SqlCode.append(' COLLATE RTRIM')  ! basically binary, with clipped spaces
+        Else
+          self.SqlCode.append(' COLLATE RTRIM')  ! Memos are not typically used in filters or sorts, so this default saves space.
+        End
+      End
     End
+
     If self.blobs.NotNull
       self.SqlCode.append(' NOT NULL')
     End
@@ -3072,11 +3119,11 @@ allSql        StringTheory
   End
   AllSql.SetValue(self.SqlCode)
 
-  ! non-primary keys  and indexes
+  ! non-primary keys and indexes
   Loop x = 1 to Records(self.keys)
     Get(self.keys,x)
     If self.keys.type = Cla_DynIndex then cycle.
-    If self.keys.primary and primaryextra = false then cycle.
+    If self.keys.primary then cycle.
     self._ConstructKey(false)
     self.SqlCode.append(';<13,10>')
     If self._executeSql() = Driver:notok
@@ -3085,6 +3132,41 @@ allSql        StringTheory
     AllSql.Append(self.SqlCode)
   End
   self.SqlCode.SetValue(allSql)
+  Return
+
+!-----------------------------------------------------------------
+!-----------------------------------------------------------------
+! This follows the rules as defined for the SQLite driver.
+! https://www.capesoft.com/docs/Driverkit/ClarionObjectBasedDrivers.htm#sqlite2createcollate
+!!! derive
+DriverFileSQLite2Class._SetCollateCase    Procedure(FieldGroupType pNode)
+  code
+  ! rule #1
+  If pNode.Collate
+    Return
+  End
+  ! rule #2, #3
+  If pNode.Binary or pNode.SqlTimeStamp or pNode.uuid = 8
+    pNode.collatecase = driver:Case
+    Return
+  End
+  ! rule #4
+  If pNode.fieldcase = driver:NoCase
+    pNode.collatecase = driver:NoCase
+    Return
+  End
+  ! rule #5
+  If pNode.fieldcase = driver:Case
+    pNode.collatecase = driver:Case
+    Return
+  End
+  ! rule #6, #7
+  If pNode.InCaseKey
+    pNode.collatecase = driver:Case
+    Return
+  End
+  ! rule #8, #9
+  pNode.collatecase = driver:NoCase
   Return
 
 !-----------------------------------------------------------------
@@ -3139,10 +3221,18 @@ AddFieldToKey  routine
     Case self.Fields.Type
     of ClaSTRING
     orof ClaCSTRING
-    orof ClaPSTRING    ! ok, so SQLite doesn't support PString, but if this code is cloned for another driver....
-      If self.fields.binary
-      ElsIf self.keys.nocase
-        self.SqlCode.Append(' COLLATE NOCASE')
+    orof ClaPSTRING
+      case self.keys.KeyCase
+      of driver:Nocase
+        If self.fields.SqlTimeStamp or self.fields.uuid ! these are always BINARY
+        ElsIf self.fields.collateCase = driver:case
+          self.SqlCode.Append(' COLLATE NOCASE')
+        End
+      of driver:Case
+        If self.fields.SqlTimeStamp or self.fields.uuid ! these are always BINARY anyway
+        ElsIf self.fields.collateCase = driver:Nocase
+          self.SqlCode.Append(' COLLATE BINARY')
+        End
       End
     End
     If self.keys.descending[col]
@@ -3151,7 +3241,6 @@ AddFieldToKey  routine
       self.SqlCode.Append(' ASC')
     End
   End
-
 
 !-----------------------------------------------------------------
 !!!todo CreateField(field)
@@ -3198,12 +3287,12 @@ x       Long
   Code
   If self.CheckConnect() = driver:notok then Return driver:notok.
 
-  self.SqlCode.SetValue('Select sql from sqlite_master where type = ''table'' and name = '''& self._sanitize(self.FullPathName,driver:sqlTable) &''';')
+  self.SqlCode.SetValue('SELECT sql FROM sqlite_master WHERE type = ''table'' AND name = '''& self._sanitize(self.FullPathName,driver:sqlTable) &''';')
   If self._executeSql() = driver:ok
     ans.SetValue(self.result.GetCell(1,1))
     If Band(pOptions,driver:keys)
       AllSql.SetValue(self.SqlCode)
-      self.SqlCode.SetValue('Select sql from sqlite_master where type = ''index'' and tbl_name = '''& self._sanitize(self.FullPathName,driver:sqlTable) &''';')
+      self.SqlCode.SetValue('SELECT sql FROM sqlite_master WHERE type = ''index'' AND tbl_name = '''& self._sanitize(self.FullPathName,driver:sqlTable) &''';')
       If self._executeSql() = driver:ok
         AllSql.Append(self.SqlCode,,'<13,10>')
         Loop x = 1 to self.Result.Rows()
@@ -3549,7 +3638,10 @@ DriverFileSQLite2Class.ValidateStructure   PROCEDURE()
 nextfield         Byte,Auto
 x                 Long,Auto
 y                 Long,Auto
+z                 Long,Auto
+Collate           Long,Auto
 saveSqlTimeStamp  Like(self.fields.SqlTimeStamp),Auto
+lne               StringTheory
 dbg               CString(255),Auto
   Code
   If self.opt:TurboSQL then Return Driver:ok.
@@ -3872,9 +3964,15 @@ result  long,auto
   Return
 
 !-----------------------------------------------------------------
+! Most databases treat a higher as better. However SQLite treats lower as better
+DriverFileSQLite2Class._GetSearchRankDirection  Procedure()
+  code
+  Return driver:Ascending
+
+!-----------------------------------------------------------------
 DriverFileSQLite2Class.SEARCH                     Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>)
 FtsName       Cstring(255),Auto
-!SearchString  cString(255),Auto
+SearchString  Cstring(255),Auto
 fields        StringTheory
 join          StringTheory
 x             Long,Auto
@@ -3889,7 +3987,6 @@ x             Long,Auto
   End
   If self._ValidateSearchTable() = Driver:ok
     FtsName = self.FullPathName  & '_fts'
-    !SearchString = self.TranslateSearch(pSearchString)
     If self._ProjectClauses &= null
       self._ProjectClauses &= new StringTheory
     End
@@ -3904,9 +4001,21 @@ x             Long,Auto
       End
     End
     self._SearchJoin = ' JOIN ' & FtsName & ' fts ON ' & Join.GetValue()
-    self.SetProp:Search(self.TranslateSearch(pSearchString))
-    self.SearchFilter = self.FullPathName & '_fts SEARCH( ''' & self.Search & ''')'
-    ! Because the SEARCH function is tokenised, there's no need to bind the parameter - that's done by DriverBaseClass._ExpandToken
+    self._SearchExpression = self.TranslateSearch(pSearchString)  ! returns a single token for the search expression
+
+    ! now expand it, because the expanded form goes into the _fts SEARCH
+    SearchString = self._ExpandExpression(self._SearchExpression)  ! ? or ?1 or whatever is appropriate for this driver.
+
+    !self.SearchFilter = self.FullPathName & '_fts SEARCH( ''' & self.Search & ''')'
+    self.SearchFilter = self.FullPathName & '_fts MATCH(' & SearchString & ')'
+
+    ! Because the SEARCH function is tokenised, there's no need to bind the parameter - that's done by DriverBaseClass._ExpandToken later on when the filter is parsed.
+
+    ! now expand it again, but this time without substituting the Values for Parameters.
+    self._ParseContext = driver:searchtext
+    SearchString = self._ExpandExpression(self._SearchExpression)
+    self._ParseContext = 0
+    self.SetProp:Search(SearchString)              ! sets self.search
 
     self._SearchOrderClause = 'rank_fts'
     self.BindField('rank_fts',self.SearchRank)
@@ -3939,31 +4048,31 @@ DriverFileSQLite2Class.TranslateReserved       PROCEDURE(*cstring pColumn)
     Return pColumn
   End
 
-!-----------------------------------------------------------------
-! In SQLITE the operators in the MATCH command are Case sensitive. hence AND, OR, NOT
-! NOT operators should come after earlier operators
-DriverFileSQLite2Class.TranslateSearch  Procedure(String pSearchString)
-str   StringTheory
-  code
-  str.Setvalue(left(pSearchString),st:clip)
-  str.Replace('and not',' NOT ',0,1,0,false)
-  str.Replace('or not',' NOT ',0,1,0,false)
-  str.Replace('and',' AND ',0,1,0,false)
-  str.Replace('or',' OR ',0,1,0,false)
-  str.Replace('not',' NOT ',0,1,0,false)
-  str.Replace('+',' AND ')
-  str.Replace('&&',' AND ')
-  str.Replace('&',' AND ')
-  str.Replace('-',' NOT ')
-  str.Replace('!',' NOT ')
-  str.Replace('~',' NOT ')
-  str.Replace('||',' OR ')
-  str.Replace('|',' OR ')
-  If str.startswith(' OR ') then str.Top(4).
-  If str.startswith(' AND ') then str.Top(5).
-  If str.startswith(' NOT ') then str.Top(5).
-  str.Replace('  ',' ',0,1,0,0,1)
-  Return str.GetValue()
+!!-----------------------------------------------------------------
+!! In SQLITE the operators in the MATCH command are Case sensitive. hence AND, OR, NOT
+!! NOT operators should come after earlier operators
+!DriverFileSQLite2Class.TranslateSearch  Procedure(String pSearchString)
+!str   StringTheory
+!  code
+!  str.Setvalue(left(pSearchString),st:clip)
+!  str.Replace('and not',' NOT ',0,1,0,false)
+!  str.Replace('or not',' NOT ',0,1,0,false)
+!  str.Replace('and',' AND ',0,1,0,false)
+!  str.Replace('or',' OR ',0,1,0,false)
+!  str.Replace('not',' NOT ',0,1,0,false)
+!  str.Replace('+',' AND ')
+!  str.Replace('&&',' AND ')
+!  str.Replace('&',' AND ')
+!  str.Replace('-',' NOT ')
+!  str.Replace('!',' NOT ')
+!  str.Replace('~',' NOT ')
+!  str.Replace('||',' OR ')
+!  str.Replace('|',' OR ')
+!  If str.startswith(' OR ') then str.Top(4).
+!  If str.startswith(' AND ') then str.Top(5).
+!  If str.startswith(' NOT ') then str.Top(5).
+!  str.Replace('  ',' ',0,1,0,0,1)
+!  Return str.GetValue()
 
 !-----------------------------------------------------------------
 ! For SQLite, the Full Text Search is done with the help of a table, the fts table. This method makes sure the table exists.
@@ -4406,16 +4515,16 @@ Len       Long,Auto
 Result    Long,Auto
 Count     Long,Auto
 obj       &DriverFileSQLite2Class
+lg        Long,Auto
+rl        Real,Auto
   code
-  !self.trace('DriverViewSQLite2Class._BindParameters self.Files=' & self.Files)
   Loop x = 1 to self.Files
     obj &= (self.FileObject[x])
     If obj &= null
-      If self._SearchParameter
-        If self._logBind then self.Log('[BIND][sb46]' & self._SearchParameter & ' (real)' & self.SearchRank).
-        result = sqlite3_bind_double(pStmt,self._SearchParameter,self.SearchRank)
-      End
-
+      !If self._SearchParameter
+      !  If self._logBind then self.Log('[BIND][sb46]' & self._SearchParameter & ' (real)' & self.SearchRank).
+      !  result = sqlite3_bind_double(pStmt,self._SearchParameter,self.SearchRank)
+      !End
       Loop y = 1 to Records(self.ParameterQueue)
         Get(self.ParameterQueue,y)
         Loop z = 1 to self.ParameterQueue.ParameterArrayIndex
@@ -4423,9 +4532,20 @@ obj       &DriverFileSQLite2Class
           If not self.ParameterQueue.ParameterArray[z].Value &= null
             len = len(self.ParameterQueue.ParameterArray[z].Value)
             count = self.ParameterQueue.ParameterArray[z].Count
-            If self._logBind then self.Log('[BIND][sb48]' & self.ParameterQueue.ParameterArray[z].Count & ' (string(' & len & '))[' & self.ParameterQueue.ParameterArray[z].Value & ']').
-            self.ParmBufferX._SetParmBuffer(count,Address(self.ParameterQueue.ParameterArray[z].Value),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
-            result = sqlite3_bind_text(pStmt,Count ,self.ParmBufferX.ParmBufferAddr[Count], self.ParmBufferX.ParmBufferLen[Count] ,SQLITE_STATIC)
+            case self.ParameterQueue.ParameterArray[z].Source
+            of ClaLong
+              lg = self.ParameterQueue.ParameterArray[z].Value
+              If self._logBind then self.Log('[BIND][sb48]' & self.ParameterQueue.ParameterArray[z].Count & ' (long)[' & lg & ']').
+              result = sqlite3_bind_int(pStmt,Count , lg)
+            of ClaReal
+              rl = self.SearchRank !self.ParameterQueue.ParameterArray[z].Value
+              If self._logBind then self.Log('[BIND][sb49]' & self.ParameterQueue.ParameterArray[z].Count & ' (real)[' & rl & ']').
+              result = sqlite3_bind_double(pStmt,Count ,rl)
+            of ClaString
+              If self._logBind then self.Log('[BIND][sb50]' & self.ParameterQueue.ParameterArray[z].Count & ' (string(' & len & '))[' & self.ParameterQueue.ParameterArray[z].Value & ']').
+              self.ParmBufferX._SetParmBuffer(count,Address(self.ParameterQueue.ParameterArray[z].Value),Len, SQLITE_TEXT, 0, driver:AnsiToUtf8+driver:Dispose,self.codepage)
+              result = sqlite3_bind_text(pStmt,Count ,self.ParmBufferX.ParmBufferAddr[Count], self.ParmBufferX.ParmBufferLen[Count] ,SQLITE_STATIC)
+            End
           End
         End
       End
@@ -4450,9 +4570,9 @@ x            Long,Auto
   Loop x = 1 to Records(self.OrderQueue)                                                 ! Turn the OrderBy queue into SQLite SQL code.
     Get(self.OrderQueue,x)
     OrderBy.Append(self.OrderQueue.Clause,,',')
-    If self.OrderQueue.Nocase and self.orderqueue.IsString = true
-      OrderBy.Append(' COLLATE NOCASE')
-    End
+    !If self.orderqueue.IsString = true and (self.OrderQueue.Binary or self.OrderQueue.Fieldcase = driver:Case)
+      !OrderBy.Append(' COLLATE BINARY')
+    !End
     If self._setdirection = Opcode:NEXT
       If self.OrderQueue.Direction = driver:Descending
         OrderBy.Append(' DESC')
@@ -4474,7 +4594,7 @@ x            Long,Auto
 ! If the View is in paging mode, then in order to find the next page, all the order values need to be in the filter.
 ! uses self.OrderQueue and prop:where as input, self.wherePage as output
 ! this sets parameters.
-DriverViewSQLite2Class._AppendOrderQueueToWhere  Procedure(*Long pCount)
+DriverViewSQLite2Class._AddOrderToWhere  Procedure(*Long pCount)
 x         Long                 ,Auto
 obj1      &DriverFileSQLClass ! ,Auto
 obj       &DriverFileSQLClass  !,Auto
@@ -4524,14 +4644,11 @@ thisparm  Cstring(7)
       End
       self._pagingfieldsadded += 1
       orc.append(self.OrderQueue.Clause & ' = ' & thisparm & nocase ,st:noclip,' AND ')
-      self._SearchParameter = self._ParameterCount
+      Clear(self.SearchRank,-1) ! in SQLite lower is better
+      self._SetParameterValue(self._ParameterCount,self.SearchRank,ClaReal)  ! SearchRankType for SQLite is REAL
     ElsIf obj._WithField(self.OrderQueue.FieldIndex) = driver:ok
       nocase = ''
-      If self.OrderQueue.Nocase
-        Case obj.Fields.Type
-        of ClaSTRING orof ClaPSTRING orof ClaCSTRING
-          nocase = ' COLLATE NOCASE'
-        End
+      If self.orderqueue.IsString = true and (self.OrderQueue.Binary or self.OrderQueue.Fieldcase = driver:Case)
       End
       obj._ParameterOpcode = Opcode:SET
       obj._SetParameterNode(self._ParameterCount,obj.fields,driver:FromShadow,0)
@@ -4598,6 +4715,7 @@ result  Long,Auto
 DriverViewSQLite2Class.Search                    Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>)
 obj              &DriverFileSQLite2Class,Auto
 linkfields       StringTheory
+SearchString     Cstring(255)
 x                Long,Auto
   code
   obj &= (self.FileObject[1])
@@ -4631,16 +4749,29 @@ x                Long,Auto
         self.node.Children.LinkingExpr =  linkfields.GetValue()
       End
       Add(self.node.Children)
-
     End
     self.ProjectField('bm25(' & obj.FullPathName & '_fts)','rank_fts')
-    self.BindField('rank_fts',self.SearchRank)
   End
+  self._SearchExpression = obj.TranslateSearch(pSearchString)  ! returns a single token for the search expression
+
+  ! now expand it, because the expanded form goes into the _fts SEARCH
+  SearchString = obj._ExpandExpression(self._SearchExpression)  ! ?1
+  self.SearchFilter = obj.FullPathName & '_fts MATCH(' & SearchString & ')'
+
+  ! Because the SEARCH function is tokenised, there's no need to bind the parameter - that's done by DriverBaseClass._ExpandToken later on when the filter is parsed.
+
+  ! now expand it again, but this time without substituting the Values for Parameters.
+  obj._ParseContext = driver:searchtext
+  SearchString = obj._ExpandExpression(self._SearchExpression)
+
+  self._ParseContext = 0
+  self.SetProp:Search(SearchString)              ! sets self.search
+  self._ParameterCount = obj._ParameterCount
+
   self._JustSetSearch = true
   self._SearchOrderClause = 'rank_fts'
-  self.SetProp:Search(obj.TranslateSearch(pSearchString))
-  self.SearchFilter = obj.FullPathName & '_fts SEARCH(''' & self.search & ''')'  ! if the SEARCH is a "second call" then just update the filter.
-  ! Because the SEARCH function is tokenised, there's no need to bind the parameter - that's done by DriverBaseClass._ExpandToken
+  self.BindField('rank_fts',self.SearchRank)
+
   Return
 
 !-----------------------------------------------------------------
@@ -4703,6 +4834,11 @@ result  Long,Auto
 DriverViewSQLite2Class._GenParm                PROCEDURE(Long pCount)
   code
   Return '?' & pCount
+!-----------------------------------------------------------------
+! Most databases treat a higher as better. However SQLite treats lower as better
+DriverViewSQLite2Class._GetSearchRankDirection  Procedure()
+  code
+  Return driver:Ascending
 !-----------------------------------------------------------------
 
 !!-----------------------------------------------------------------

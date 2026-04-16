@@ -216,6 +216,7 @@ _SetDefaultPragmas          Procedure(),Virtual
 ReplaceObject               Procedure(Long pOldObjectAddress),Derived
 ValidateStructure           Procedure(),Long,Derived
 _GetCollation               Procedure(Long pIndex),String,Derived           ! get the collation name for the database
+_SetCollateCase             Procedure(FieldGroupType pNode),Derived
 _CreateDefault              Procedure(Long pHasDefault, Long pType, String pDefault),Derived
 _ValidateSearchTable        Procedure(),Long,VIRTUAL
 _CreateFTS                  Procedure(),Long,VIRTUAL
@@ -233,6 +234,7 @@ _ExecuteSqlWork             Procedure(Long pStmt),Long,Virtual
 
 _ClearStmts                 Procedure(),Virtual
 _GetDBVersion               Procedure(),Virtual
+_GetSearchRankDirection     Procedure(),Byte,Derived
 _GenParm                    Procedure(Long pCount),String,Derived
 _AddSQL                     Procedure(Long pOpcode),Long,Virtual
 _ClaimSQL                   Procedure(? pFIELD, ? pNewValue),Long,Derived
@@ -267,10 +269,9 @@ _TranslateYearSQL           Procedure(*CString pField),String,Derived
 _TranslateLabelOverDateSQL  Procedure(FieldGroupType pNode),String,Derived
 _TranslateLabelOverTimeSQL  Procedure(FieldGroupType pNode),String,Derived
 TranslateReserved           Procedure(*cString pColumn),String,Derived
-TranslateSearch             Procedure(String pSearchString),String,Derived
+!TranslateSearch             Procedure(String pSearchString),String,Derived
 TranslateRegularExpression  Procedure(*CString pExpr,*CString pColumn),String,Derived
 _LoadArray                  Procedure(*String pStr,Long pIndex, Long pBuffer, Long pCanNull),Derived
-_AppendOrderQueueToWhere    Procedure(),Virtual
 SetOrderByFromQueue         Procedure(),Derived
 SetDriverOption             Procedure(String pOption, String pValue),String,Derived
 _ConstructKey               Procedure(Long pPrimary),Virtual
@@ -349,13 +350,14 @@ Construct                   Procedure()
 ExplainStart                Procedure(),String,Derived
 _BindParameters             Procedure(Long pStmt),Long,Virtual
 _GenParm                    Procedure(Long pCount),String,Derived
+_GetSearchRankDirection     Procedure(),Byte,Derived
 _ExecuteSelect              Procedure(),Derived
 CLOSE                       Procedure(),Derived
 SEARCH                      Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),Derived
 SET                         Procedure(Long pIndex),Derived
 _Set                        Procedure(Long pOpcode),Derived
 SetOrderByFromQueue         Procedure(),Derived
-_AppendOrderQueueToWhere    Procedure(*Long pCount),Derived
+_AddOrderToWhere            Procedure(*Long pCount),Derived
 CheckConnect                Procedure(),Long,Derived
 _Prepare                    Procedure(),Long,Virtual
 _ExecuteSql                 Procedure(),Long,Derived

@@ -2535,10 +2535,11 @@ nest        long
 ! _ExpandExpression can read any records from any of the queues. So if incoming pTokenString
 ! is a value from one of the queues, then it needs to be preserved and restored before calling this method.
 DriverBaseClass._ExpandExpression      Procedure(String pTokenString, <String pPrefix>,<String pSuffix>)
-x      long,auto
-i      long,auto
-ans    cstring(4096)              !!!todo think about replacing this with variable length
-ts     cstring(4096),auto
+x             Long,auto
+i             Long,auto
+ans           Cstring(4096)              !!!todo think about replacing this with variable length
+ts            Cstring(4096),auto
+LastTokenType String(1) !not auto
   code
   ts = pTokenString
   If pTokenString = '' then return ''.
@@ -2555,7 +2556,19 @@ ts     cstring(4096),auto
       End
       Break
     End
+    Case LastTokenType
+    Of token:label
+    Orof token:value
+      Case pTokenString[x]
+      Of token:Label
+      Orof token:value
+      Orof token:function
+        ans = ans & ' ' ! separate some tokens with spaces.
+      End
+    End
+    LastTokenType = pTokenString[x]
     ans = ans & self._ExpandToken(pTokenString,x)
+
     If x = 1 and not omitted(pPrefix) and pPrefix <> ''
       If ans[1] = ''''
         ans = '''' & clip(pPrefix) & sub(ans,2,len(ans))
@@ -16515,7 +16528,7 @@ adj   long
   If self._withNodeField(pIndex) = driver:ok
     adj = pIndex - self._FieldsOffset
     self.Node.name[adj] = pValue
-    put(self.Node)
+    Put(self.Node)
   End
   Return
 

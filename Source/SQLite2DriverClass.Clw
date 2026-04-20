@@ -1712,7 +1712,9 @@ lg      Long,Auto
   Loop y = 1 to Records(self.ParameterQueue)
     Get(self.ParameterQueue,y)
     Loop x = 1 to self.ParameterQueue.ParameterArrayIndex
-      If self.ParameterQueue.ParameterArray[x].OpCode <> self._ParameterOpcode then cycle.
+      If self.ParameterQueue.ParameterArray[x].OpCode <> self._ParameterOpcode
+        cycle
+      end
       If not self.ParameterQueue.ParameterArray[x].Value &= null
         len = len(self.ParameterQueue.ParameterArray[x].Value)
         count = self.ParameterQueue.ParameterArray[x].Count
@@ -4006,7 +4008,6 @@ x             Long,Auto
     ! now expand it, because the expanded form goes into the _fts SEARCH
     SearchString = self._ExpandExpression(self._SearchExpression)  ! ? or ?1 or whatever is appropriate for this driver.
 
-    !self.SearchFilter = self.FullPathName & '_fts SEARCH( ''' & self.Search & ''')'
     self.SearchFilter = self.FullPathName & '_fts MATCH(' & SearchString & ')'
 
     ! Because the SEARCH function is tokenised, there's no need to bind the parameter - that's done by DriverBaseClass._ExpandToken later on when the filter is parsed.
@@ -4607,10 +4608,10 @@ first     Byte
 thisparm  Cstring(7)
   code
   obj1 &= (self.FileObject[1])
-  if obj1 &= null then return.
+  If obj1 &= null then return.
   Loop x = 1 to Records(self.OrderQueue)
     Get(Self.OrderQueue,x)
-    If self.OrderQueue.fixed then cycle.
+    If self.OrderQueue.fixed then Cycle.
     If self.OrderQueue.FileIndex
       obj &= (self.FileObject[self.OrderQueue.FileIndex])
       if obj &= null
@@ -4633,7 +4634,6 @@ thisparm  Cstring(7)
       con = con & '='
     End
     self._ParameterCount += 1
-
     If obj &= null
       thisparm = obj1._genparm(self._ParameterCount)
       If first = false
@@ -4644,7 +4644,12 @@ thisparm  Cstring(7)
       End
       self._pagingfieldsadded += 1
       orc.append(self.OrderQueue.Clause & ' = ' & thisparm & nocase ,st:noclip,' AND ')
-      Clear(self.SearchRank,-1) ! in SQLite lower is better
+      case self._ParameterOpcode
+      of Opcode:NEXT
+        Clear(self.SearchRank,-1) ! in SQLite lower is better
+      of Opcode:PREVIOUS
+        Clear(self.SearchRank,1) ! in SQLite lower is better
+      End
       self._SetParameterValue(self._ParameterCount,self.SearchRank,ClaReal)  ! SearchRankType for SQLite is REAL
     ElsIf obj._WithField(self.OrderQueue.FieldIndex) = driver:ok
       nocase = ''
@@ -4712,10 +4717,10 @@ result  Long,Auto
   Return
 
 !-----------------------------------------------------------------
+! sets self.search and self._searchOrderClause
 DriverViewSQLite2Class.Search                    Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>)
 obj              &DriverFileSQLite2Class,Auto
 linkfields       StringTheory
-SearchString     Cstring(255)
 x                Long,Auto
   code
   obj &= (self.FileObject[1])
@@ -4752,26 +4757,33 @@ x                Long,Auto
     End
     self.ProjectField('bm25(' & obj.FullPathName & '_fts)','rank_fts')
   End
-  self._SearchExpression = obj.TranslateSearch(pSearchString)  ! returns a single token for the search expression
 
-  ! now expand it, because the expanded form goes into the _fts SEARCH
-  SearchString = obj._ExpandExpression(self._SearchExpression)  ! ?1
-  self.SearchFilter = obj.FullPathName & '_fts MATCH(' & SearchString & ')'
-
-  ! Because the SEARCH function is tokenised, there's no need to bind the parameter - that's done by DriverBaseClass._ExpandToken later on when the filter is parsed.
-
-  ! now expand it again, but this time without substituting the Values for Parameters.
-  obj._ParseContext = driver:searchtext
-  SearchString = obj._ExpandExpression(self._SearchExpression)
-
-  self._ParseContext = 0
-  self.SetProp:Search(SearchString)              ! sets self.search
-  self._ParameterCount = obj._ParameterCount
-
+  self.SetProp:Search(pSearchString)              ! sets self.search
   self._JustSetSearch = true
   self._SearchOrderClause = 'rank_fts'
   self.BindField('rank_fts',self.SearchRank)
+  Return
 
+!-----------------------------------------------------------------
+! the search term needs to be parameterised. This is done in the parent._SET
+! have access so self.search and self._SearchOrderClause
+DriverViewSQLite2Class._BuildSearch    Procedure(Long pOpcode)
+obj              &DriverFileSQLite2Class,Auto
+SearchString     Cstring(255)
+  code
+  obj &= (self.FileObject[1])
+
+  !self._SearchExpression = obj.TranslateSearch(self.GetProp:Search())  ! returns a single token for the search expression. Doesn't add parameter.
+  SearchString = obj.TranslateSearch(self.GetProp:Search())  ! returns a single token for the search expression. Doesn't add parameter.
+
+  ! now expand it, because the expanded form goes into the _fts SEARCH
+
+  obj._ParseContext = 0
+  obj._ParameterOpcode =  self._ParameterOpcode ! Next or Previous
+  !SearchString = obj._ExpandExpression(self._SearchExpression)  ! returns ?1. Adds the parameter (presumably parameter #1)
+  SearchString = obj._ExpandExpression(SearchString)  ! returns ?1. Adds the parameter (presumably parameter #1)
+  self.SearchFilter = obj.FullPathName & '_fts MATCH(' & SearchString & ')'
+  self._ParameterCount = obj._ParameterCount
   Return
 
 !-----------------------------------------------------------------

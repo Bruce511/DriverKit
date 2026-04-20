@@ -352,6 +352,7 @@ _BindParameters             Procedure(Long pStmt),Long,Virtual
 _GenParm                    Procedure(Long pCount),String,Derived
 _GetSearchRankDirection     Procedure(),Byte,Derived
 _ExecuteSelect              Procedure(),Derived
+_BuildSearch                Procedure(Long pOpcode),Derived
 CLOSE                       Procedure(),Derived
 SEARCH                      Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),Derived
 SET                         Procedure(Long pIndex),Derived

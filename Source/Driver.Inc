@@ -594,16 +594,16 @@ fld_num              Long                !   // field number in record structure
                    End
 
 Cla_KEYDESC        Group,Type
-pname                like(Cla_StrDesc)   ! // physical key name
-lname                like(Cla_StrDesc)   ! // label name for key
-rt_kdesc             long                ! void * ! // additional runtime key info
-key_attr             long                ! // attribute of key
-num_comps            byte                ! // number of components for key
-comps                long                !&Cla_KEYCOMP    ! // pointer to components
-parent               long                !&Cla_FCBBLK     ! // pointer to owning file
-padding1             byte
-padding2             byte
-padding3             byte
+pname                like(Cla_StrDesc)   ! // physical key name                            8
+lname                like(Cla_StrDesc)   ! // label name for key                           16
+rt_kdesc             long                ! void * ! // additional runtime key info         20
+key_attr             long                ! // attribute of key                             24
+num_comps            byte                ! // number of components for key                 25
+comps                long                !&Cla_KEYCOMP    ! // pointer to components       29
+parent               long                !&Cla_FCBBLK     ! // pointer to owning file      33
+padding1             byte                !                                                 34
+padding2             byte                !                                                 35
+padding3             byte                !                                                 36
                    End
 
 ! // key_attr flags

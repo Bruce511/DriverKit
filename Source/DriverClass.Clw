@@ -497,11 +497,13 @@ DriverBaseClass._GetString    Procedure(*Cla_StrDesc pStr)
 str     &String,auto
 a       Long,auto
 b       Byte,auto
+i long
   code
   If pStr.len = 0 then return ''.
   If pStr.len = -1
     Loop a = pStr.str to pStr.str + 255
       Peek(a,b)
+      i+= 1
       If b = 0
         Break
       End
@@ -3365,7 +3367,6 @@ ParseValue  routine
 !!!DERIVE
 DriverBaseClass._TranslateYearSQL   Procedure(*CString pField)
   code
-  self.trace('DriverBaseClass._TranslateYearSQL Not Expected here')
   Return ''
 
 !-----------------------------------------------------------------
@@ -5099,6 +5100,7 @@ Doparse    byte
 r          byte
   Code
 ! Point FILE and object at one another
+  !self.trace('DriverFileClass.INIT')
   If self._Inited = true and pForce = false then return.
   self.LoadLogging()
   self.file &= pFile
@@ -5117,7 +5119,7 @@ r          byte
   ! if this is the first time the object has been encountered then create unthreaded shared property space
   threaded = choose(band(self.ClaFCB.fil_attr,FILTHRD) > 0, true, false)
   If threaded = false or |                     ! if the file is not threaded, then just make the list if necessary
-                 Thread() = 1                       ! this is threaded, but this is thread 1, so just make the list if necessary
+            Thread() = 1                       ! this is threaded, but this is thread 1, so just make the list if necessary
     do checkShared
   Else   ! file is threaded, this is not on thread 1
     FileOne &= Instance(self.File,1)
@@ -5135,10 +5137,18 @@ r          byte
   !***
   ! Then apply the driver string for this table
   self.Send(self.DriverStr)
-
   ! this next line is problematic if the full path name is a variable, and it's set before the first table is initialised.
   !     Recommend Calling SetProp:Label instead
   !self.setProp:Label(0,self.FullPathName) ! UPPER of first 8 chars if no FullPathName set.
+
+! file attributes
+  self.SharedProperties.hasowner = choose(band(self.ClaFCB.fil_attr,FILOWN) > 0, true, false)
+  self.SharedProperties.encrypt  = choose(band(self.ClaFCB.fil_attr,FILCRYP) > 0, true, false)
+  self.SharedProperties.reclaim  = choose(band(self.ClaFCB.fil_attr,FILRECL) > 0, true, false)
+  self.SharedProperties.create   = choose(band(self.ClaFCB.fil_attr,FILCREA) > 0, true, false)
+  self.SharedProperties.threaded = choose(band(self.ClaFCB.fil_attr,FILTHRD) > 0, true, false)
+  self.SharedProperties.oem      = choose(band(self.ClaFCB.fil_attr,FILOEM) > 0, true, false)
+  self.SharedProperties.cdrom    = choose(band(self.ClaFCB.fil_attr,FILCD) > 0, true, false)
 
   self._FreeBlobs()
   self._FreeKeys()
@@ -5151,14 +5161,6 @@ r          byte
     self._nullstr &= New String(self.SharedProperties.FieldList.nodes)
     self._nullstr = all('+',size(self._nullstr))
   End
-! file attributes
-  self.SharedProperties.hasowner = choose(band(self.ClaFCB.fil_attr,FILOWN) > 0, true, false)
-  self.SharedProperties.encrypt  = choose(band(self.ClaFCB.fil_attr,FILCRYP) > 0, true, false)
-  self.SharedProperties.reclaim  = choose(band(self.ClaFCB.fil_attr,FILRECL) > 0, true, false)
-  self.SharedProperties.create   = choose(band(self.ClaFCB.fil_attr,FILCREA) > 0, true, false)
-  self.SharedProperties.threaded = choose(band(self.ClaFCB.fil_attr,FILTHRD) > 0, true, false)
-  self.SharedProperties.oem      = choose(band(self.ClaFCB.fil_attr,FILOEM) > 0, true, false)
-  self.SharedProperties.cdrom    = choose(band(self.ClaFCB.fil_attr,FILCD) > 0, true, false)
 
   self._optimize()
   self._inited = true
@@ -5507,7 +5509,8 @@ p            long,Auto
   Return
 
 !-----------------------------------------------------------------
-DriverFileClass._parseKeys    Procedure(Byte pIndex)
+!!!todo _ParseKeys GPF's when the file is not threaded, so INIT of the file fails to complete.
+DriverFileClass._parseKeys    Procedure(Byte pNumKeys)
 addr         &long
 DescRam      Group(Cla_KEYDESC),dim(255)
              End
@@ -5516,15 +5519,22 @@ x            long
 y            long
 p            long
 dbName       pString(254)  ! the name, as it is in the database. If from the label then prefix is included with _
-
+threaded     byte,Auto
+sizeKeyDesc  Long
   code
+  threaded = self.SharedProperties.threaded
+  If Threaded
+    sizeKeyDesc = size(Cla_KEYDESC)
+  Else
+    sizeKeyDesc = size(Cla_KEYDESC) + 4    !non-threaded file key appears to have extra data after Cla_KEYDESC. But it's not always 4 bytes.
+  End
   addr &= (self.ClaFCB.k_desc)
-  MemCpy(address(descram),addr,size(Cla_KEYDESC)*pIndex)
-  Loop x = 1 to pIndex
+  MemCpy(address(descram),addr,sizeKeyDesc*pNumKeys)
+  Loop x = 1 to pNumKeys
     clear(self.keys)
     self.keys.index = x
-    self.keys.keyptr = addr + (x-1) * size(Cla_KEYDESC)
-    desc =  descram[x]
+    self.keys.keyptr = addr + ((x-1) * sizeKeyDesc)
+    MemCpy(address(desc),address(descram) + ((x-1) * sizeKeyDesc), size(Cla_KEYDESC))
     dbname = ''
     self.keys.name  = self._GetString(desc.pname)  ! Contents of the KEYs NAME() attribute, or '' if there is no NAME() attribute.
     self.keys.label = self._GetString(desc.lname)
@@ -5545,7 +5555,6 @@ dbName       pString(254)  ! the name, as it is in the database. If from the lab
       End
     End
     self.keys.dbName = dbName
-
     self.keys.dup = Choose(band(desc.key_attr,Cla_Dup)=Cla_Dup,true,false)
     self.keys.opt = Choose(band(desc.key_attr,Cla_Opt)=Cla_Opt,true,false)
     self.keys.KeyCase = Choose(band(desc.key_attr,Cla_NoCase)=Cla_NoCase,driver:Nocase,driver:Case)
@@ -5562,7 +5571,6 @@ dbName       pString(254)  ! the name, as it is in the database. If from the lab
       self.keys.type = Cla_Key
     End
     If self.keys.type = Cla_Key and self.keys.primary then self.SharedProperties._PrimaryKeyIndex = x.
-
     MemCpy(address(self.keys.component),desc.comps,self.keys.components * 4)
     loop y = 1 to self.keys.components
       if self.keys.component[y] < 0
@@ -5570,7 +5578,7 @@ dbName       pString(254)  ! the name, as it is in the database. If from the lab
         self.keys.component[y] = abs(self.keys.component[y])
       end
     end
-    !self.trace('KEY: ' & self.keys.index & ' label=[' & self.keys.label & '] Name=' & self.keys.name & ' dup=' & self.keys.dup & ' opt=' & self.keys.opt & ' nocase=' & self.keys.nocase  & ' primary=' & self.keys.primary & ' components=' & self.keys.components & '(' & self.keys.component[1] & ','  & self.keys.component[2] & ',' & self.keys.component[3] & ',' & self.keys.component[4] & ',' & self.keys.component[5] &') type=' & self.keys.type & ' ptr=' & self.keys.keyptr)
+    !self.trace('KEY: ' & self.keys.index & ' label=[' & self.keys.label & '] Name=' & self.keys.name & ' dup=' & self.keys.dup & ' opt=' & self.keys.opt & ' keycase=' & self.keys.keycase  & ' primary=' & self.keys.primary & ' components=' & self.keys.components & '(' & self.keys.component[1] & ','  & self.keys.component[2] & ',' & self.keys.component[3] & ',' & self.keys.component[4] & ',' & self.keys.component[5] &') type=' & self.keys.type & ' ptr=' & self.keys.keyptr)
     Add(Self.Keys)
   End
   Return
@@ -6597,28 +6605,31 @@ x     Long,Auto
   str.Replace('"','''')
 
   ! Parse it into tokens so it can be manipulated
+  ! driver:searchterm; wraps quotes around labels, allows the AND operator, and allows * to be part of the "label" name.
   self.ParseProperty(str.GetValue(), driver:searchterm,str)     ! turns the labels into parameters
   ! do necessary manipulations
   Loop
-    If str.sub(1) = token:condition or str.sub(1) = token:operator
-      str.Top(6)                                                                                      !remove all leading operators or conditions
-    ElsIf str.sub(str.length() - 5) = token:condition or str.sub(str.length() - 5) = token:operator
-      str.Tail(6)                                                                                     !remove all trailing operators or conditions
+    If str.sub(1) = token:condition or str.sub(1) = token:operator                                    !remove all leading operators or conditions
+      str.Top(6)
+    ElsIf str.sub(str.length() - 5) = token:condition or str.sub(str.length() - 5) = token:operator   !remove all trailing operators or conditions
+      str.Tail(6)
     Else
       Break
     End
   End
 
   ! manipulation done, so move it back into a single string (ie a single token)
-  If str.Length() = 6
+  If str.Length() = 6                                                                                ! already a single token
+    self._ParseContext = 0
     Return str.GetValue()
   End
 
+  ! expand the expression, now using correct operators. Wrap a '' around it so it becomes a single "value".
+  ! driver:SearchText; supports (and requires) AND operator (not +). and doesn't add a parameter
   self._ParseContext = driver:searchtext
   str.SetValue('''' & self._ExpandExpression(str.GetValue()) & '''')
-  str.trace()
 
-  ! now push the single string into the token list so it can be a parameter
+  ! now push the single string into the token list, and the V0000 token is set as a parameter
   ! returns the token list for that one parameter
   self.ParseProperty(str.GetValue(), driver:searchparameter,str)
   self._ParseContext = 0
@@ -10222,45 +10233,51 @@ DriverFileClass._SET             PROCEDURE(Byte pSetMethod, BigInt pPointer,Key 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE()
   Code
+  self._SearchExpression = ''                                       ! Do NOT move this into _Set.
   self._Set(driver:SetFile,driver:SetBoundary,nullkey,nullkey)
   Return
 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE(Byte pSpacer=0,KEY pKey)
   Code
+  self._SearchExpression = ''
   self._Set(driver:SetFile,driver:SetBoundary,pKey,nullkey)
   Return
 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE(BIGINT pSetPointer)
   Code
+  self._SearchExpression = ''
   self._Set(driver:SetFile,pSetPointer,nullkey,nullkey)
   Return
 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE(KEY pKey)
   Code
+  self._SearchExpression = ''
   self._Set(driver:SetKey,0,pKey,nullkey)
   Return
 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE(KEY pKey, KEY pStart)
   Code
+  self._SearchExpression = ''
   self._Set(driver:SetKeyKey,0,pKey,pStart)
   Return
 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE(KEY pKey, BIGINT pSetPointer)
   Code
+  self._SearchExpression = ''
   self._Set(driver:SetKey,pSetPointer,pKey,nullkey)
   Return
 
 !-----------------------------------------------------------------
 DriverFileClass.SET              PROCEDURE(KEY pKey, KEY pStart, BIGINT pSetPointer)
   Code
+  self._SearchExpression = ''
   self._Set(driver:SetKeyKey,pSetPointer,pKey,pStart)
   Return
-
 
 !-----------------------------------------------------------------
 ! Union, Except and Intersect are interesting because they're sent to the wrong object. So when it comes in here
@@ -13407,7 +13424,7 @@ tok                 StringTheory
 
   Code
   self._ClearParameterQueue(Opcode:Set)
-  If self._SearchJoin
+  If self._SearchExpression
     If self._ExpandExpression(self._SearchExpression).
   End
   self._WhereParmNumber = 1
@@ -16844,7 +16861,8 @@ PutNode    byte
           Else
             usename = Clip(Left(pNode.name[y]))
           End
-          i = Instring(' AS ',upper(usename),1,1)
+          i = 0
+          !i = Instring(' AS ',upper(usename),1,1)
           If i
             expr = Sub(usename,1,i-1)
             as = true
@@ -17551,6 +17569,7 @@ ShadowBufferPrimed  Byte
     ElsIf self._JustReset = driver:BufferPrimed     ! The buffers are already primed from the Reset command.
     Else ! first time in.
       self._ClearOrderFieldsInShadowBuffer(pOpcode)
+      self._SetOffset = 0
     End
     self._justSet = false
     self._justReset = false
@@ -17708,20 +17727,31 @@ DriverViewSQLClass.SET                       Procedure(Long pIndex)
   self._SetOffset = 0
   If Errorcode() <> NoError then Return.
   self._ViewFixedFields = pIndex
+  self._SearchExpression = ''
   self._setdirection = 0
   self._justset = true
   Return
 
 !-----------------------------------------------------------------
 DriverViewSQLClass.AddFixedToOrderBy          Procedure()
-vff long
   code
+
+!-----------------------------------------------------------------
+DriverViewSQLClass._BuildSearch                  Procedure(Long pOpcode)
+  code
+  Return
+
 !-----------------------------------------------------------------
 DriverViewSQLClass._SET                       Procedure(Long pOpcode)
+obj              &DriverFileClass,Auto
   code
   self._setdirection = pOpcode
   self._ParameterOpcode = Opcode:SET
-  !self._ClearParameterQueue(Opcode:Set)
+  self._ClearParameterQueue(Opcode:Set)    ! was commented out, but that breaks Next / Previous direction changes
+  If not self.Search &= Null and self.Search <> ''
+    self._BuildSearch(pOpcode)
+  End
+  self._ParameterOpcode = Opcode:SET
   self.NewResultSet(driver:DontFreeRam)
   !!!todo make a list of the fields in the group by. Only these fields can be projected UNLESS the field has been aggregated in prop:name or prop:project
   If self._justset
@@ -17755,7 +17785,7 @@ DriverViewSQLClass._SET                       Procedure(Long pOpcode)
   If self.Limit = 0 and self.Paging = true and self._OrderHasCalc = false
     self._OrderParmNumber = self._ParameterCount
     self._AddOrderToWhere(self._ParameterCount)     ! Add the OrderBy fields to the where clause to create WherePage  ! parameters in here
-  else
+  Else
     self.setProp:WherePage('')
   End
   If Errorcode() then Return.

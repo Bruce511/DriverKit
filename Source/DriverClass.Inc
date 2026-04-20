@@ -896,7 +896,7 @@ _parseFieldsWalker       Procedure(*Long pAddr,Long pFields,*Long pIndex,Long pL
 _SetCollateCase          Procedure(FieldGroupType pNode),Virtual
 
 _parseBlobs              Procedure(Byte pIndex),VIRTUAL
-_parseKeys               Procedure(Byte pIndex),VIRTUAL
+_parseKeys               Procedure(Byte pNumKeys),VIRTUAL
 _parseKeyNameAttributes  Procedure(),VIRTUAL
 _parseBlobNameAttributes Procedure(),VIRTUAL
 _parseFieldNameAttributes Procedure(FieldGroupType pNode),VIRTUAL
@@ -1706,6 +1706,7 @@ _ClearDynamicProjects           Procedure(),Virtual
 _ClearDynamicProjectsWalker     Procedure(ViewTreeType pNode),Virtual
 _NextPrevious                   Procedure(Long pOpcode),Virtual
 InTransaction                   Procedure(),LONG,DERIVED
+_BuildSearch                    Procedure(Long pOpcode),Virtual
 
 CLEARPROPS                      Procedure(),Derived
 NEXT                            Procedure(),Derived

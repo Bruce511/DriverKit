@@ -247,18 +247,9 @@ DriverFileInMemory2Class.CONNECT             PROCEDURE(Long pOptions=0)
 ! Threaded databases will be destroyed by the DESTRUCT of the DriverInMemoryThread object
 ! Unthreaded databases exist forever, and will be cleaned up when the program closes.
 DriverFileInMemory2Class.DISCONNECT     PROCEDURE()!
-!result  Long,Auto
-!stmt    Long
   Code
-!  parent.Disconnect()
-!  If self.dbHandle
-!    If ConnectionPoolSQlite2.Disconnect(self.dbHandle) = true
-!      result = sqlite3_close(self.dbHandle)
-!      self.SetErrorSqlite(result,'[p115]')
-!    End
-!    self.dbHandle = 0
-!  End
   Return
+
 !-----------------------------------------------------------------
 ! no need for stream optimization in mem driver
 DriverFileInMemory2Class.STREAM           PROCEDURE()

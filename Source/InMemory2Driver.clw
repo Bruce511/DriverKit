@@ -225,6 +225,7 @@ DRIVER_HAS_TYPE             Equate(NO) !
 DRIVER_HAS_ULONG            Equate(YES) !  /* Unsigned 4 byte binary             */
 DRIVER_HAS_USHORT           Equate(YES) !  /* Unsigned 2 byte binary             */
 DRIVER_HAS_USIGNED          Equate(NO)  !
+DRIVER_HAS_USTRING          Equate(YES)  !
 
 ! These features make up the Attribute value in the DRVREG structure.
 ! Some of them are inherited from settings above, however any can be set any way the driver supports.
@@ -434,6 +435,7 @@ NUM_DRIVER_TYPES        Equate(|
                         + DRIVER_HAS_ULONG         |
                         + DRIVER_HAS_USHORT        |
                         + DRIVER_HAS_USIGNED       |
+                        + DRIVER_HAS_USTRING       |
                         )
 
 
@@ -602,6 +604,7 @@ TypeDescriptorMem2  String('' |
                 & chr(ClaULONG)         |
                 & chr(ClaUSHORT)        |
                 |& chr(ClaUNSIGNED)     |
+                & chr(ClaUSTRING)       |
                 & '<0>' )
 boundary2       string('CAPESOF2')
 

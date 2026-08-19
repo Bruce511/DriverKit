@@ -82,8 +82,16 @@ ERROR2               Procedure()
     Return 'The User or Password is incorrect'
   of ConnectionFailureErr
     Return 'Connection Failure'
+  of TooManyHooksErr         !Equate(148)   !  "Too many hooks"
+    Return 'Too many hooks'
+  of SQLParametersErr        !Equate(149)   !  Number of SQL() parameters does not match
+    Return 'Number of SQL() parameters does not match'
+  of SQLParametersReuseErr   !Equate(150)   !  "A SQL parameter is reused with a database that does not support it."
+    Return 'A SQL parameter is reused with a database that does not support it'
+  of SQLParametersGapErr     !Equate(151)   !  "The SQL has numbered parameters, but there are gaps in the numbers."
+    Return 'The SQL has numbered parameters, but there are gaps in the numbers'
   Else
-    Return ClaError()
+    Return clip(ClaError())
   End
 
 !------------------------------------------------------------------------------------------------
@@ -149,6 +157,19 @@ obj      &DriverFileClass
   End
   If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', cstring)').
   obj.BindField(pName,pCstring)
+  Return
+
+!------------------------------------------------------------------------------------------------
+BINDFIELD                 Procedure(FILE pFile,String pName, *Ustring pUstring)
+obj      &DriverFileClass
+  Code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]BINDFIELD(' & clip(pName) & ', ustring)').
+  obj.BindField(pName,pUstring)
   Return
 
 !------------------------------------------------------------------------------------------------
@@ -307,6 +328,19 @@ obj      &DriverFileClass
   Return
 
 !------------------------------------------------------------------------------------------------
+CLONE               Procedure(FILE pFile, String pNewTableName, Long pOptions)
+obj      &DriverFileClass
+  Code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CLONE(' & clip(pNewTableName) & ',' & pOptions & ')').
+  obj.Clone(pNewTableName,pOptions)
+  Return
+
+!------------------------------------------------------------------------------------------------
 COMMIT              Procedure (FILE pFile)
 obj      &DriverFileClass
   code
@@ -369,6 +403,32 @@ obj      &DriverFileClass
   End
   If obj._logClarion then obj.Log('[CLAR]CREATEDB(''' & clip(pDatabaseName) & ''')').
   obj.CreateDB(pDatabaseName,pOptions)
+  Return
+
+!------------------------------------------------------------------------------------------------
+CREATESCHEMA                Procedure(FILE pFile)
+obj      &DriverFileClass
+  code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CREATESCHEMA()').
+  obj.CreateSchema('','')
+  Return
+
+!------------------------------------------------------------------------------------------------
+CREATESCHEMA                Procedure(FILE pFile,String pSchemaName,<String pOptions>)
+obj      &DriverFileClass
+  code
+  obj &= pFile{prop:object}
+  If obj &= null
+    ClaSetError(NoDriverSupport)
+    Return
+  End
+  If obj._logClarion then obj.Log('[CLAR]CREATESCHEMA(''' & clip(pSchemaName) & ''')').
+  obj.CreateSchema(pSchemaName,pOptions)
   Return
 
 !------------------------------------------------------------------------------------------------

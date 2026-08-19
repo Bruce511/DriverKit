@@ -166,7 +166,7 @@ Stmt_Put                    Long
 Stmt_Set                    Long
 Stmt_Upsert                 Long
 
-_fromCache                  Byte
+!_fromCache                  Byte
 _AddCache                   Byte   ! these store the value that was in propscache when the Stmt_ was created. If a property is changed
 _AddMemoCache               Byte            ! the status of nomemo when the Add SQL was cached.
 _AddSqlCache                &StringTheory   ! the SQL for the ADD command. So that prop:sql is set after the call.
@@ -237,7 +237,6 @@ _ClearStmts                 Procedure(),Virtual
 _GetDBVersion               Procedure(),Virtual
 _GetSearchRankDirection     Procedure(),Byte,Derived
 _GenParm                    Procedure(Long pCount),String,Derived
-_AddSQL                     Procedure(Long pOpcode),Long,Virtual
 _ClaimSQL                   Procedure(? pFIELD, ? pNewValue),Long,Derived
 _MergeSQL                   Procedure(DriverFileSQLClass pDestination,String pDestinationName),Virtual
 _RollbackSavePointSql       Procedure(String pSavePoint),Derived
@@ -253,7 +252,7 @@ _PrepareRandom              Procedure(String pFilter, BIGINT pOffset),Long,Virtu
 
 _GenerateSelect             Procedure(Long pOpcode),Derived
 _BindParameter              Procedure(Long pStmt,Long pCount, *? pParm, DriverParmBufferClass pParmBuffer, Long pCodePage),Virtual
-_BindParameters             Procedure(Long pStmt, DriverParmBufferClass pParmBuffer, Long pCodePage),Long,Virtual
+_BindParameters             Procedure(Long pStmt, DriverParmBufferClass pParmBuffer, Long pCodePage, ParameterQueueType pParameterQueue),Long,Virtual
 _BindField                  Procedure(Long pStmt,Long pCount, Long pAddress, DriverParmBufferClass pParmBuffer, Long pCodePage),Virtual
 _BindBlob                   Procedure(Long pStmt,Long pCount, DriverParmBufferClass pParmBuffer, Long pCodePage),Virtual
 _ToRecord                   Procedure(Long pStmt,Long pBuffer),Virtual
@@ -276,7 +275,7 @@ TranslateRegularExpression  Procedure(*CString pExpr,*CString pColumn),String,De
 _LoadArray                  Procedure(*String pStr,Long pIndex, Long pBuffer, Long pCanNull),Derived
 SetOrderByFromQueue         Procedure(),Derived
 SetDriverOption             Procedure(String pOption, String pValue),String,Derived
-_ConstructKey               Procedure(Long pPrimary),Virtual
+_ConstructKey               Procedure(Long pPrimary),Derived
 _Morph                      Procedure(String pFieldLabel,Byte pClarionType, Long pClarionAddress, Long pClarionLength, Long pDbType, Long pDbAddress, Long pDbLength, Long pSqlTimeStamp, Byte pSetFieldNull, *Long rTextLength),Derived
 _UpdateFileStrings          Procedure(),Derived
 _LogoutSql                  Procedure(),Derived
@@ -285,6 +284,7 @@ _LogoutSql                  Procedure(),Derived
 BUILD                       Procedure(),Virtual
 BUILD                       Procedure(Key pKey),Virtual
 CLEARPROPS                  Procedure(),Derived
+CLONE                       Procedure(String pNewTableName,Long pOptions),Derived
 CLOSE                       Procedure(),Derived
 COPY                        Procedure(String pNewFileName, Long pOptions),Derived
 _CREATETABLE                Procedure(),Derived
@@ -292,7 +292,6 @@ _CREATETABLE                Procedure(),Derived
 !CREATEFIELD                 Procedure(String pName, String pType, String pConstraint),Derived
 _CreateField                Procedure(),DERIVED
 _CreateBlob                 Procedure(),DERIVED
-CREATEKey                   Procedure(Key pKey),Derived
 CREATEKey                   Procedure(String pName, Long pOptions, *? pField1, *? pField2, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>),Derived
 _CreateValidationBoolean    Procedure(),Long,Derived
 DECLARATION                 Procedure(Long pOptions=0),String,Derived
@@ -314,6 +313,7 @@ RENAME                      Procedure(String pNewFileName),Derived
 RESTORESTATE                Procedure(Long pState, Byte pBuffer),Derived
 RESUMERELATIONS             Procedure(),Derived
 STREAM                      Procedure(),Derived
+SQL                         Procedure(String pSql,<*? pParm1>,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),DERIVED
 SUSPENDRELATIONS            Procedure(),Derived
 
 ! Record Access
@@ -362,6 +362,7 @@ _BuildSearch                Procedure(Long pOpcode),Derived
 CLOSE                       Procedure(),Derived
 SEARCH                      Procedure(String pSearchString,<*? pField1>, <*? pField2>, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>,<*? pField11>, <*? pField12>, <*? pField13>, <*? pField14>, <*? pField15>),Derived
 SET                         Procedure(Long pIndex),Derived
+SQL                         Procedure(String pSql,<*? pParm1>,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>),DERIVED
 _Set                        Procedure(Long pOpcode),Derived
 SetOrderByFromQueue         Procedure(),Derived
 _AddOrderToWhere            Procedure(*Long pCount),Derived

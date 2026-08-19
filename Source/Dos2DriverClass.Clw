@@ -225,6 +225,7 @@ l             long
 bufferoffset  long
 recordoffset  long
   Code
+  !region CustomFields
   If self.SharedProperties.HasCustomFields
     ! the table has custom field interface(s). So the copy must be done on a field-by-field basis.
     ! Two counters are involved - the offset into the buffer, and the offset into the record.
@@ -246,6 +247,8 @@ recordoffset  long
        End
      End
   Else
+  !endregion
+  !region simple copy
     ! if the table does not use custom fields, then a simple mem copy is fast.
     memcpy(self.ClaFCB.rec_buf,address(self._buffer[pBufferPos]),pLength)
     If pLength < self.ClaFCB.rec_len
@@ -253,6 +256,7 @@ recordoffset  long
     End
     self._bytes = pLength
   End
+  !endregion
   self.RecordPointer = pFilePointer
   self.RecordLength = pLength
   Return
@@ -260,7 +264,7 @@ recordoffset  long
 !-----------------------------------------------------------------
 ! reads the data out of the buffer, refreshing the buffer from disk if necessary.
 DriverFileDos2Class._Read             PROCEDURE(BIGINT pFilePointer, LONG pLength)
-i long
+i long,Auto
   code
   Loop i = 1 to 2
     If self._ReadFromBuffer(pFilePointer,pLength) = Driver:ok
@@ -540,13 +544,13 @@ ix  BIGINT,Auto
     ! thing we want to get is already in the buffer,so just read it out of there.
     ix = pFilePointer - self._bufferstart + 1
     self._CopyBufferIntoRecord(pFilePointer,ix,pLength)
-    return Driver:ok
+    Return Driver:ok
   Elsif pFilePointer >= self._bufferstart and self._filesize = self._bufferend
     ix = pFilePointer - self._bufferstart + 1
     self._CopyBufferIntoRecord(pFilePointer,ix,self._bufferend-pFilePointer+1)
-    return Driver:ok
+    Return Driver:ok
   end
-  return Driver:notok
+  Return Driver:notok
 
 !-----------------------------------------------------------------
 DriverFileDos2Class._ExpandName                 PROCEDURE()

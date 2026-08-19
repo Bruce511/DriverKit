@@ -20,6 +20,9 @@ driver:SetBoundary      Equate(-1)
 driver:Force            Equate(1)
 driver:ForcePrimary     Equate(1)
 
+driver:lower            equate(1)
+driver:upper            equate(2)
+
 driver:NotSet           Equate(0)
 driver:SetFile          Equate(1)
 driver:SetKey           Equate(2)
@@ -337,6 +340,7 @@ Opcode:Subset                  equate(175)
 Opcode:ResultGet               equate(176)
 Opcode:Update                  equate(177)
 Opcode:Claim                   equate(178)
+Opcode:CallOut                 equate(179)
 
 !EndRegion: Opcodes
 
@@ -374,8 +378,11 @@ ClaNOTHING       Equate(018h) !                   Nothing                       
 ClaQUEUE         Equate(01Ah) !                   /* 0x1A Queue          */        ?
 ClaBLOB          Equate(01Bh) ! 27                /* 0x1B Blob and TempStr          */        ?
 ClaREFERENCE     Equate(01Fh)
+ClaUSTRING       Equate(033h) ! 51                ! Clarion 12.0.14090
 ClaTYPE          Equate(08Eh)
 ClaInt64         Equate(064h)   ! Placeholder for now - bj
+ClaSearch        Equate(095h)   ! used for identifying seachrank parameter
+ClaBoolean       Equate(096h)   ! used to attach a type to fixed values in filter expressions
 !EndRegion: Data Types
 
 !Region ----------  Field Attributes ----------

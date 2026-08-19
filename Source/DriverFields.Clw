@@ -436,6 +436,13 @@ DriverUUIDPostgresClass.iDriverField.GetSQLType    Procedure()
   return 'uuid'
 
 !======================================================================================================================
+! MariaDB uses UUID as the storage type from verion 10.7
+! -------------------------------------------------------------------
+DriverUUIDMariaDBClass.iDriverField.GetSQLType    Procedure()
+  code
+  return 'uuid'
+
+!======================================================================================================================
 ! MS SQL Server uses UNIQUEIDENTIFIER as the storage type
 ! -------------------------------------------------------------------
 DriverUniqueIdentifierMSClass.iDriverField.GetSQLType    Procedure()

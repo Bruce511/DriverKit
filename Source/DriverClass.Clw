@@ -284,7 +284,7 @@ ufo         &driver:iUFO
   Return -1
 
 !--------------------------------------------------------------------------------
-DriverBaseClass.GetAnySize     Procedure(*? pField)
+DriverBaseClass.GetAnySize     Procedure(*? pField)  ! Returns number of bytes, not characters. For Cstring and UString includes trailing 0 bytes.
 ufo         &driver:iUFO,Auto
 s           Long,Auto
 t           Long,Auto
@@ -294,8 +294,14 @@ t           Long,Auto
     s = ufo._size(address(pField))
     If s = 0
       t = self.GetAnyType(pField)
-      case t ; Of ClaSTRING orof ClaCSTRING orof ClaPSTRING  ! constant string values return 0 from ufo._size, so this checks the len()
+      case t                     ! constant string values return 0 from ufo._size, so this checks the len()
+      Of ClaSTRING
         s = Len(clip(pField))
+      Of ClaCSTRING
+      orof ClaPSTRING
+        s = Len(clip(pField)) + 1
+      of ClaUSTRING
+        s = Len(clip(pField)) * 2 + 2
       End
     End
     Return s
@@ -311,6 +317,12 @@ ufo         &driver:iUFO
     Return ufo._Address(address(pField))
   End
   Return 0
+
+!-----------------------------------------------------------------
+!!! derived in File class
+DriverBaseClass.GetFullPathName  Procedure()
+  code
+  Return self.FullPathName
 
 !------------------------------------------------------------------------------
 ! If the value is null, or 0, then the date 0001-01-01 is used. This is the "lowest" date supported by most databases.
@@ -665,6 +677,7 @@ neg     Byte
   orof ClaPSTRING
     if pLength < 20 then return driver:notok.
   of ClaCSTRING
+  orof ClaUSTRING
     if pLength < 21 then return driver:notok.
   of ClaDECIMAL
   orof ClaPDECIMAL
@@ -1061,6 +1074,8 @@ DriverBaseClass.InterpretProperty  Procedure(long pProperty)
     return 'PROP:ResultRow'
   of Prop:ResultRecords
     return 'PROP:ResultRecords'
+  of Prop:Schema
+    return 'PROP:Schema'
   of Prop:Search
     return 'PROP:Search'
   of Prop:SearchRank
@@ -1443,6 +1458,8 @@ DriverBaseClass.InterpretType  Procedure(Byte pType)
     return 'QUEUE'
   of ClaBLOB          !Equate(01Bh) !                   /* 0x1B Blob and TempStr          */        ?
     return 'BLOB'
+  of ClaUSTRING        !Equate(033h) !
+    return 'USTRING'
   end
   Return pType
 
@@ -1735,7 +1752,7 @@ i                         Long,Auto
     Case self.subsetqueue.Operation
     of  Opcode:Except orof Opcode:Intersect orof Opcode:Union orof Opcode:UnionAll
       If self.SubsetInFields = '' then self.SubsetInFields = self.SubSetFields.  ! this is the field list for the IN statement
-      pCTE.Append(cmd & ' SELECT ' & obj.SubSetFields & ' FROM ' & self._sanitize(obj.FullPathName,driver:sqlTable))
+      pCTE.Append(cmd & ' SELECT ' & obj.SubSetFields & ' FROM ' & obj.GetFullPathName() )
       donecmd = true
       If not self.SubsetQueue.Filter  &= null
         obj._noAlias = true
@@ -1760,7 +1777,7 @@ first  routine
     pCTE.SetValue('WITH subset(' & self.SubSetFields & ') AS (')
     If self.subsetqueue.Operation = Opcode:Except
       If FoundSubsetOnPrimaryTable = false then Distinct = 'DISTINCT '.
-      pCTE.Append(' SELECT ' & Distinct & self.SubSetFields & ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable))
+      pCTE.Append(' SELECT ' & Distinct & self.SubSetFields & ' FROM ' & self.GetFullPathName())
     End
   End
   donefirst = true
@@ -1801,7 +1818,6 @@ cansimplify  byte,Auto
   code
   If pTokenString.Length() = 0 then return.
 
-  !self.trace('AddTokensToOrderBy tokenString=' & pTokenString.GetValue())
   ! there are some special cases to take care of.
   ! UPPER and LOWER are removed, and OrderBy.NoCase is set instead.
   x = 1
@@ -1867,13 +1883,13 @@ cansimplify  byte,Auto
     End
     If self.OrderQueue.Clause = ''
       i = pTokenString.Instring(token:comma,1,x)
-      if i = 0
+      If i = 0
         self.OrderQueue.Clause = self._ExpandExpression(pTokenString.slice(x))
         x = pTokenString.Length()
-      else
+      Else
         self.OrderQueue.Clause = self._ExpandExpression(pTokenString.slice(x,i-1))
         x = i + 6
-      end
+      End
       self.OrderQueue.IsCalc = true
     End
     If already = 0
@@ -1934,6 +1950,81 @@ where   StringTheory
   End
   self.SetProp:Where(where.GetValue())
   Return
+
+!------------------------------------------------------------------------------------------------------------
+DriverBaseClass.CheckForGaps  Procedure(StringTheory pStr,String pMarker)
+present   byte,dim(DRIVER:NUMBERPARMS)
+count     long,auto
+x         long,auto
+  code
+  Loop count = DRIVER:NUMBERPARMS to 1 by -1
+    x = 1
+    Loop
+      x = pStr.Instring(pMarker & count,1,x+1)
+      If x
+        Case count
+        Of 1 to 9   ! need to check following char is not a digit.
+          case pStr.Sub(x+2)
+          of '0' to '9'
+            cycle
+          End
+        End
+        present[count] = true
+      End
+      Break
+    End
+  End
+  x = 0
+  Loop count = DRIVER:NUMBERPARMS to 1 by -1
+    If x = 0 and present[count] <> 0
+      x = 1
+    ElsIf present[count] <> x
+      self.SetError(SQLParametersGapErr)
+      Return driver:notok
+    End
+  End
+  return driver:ok
+
+
+!------------------------------------------------------------------------------------------------------------
+DriverBaseClass.CheckForReuse   Procedure(StringTheory pStr,String pMarker)
+present   byte,dim(DRIVER:NUMBERPARMS)
+count     long,auto
+x         long,auto
+  code
+  Loop count = DRIVER:NUMBERPARMS to 1 by -1
+    x = 1
+    Loop
+      x = pStr.Instring(pMarker & count,1,x+1)
+      If x = 0 then break.
+      Case count
+      Of 1 to 9   ! need to check following char is not a digit.
+        case pStr.Sub(x+2)
+        of '0' to '9'
+          cycle
+        End
+      End
+      present[count] += 1
+      If present[count] > 1
+        self.SetError(SQLParametersReuseErr)
+        Return driver:notok
+      End
+    End
+  End
+  Return driver:ok
+
+!------------------------------------------------------------------------------------------------------------
+DriverBaseClass.CheckForMaxParm   Procedure(StringTheory pStr,String pMarker)
+count     long,auto
+x         long,auto
+  code
+  Loop count = DRIVER:NUMBERPARMS to 1 by -1
+    x = pStr.Instring(pMarker & count,1)
+    If x
+      Return count
+    End
+  End
+  Return 0
 
 !------------------------------------------------------------------------------------------------------------
 ! the prop:filter contains Claron code, Field names and Static values.
@@ -2002,7 +2093,6 @@ x            Long,Auto
      ! sql order is Field ASC, Field DESC
      self.TranslateOrder(rTokenString)
   End
-
   Return driver:ok
 
 !-----------------------------------------------------------------
@@ -2656,7 +2746,6 @@ LastTokenType String(1) !not auto
     End
     LastTokenType = pTokenString[x]
     ans = ans & self._ExpandToken(pTokenString,x)
-
     If x = 1 and not omitted(pPrefix) and pPrefix <> ''
       If ans[1] = ''''
         ans = '''' & clip(pPrefix) & sub(ans,2,len(ans))
@@ -2677,7 +2766,11 @@ token      String(6)
 fc         Like(self.FunctionQueue.Func)
 fp         Like(self.FunctionQueue.Parms)
 LabelType  Byte
-Label      Cstring(4096)
+Label      Cstring(4096),auto
+Value      String(4096),auto
+rl         real,auto
+lg         long,auto
+overcolumn  long
   code
   token = sub(pTokenString,pTokenpos,6)
   If token = '' then Return ''.
@@ -2694,17 +2787,20 @@ Label      Cstring(4096)
     ElsIf self.ValueQueue.Parm
       self._ParameterCount += 1
       If sub(self.ValueQueue.Value,1,1) = ''''
-        self._SetParameterValue(self._ParameterCount,sub(self.ValueQueue.Value,2,len(clip(self.ValueQueue.Value))-2),ClaString)
+        value = sub(self.ValueQueue.Value,2,len(clip(self.ValueQueue.Value))-2)
+        self._SetParameterValue(self._ParameterCount,address(value),ClaString,len(clip(value)))
       ElsIf not Numeric(self.ValueQueue.Value)
-        self._SetParameterValue(self._ParameterCount,self.ValueQueue.Value,ClaString)
+        self._SetParameterValue(self._ParameterCount,address(self.ValueQueue.Value),ClaString,len(clip(self.ValueQueue.Value)))
       ElsIf sub(self.ValueQueue.Value,1,1) = '.'
-        self._SetParameterValue(self._ParameterCount,self.ValueQueue.Value,ClaReal)
-      else
-        self._SetParameterValue(self._ParameterCount,self.ValueQueue.Value,ClaLong)
+        rl = self.ValueQueue.Value
+        self._SetParameterValue(self._ParameterCount,address(rl),ClaReal,8)
+      Else
+        lg = self.ValueQueue.Value
+        self._SetParameterValue(self._ParameterCount,address(lg),ClaLong,4)
       end
       Return self._genparm(self._ParameterCount)
     End
-    self.CheckTokenType(self.ValueQueue.Value,pTokenString,pTokenPos)
+    self.CheckTokenType(self.ValueQueue.Value,LabelType,pTokenString,pTokenPos)
     Return self.ValueQueue.Value
   !!!endregion
   !!!region token:expression
@@ -2727,7 +2823,7 @@ Label      Cstring(4096)
     If pTokenpos > 6 and sub(pTokenString,pTokenpos-6,6) = token:as
       Return self.LabelQueue.Label   ! Label's following an AS are returned as is.
     End
-    Label = self.TranslateLabel(self.LabelQueue.Label,LabelType,pTokenString, pTokenPos)
+    Label = self.TranslateLabel(self.LabelQueue.Label,LabelType,pTokenString, pTokenPos,overcolumn)
     Return Label
   !!!endregion
   !!!region token:function
@@ -2775,15 +2871,52 @@ Label      Cstring(4096)
   Return ''
 
 !-----------------------------------------------------------------
-DriverBaseClass.CheckTokenType  Procedure(*cstring pValue,*String pTokenString,Long pTokenPos)
+DriverBaseClass.CheckTokenType  Procedure(*cstring prValue,*Byte rValueType,*String pTokenString,Long pTokenPos)
 relatedToken  string(6)
-rt            Long ,Auto
-FieldType     Byte ,Auto
-FieldBoolean  Byte ,Auto
+previousToken string(6)
+nextToken     string(6)
+previousCondition  string(6)
+nextCondition      string(6)
+rt                 Long ,Auto
+FieldType          Byte ,Auto
+FieldBoolean       Byte ,Auto
+BooleanValue       cstring(2)
   code
   Case self._ParseContext
   of driver:filter
-    if pTokenpos >= 12
+    If pTokenpos >= 6
+      previousToken = sub(pTokenString,pTokenpos-6,6)    ! previous token
+      If previousToken[1] = token:condition              ! is a conditional
+        rt = sub(previousToken,2,4)
+        Get(self.ConditionQueue,rt)                     ! get the condition
+        previousCondition = self.ConditionQueue.Condition
+      End
+    End
+    If len(pTokenString) >= pTokenpos + 6
+      nextToken = sub(pTokenString,pTokenpos+6,6)        ! next token
+      If nextToken[1] = token:condition                  ! is a conditional
+        rt = sub(nextToken,2,4)
+        Get(self.ConditionQueue,rt)                     ! get the condition
+        nextCondition = self.ConditionQueue.Condition
+      End
+    End
+    If previousToken or nextToken
+      If previousToken = '' or (previousCondition = 'AND' or previousCondition = 'OR' or previousCondition = 'NOT')  ! previous term is a logical comparison
+        If nextToken = '' or (nextCondition = 'AND' or nextCondition = 'OR' or nextCondition = 'NOT')                ! next term is a logical comparison
+          ! this token is a naked boolean
+          prValue = self.TranslateBoolean(prValue)
+          If previousCondition = 'NOT'   ! translate to t = 0
+            BooleanValue = 0
+            prValue = prValue & ' = ' & self.TranslateBoolean(BooleanValue)
+          Else                           ! translate to t = 1
+            BooleanValue = 1
+            prValue = prValue & ' = ' & self.TranslateBoolean(BooleanValue)
+          End
+          Return
+        End
+      End
+    End
+    If pTokenpos >= 12
       relatedtoken = sub(pTokenString,pTokenpos-6,6)    ! previous token
       If relatedToken[1] = token:condition              ! is a conditional
         rt = sub(relatedToken,2,4)
@@ -2821,12 +2954,15 @@ GetLabelType  routine
   If self.GetLabelType(self.LabelQueue.Label,FieldType,FieldBoolean) = Driver:ok
     Case FieldType
     of ClaDATE
-      pValue = self._TranslateDateSql(pValue,true)
+      prValue = self._TranslateDateSql(prValue,true)
+      rValueType = ClaDate
     of ClaTIME
-      pValue = self._TranslateTimeSql(pValue)
+      prValue = self._TranslateTimeSql(prValue)
+      rValueType = ClaTime
     Else
       If FieldBoolean
-        pValue = self.TranslateBoolean(pValue)
+        prValue = self.TranslateBoolean(prValue)
+        rValueType = ClaBoolean
       End
     End
   End
@@ -3123,6 +3259,7 @@ fld        Cstring(128)
 dy         Cstring(128) ,Auto
 mth        Cstring(128) ,Auto
 yr         Cstring(128) ,Auto
+overcolumn Long
   Code
   ! if there is only one parameter then it is considered to be a date already. So this DATE() call is really
   ! a "cast" telling the engine that the parameter is a DATE value. not a formatted string date, but a Long etc.
@@ -3142,7 +3279,7 @@ yr         Cstring(128) ,Auto
     If sub(pTokenString,pTokenPos - 6,1) = token:condition and sub(pTokenString,pTokenPos - 12,1) = token:label
       t = sub(pTokenString,pTokenPos - 11,4)
       get(self.LabelQueue,t)
-      fld = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0)   ! gets the specific self.fields node.
+      fld = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0,overcolumn)   ! gets the specific self.fields node.
     end
   ElsIf pTokenPos + 17 < len(clip(pTokenString))
     If sub(pTokenString,pTokenPos + 6,1) = token:condition
@@ -3153,7 +3290,7 @@ yr         Cstring(128) ,Auto
     If sub(pTokenString,pTokenPos + 6,1) = token:condition and sub(pTokenString,pTokenPos + 12,1) = token:label
       t = sub(pTokenString,pTokenPos + 13,4)
       get(self.LabelQueue,t)
-      fld = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0)   ! gets the specific self.fields node.
+      fld = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0,overcolumn)   ! gets the specific self.fields node.
     end
   End
 
@@ -3221,6 +3358,7 @@ DriverBaseClass._TranslateDateSql          Procedure(*CString pField, String pMo
 DriverBaseClass.TranslateDay         Procedure(*Cstring pFunc, *CString pParms,string pTokenString,*Long pTokenPos,*Cstring[] pExParm,Long pNumParms)
 t          Long,Auto
 dy         Cstring(128)
+overcolumn Long
 LabelType  Byte
   Code
   If pExParm[1,1] = token:value                                 ! if its a value
@@ -3230,7 +3368,7 @@ LabelType  Byte
   ElsIf pExParm[1,1] = token:label                              ! if it's a label, it could be a DATE column, a LONG column or a binded value
     t = sub(pExParm[1],2,4)
     Get(self.LabelQueue,t)
-    dy = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0)   ! gets the specific self.fields node. Needed for call to _TranslateDaySQL below
+    dy = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0,overcolumn)   ! gets the specific self.fields node. Needed for call to _TranslateDaySQL below
     Case LabelType
     Of driver:constant
     Orof driver:bound
@@ -3472,6 +3610,7 @@ DriverBaseClass.TranslateMonth         Procedure(*Cstring pFunc, *CString pParms
 t          Long
 mth        Cstring(128)
 LabelType  Byte
+overcolumn Long
   Code
   If pExParm[1,1] = token:value                                ! if its a value
     t = sub(pExParm[1],2,4)                                    ! get the value index
@@ -3480,7 +3619,7 @@ LabelType  Byte
   ElsIf pExParm[1,1] = token:label                             ! if it's a label, it could be a DATE column, a LONG column or a binded value
     t = sub(pExParm[1],2,4)
     get(self.LabelQueue,t)
-    mth = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0)
+    mth = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0,overcolumn)
     case LabelType
     of driver:constant
     orof driver:bound                                          ! safe to just use because ParseValue will force it to be a number
@@ -3598,6 +3737,7 @@ DriverBaseClass.TranslateYear         Procedure(*Cstring pFunc, *CString pParms,
 t          Long
 yr         Cstring(128)
 LabelType  Byte
+overcolumn Long
   Code
   If pExParm[1,1] = token:value                       ! if its a value
     t = sub(pExParm[1],2,4)                           ! get the value index
@@ -3606,7 +3746,7 @@ LabelType  Byte
   ElsIf pExParm[1,1] = token:label                    ! if it's a label, it could be a DATE column, a LONG column or a binded value
     t = sub(pExParm[1],2,4)
     get(self.LabelQueue,t)
-    yr = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0)
+    yr = self.TranslateLabel(self.LabelQueue.Label,LabelType,'',0,overcolumn)
     Case LabelType
     of driver:constant
     orof driver:bound                                 ! safe to just use because ParseValue will force it to be a number
@@ -3670,7 +3810,7 @@ OnePage  routine
   End
 
 !-----------------------------------------------------------------
-DriverBaseClass._SetParameterValue         Procedure(Long pCount, String pValue, Byte pClarionType)
+DriverBaseClass._SetParameterValue         Procedure(Long pCount, Long pValuePtr, Byte pClarionType, Long pSizeBytes)
 x   long,auto
   code
   x = self._GetFreeParameter()
@@ -3679,7 +3819,29 @@ x   long,auto
   self.ParameterQueue.ParameterArray[x].OpCode = self._ParameterOpcode
   self.ParameterQueue.ParameterArray[x].Count = pCount
   self.ParameterQueue.ParameterArray[x].Source = pClarionType
-  self._ResetParameterValue(x,pValue, size(pValue) )
+  self._ResetParameterValue(x,pValuePtr,pSizeBytes )
+  Return
+
+!-----------------------------------------------------------------
+! assumes the correct self.ParameterQueue record has been loaded.
+DriverBaseClass._ResetParameterValue         Procedure(Long pIndex, Long pValuePtr, Long pSizeBytes)
+str   &string
+  code
+  !self.trace('DriverBaseClass._ResetParameterValue  pIndex=' & pIndex & '  pValuePtr=' & pValuePtr & ' pSizeBytes=' & pSizeBytes)
+  str &= (pValuePtr) & ':' & pSizeBytes
+  If pSizeBytes = 0 and self.ParameterQueue.ParameterArray[pIndex].BinValue &= null
+    Return
+  End
+  If size(self.ParameterQueue.ParameterArray[pIndex].BinValue) <> pSizeBytes
+    Dispose(self.ParameterQueue.ParameterArray[pIndex].BinValue)
+    If pSizeBytes > 0
+      self.ParameterQueue.ParameterArray[pIndex].BinValue &= new string(pSizeBytes)
+    End
+  End
+  If pSizeBytes > 0
+    memcpy(address(self.ParameterQueue.ParameterArray[pIndex].BinValue),pValuePtr,pSizeBytes)
+  End
+  Put(self.ParameterQueue)
   Return
 
 !-----------------------------------------------------------------
@@ -3773,33 +3935,13 @@ y        Long,Auto
         ElsIf self.ParameterQueue.ParameterArray[x].BlobIndex
           self._SetParameterBlob(pCount,self.ParameterQueue.ParameterArray[x].BlobIndex)
         Else
-          self._SetParameterValue(pCount, self.ParameterQueue.ParameterArray[x].Value , self.ParameterQueue.ParameterArray[x].Source)
+          self._SetParameterValue(pCount, address(self.ParameterQueue.ParameterArray[x].BinValue) , self.ParameterQueue.ParameterArray[x].Source,size(self.ParameterQueue.ParameterArray[x].BinValue))
         End
         Return
       End
     End
   End
 
-!-----------------------------------------------------------------
-! assumes the correct self.ParameterQueue record has been loaded.
-DriverBaseClass._ResetParameterValue         Procedure(Long pIndex, String pValue, Long pLength)
-  code
-  !self.trace('DriverBaseClass._ResetParameterValue  pIndex=' & pIndex & '  pValue=' & pValue)
-  If pLength = 0 and self.ParameterQueue.ParameterArray[pIndex].Value &= null
-    self.ParameterQueue.ParameterArray[pIndex].Value &= new string(1)
-  Else
-    If size(self.ParameterQueue.ParameterArray[pIndex].Value) < pLength
-      Dispose(self.ParameterQueue.ParameterArray[pIndex].Value)
-      self.ParameterQueue.ParameterArray[pIndex].Value &= new string(pLength)
-    End
-  End
-  If pLength = 0
-    self.ParameterQueue.ParameterArray[pIndex].Value = ''
-  Else
-    self.ParameterQueue.ParameterArray[pIndex].Value = pValue[1 : pLength]
-  End
-  Put(self.ParameterQueue)
-  Return
 !-----------------------------------------------------------------
 DriverBaseClass._ClearParameterQueue        Procedure(Long pOpcode)
 x  long,auto
@@ -3840,8 +3982,8 @@ y  long,auto
   Loop y = 1 to records(self.ParameterQueue)
     Get(self.ParameterQueue,y)
     Loop x = 1 to self.ParameterQueue.ParameterArrayIndex
-      If self.ParameterQueue.ParameterArray[x].Value &= null then cycle.
-      Dispose(self.ParameterQueue.ParameterArray[x].Value)
+      If self.ParameterQueue.ParameterArray[x].BinValue &= null then cycle.
+      Dispose(self.ParameterQueue.ParameterArray[x].BinValue)
     End
   End
   PopErrors()
@@ -3855,7 +3997,7 @@ DriverBaseClass._GetSearchRankDirection  Procedure()
 
 !-----------------------------------------------------------------
 !!! DERIVE
-DriverBaseClass.TranslateLabel     Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos)
+DriverBaseClass.TranslateLabel     Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos,*Long rOverColumn)
   code
   return pValue
 
@@ -3904,24 +4046,72 @@ DriverBaseClass.TranslateRegularExpression    Procedure(*CString pExpr,*CString 
   Return ' '
 
 !-----------------------------------------------------------------
-DriverBaseClass.TranslateVariable  Procedure(*cstring pValue)
-v   cstring(4096)
+DriverBaseClass.TranslateVariable  Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos,*Cstring rValue)
+dataType  Byte
+val       Cstring(size(rValue)+1)
+dts       String(4)
+tm        Time
   code
   PushErrors()
-  v = clip(Evaluate(pValue))
+  rValue = clip(Evaluate(pValue))
   If Errorcode()
-    ! ERROR BAD FILTER, VARIABLE NAME
-    !self.SetError(FileSystemErr)
-    !self.SetFileError(BadFilterErr,'BadFilterErr: Unable to Evaluate ' & pValue)
     PopErrors()
-    Return pValue
+    Return driver:notok
   End
   PopErrors()
-  If Numeric(v)
-    Return v
-  else
-    Return '''' & v & ''''
+  Case band(self._ParseContext, 01111111b)
+  Of driver:Order
+  Orof driver:SQLOrder
+  Orof driver:GroupBy
+    pReturnType = driver:constant
+    rValue = self._Sanitize(rValue,self._ParseContext)
+    Return driver:ok
+  Of driver:filter
+  orOf driver:searchfilter
+  OrOf driver:having
+  OrOf driver:expression
+    If Numeric(rValue)
+      pReturnType = driver:constant
+      self.CheckTokenType(rValue,datatype,pTokenString,pTokenPos)
+      Return driver:ok
+    Else
+      pReturnType = driver:parameter
+      self._ParameterCount += 1
+      val = rValue
+      dataType = ClaString
+      self.CheckTokenType(val,dataType,pTokenString,pTokenPos)
+      case dataType
+      of ClaDATE
+        dts = self.tempDeformat.DeformatDateDate(rValue)   ! dts is a String, over a DATE, as returned by DeformatDateDate
+        self._SetParameterValue(self._ParameterCount,address(dts),ClaDATE,Len(rValue))
+      of ClaTIME
+        tm = self.tempDeformat.DeformatTime(rValue)  ! tm is a TIME field, auto-converted from the LONG returned by DeformatTime.
+        self._SetParameterValue(self._ParameterCount,address(tm),ClaTIME,Len(rValue))
+      else
+        self._SetParameterValue(self._ParameterCount,address(rValue),ClaSTRING,Len(rValue))
+      End
+      rValue = self._genparm(self._ParameterCount)
+      Return driver:ok
+    End
   End
+  ! some other context?
+  pReturnType = driver:constant
+  Return driver:ok
+
+!-----------------------------------------------------------------
+DriverBaseClass.IsInBindQueue    Procedure(*cstring pValue,*byte pReturnType,*cstring rValue)
+  code
+  If not self.BindQueue &= null
+    self.BindQueue.Name = upper(clip(pValue))
+    Get(self.BindQueue,self.BindQueue.name)
+    If Errorcode() = 0
+      pReturnType = driver:BindField
+      rValue = self.BindQueue.Name
+      Return driver:ok
+    End
+    self.SetError(NoError)
+  End
+  Return driver:notok
 
 !-----------------------------------------------------------------
 DriverBaseClass.DOPROPERTY                         Procedure(String pProperty,Long pIndex=0)
@@ -3942,6 +4132,8 @@ DriverBaseClass.GETPROPERTY                        Procedure(String pProperty,Lo
   Case pProperty
   of Prop:Affected
     return self.GetProp:Affected()
+  of Prop:AllowReturning
+    return self.GetProp:AllowReturning(pIndex)
   of Prop:AlwaysQuote
     return self.GetProp:AlwaysQuote()
   of Prop:ChildrenAffected
@@ -4035,6 +4227,8 @@ DriverBaseClass.GETPROPERTY                        Procedure(String pProperty,Lo
     Return self.GetProp:OrderBy()
   of PROP:Paging
     Return self.GetPROP:Paging()
+  of PROP:Port
+    Return self.GetPROP:Port()
   of PROP:Profile
   orof PROP:Logfile
     return self.GetProp:Profile()
@@ -4046,6 +4240,8 @@ DriverBaseClass.GETPROPERTY                        Procedure(String pProperty,Lo
     return self.GETPROP:ResultRecords()
   of Prop:ResultRow
     return self.GETPROP:ResultRow()
+  of PROP:Schema
+    Return self.GetPROP:Schema()
   of Prop:Search
     return self.GetProp:Search()
   of Prop:SearchRank
@@ -4104,10 +4300,10 @@ DriverBaseClass.OPEN               Procedure()
   Return
 
 !-----------------------------------------------------------------
-! deliberatly does not clear prop:sql
+! deliberatly does not clear prop:sql. Do not want it to clear Error.
 DriverBaseClass.ClearProps            PROCEDURE()
   Code
-  self.SetError(NoError)
+  !self.SetError(NoError)
   self.SetProp:Distinct(false)
   self.SetProp:NotDistinct(false)
   !self.SetProp:Explain(false)
@@ -4181,7 +4377,6 @@ DriverBaseClass.CLOSE               Procedure()
 DriverBaseClass.FLUSH               Procedure()
   code
   self.SetError(NoError)
-  !self.result.Free()   ! removed in build 1.33. See new RESULTFREE() command.
   Return
 
 !-----------------------------------------------------------------
@@ -4204,10 +4399,10 @@ UserLen                Ulong,Auto
   !Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][' & _User & '][' & _ProcessId & '][' & thread() & '][' & format(today(),'@d1')& '][' & format(clock(),'@t4') & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog) & '<13,10>'
   !Clog = '[' & self.GetProp:Driver() & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][' & _User & '][' & _ProcessId & '][' & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & ']' & clip(pLog) & '<13,10>'
   If self._LogFile = ''
-    Clog = '[' & self.GetProp:Driver() & '][' & Driver:Version & '][' & self._structure & '][' & self.rid & '][PID=' & _ProcessId & '][THD=' & thread() & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog)
+    Clog = '[' & self.GetProp:Driver() & '][' & Driver:Version & '][' & self._structure & '][' & self.rid & '][PID=' & _ProcessId & '][THD=' & thread() & '][' & self.GetProp:Server() & ':' & self.GetProp:Port() & '][' & self.GetProp:Database() & '][' & self.GetFullPathName() & '][' & self.status() & ']' & clip(pLog)
     osOutputDebugString(Clog)
   Elsif self._LogFile
-    Clog = '[' & self.GetProp:Driver() & '][' & Driver:Version & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][USR=' & _User & '][PID=' & _ProcessId & '][THD=' & thread() & '][' & format(today(),'@d1')& '][' & format(clock(),'@t4') & '][' & self.GetProp:Server() & '][' & self.GetProp:Database() & '][' & self.FullPathName & '][' & self.status() & ']' & clip(pLog) & '<13,10>'
+    Clog = '[' & self.GetProp:Driver() & '][' & Driver:Version & '][' & self._structure & '][' & self.rid & '][' & _WorkStation & '][USR=' & _User & '][PID=' & _ProcessId & '][THD=' & thread() & '][' & format(today(),'@d1')& '][' & format(clock(),'@t4') & '][' & self.GetProp:Server() & ':' & self.GetProp:Port() & '][' & self.GetProp:Database() & '][' & self.GetFullPathName() & '][' & self.status() & ']' & clip(pLog) & '<13,10>'
     If self._logHandle = 0
       ! open log file, in append mode
       self._logHandle = osCreateFile(self._LogFile, GENERIC_WRITE, SHARE_ALL , 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
@@ -4244,7 +4439,7 @@ UserLen                Ulong,Auto
 !-----------------------------------------------------------------
 DriverBaseClass.LOGGINGON                  Procedure(<String pFileName>,Long pOptions=0)
   Code
-  self.trace('=========================== LOGGING ON ' & self.FullPathName & '[' & Driver:Version & '] ==============================================')
+  self.trace('=========================== LOGGING ON ' & self.GetFullPathName() & '[' & Driver:Version & '] ==============================================')
   If Omitted(pFileName)
     self._LogFile = ''
   Else
@@ -4275,8 +4470,7 @@ DriverBaseClass.LOGGINGON                  Procedure(<String pFileName>,Long pOp
     If band(pOptions,driver:LogOptions) then self._logOptions = true else self._logOptions = false.
     If band(pOptions,driver:LogConnections) then self._logConnections = true else self._logConnections = false.
   End
-  self.log('=========================== LOGGING ON ' & self.FullPathName & ' ==============================================')
-  !self.trace('=========================== LOGGING ON ' & self.FullPathName & ' ==============================================')
+  self.log('=========================== LOGGING ON ' & self.GetFullPathName() & ' ==============================================')
   Return
 
 !-----------------------------------------------------------------
@@ -4292,7 +4486,7 @@ DriverBaseClass.LOGGINGOFF                 Procedure()
   self._logExplain = false
   self._logOptions = false
   self._logConnections = false
-  self.log('=========================== LOGGING OFF ' & self.FullPathName & ' ==============================================')
+  self.log('=========================== LOGGING OFF ' & self.GetFullPathName() & ' ==============================================')
   Return
 
 !-----------------------------------------------------------------
@@ -4509,7 +4703,7 @@ DriverBaseClass.SETPROPERTY              Procedure(String pProperty,Long pIndex,
   of PROP:WherePage
     self.SetPROP:WherePage(pValue)
   else
-    !self.trace('DriverBaseClass.SetProperty (' & self.InterpretProperty(pProperty) & ',' & pIndex & ',' & pValue & ') [' & self.FullPathName & ']')
+    !self.trace('DriverBaseClass.SetProperty (' & self.InterpretProperty(pProperty) & ',' & pIndex & ',' & pValue & ') [' & self.GetFullPathName() & ']')
     self.SetCustomProperty(pProperty,pIndex,pValue)
   end
   Return
@@ -4538,6 +4732,12 @@ DriverBaseClass.SetCustomProperty       Procedure(String pProperty,Long pIndex,S
 DriverBaseClass.GetPROP:Affected            PROCEDURE()
   code
   Return self.Affected
+
+!-----------------------------------------------------------------
+!!! DERIVE
+DriverBaseClass.GetProp:AllowReturning      PROCEDURE(Long pOpcode)
+  code
+  return true
 
 !-----------------------------------------------------------
 DriverBaseClass.GetProp:AlwaysQuote  Procedure()
@@ -4968,6 +5168,11 @@ DriverBaseClass.SetPROP:Paging          Procedure(Byte pValue)
   Return
 
 !-----------------------------------------------------------------
+DriverBaseClass.GetProp:Port         Procedure()   ! get the server port out of the connection string
+  code
+  Return ''
+
+!-----------------------------------------------------------------
 DriverBaseClass.GetPROP:NoPrevious       Procedure()
   Code
   If self.NoPrevious then Return '1' Else Return ''.
@@ -5080,6 +5285,12 @@ DriverBaseClass.GETPROP:ResultRow         Procedure()
   Return self.ResultRow()
 
 !-----------------------------------------------------------------
+!!! DERIVE
+DriverBaseClass.GetProp:Schema       PROCEDURE()
+  code
+  Return ''
+
+!-----------------------------------------------------------------
 DriverBaseClass.GetProp:Search             Procedure()
   Code
   If self.Search &= NULL
@@ -5135,7 +5346,7 @@ DriverBaseClass.SetProp:Sql            Procedure(String pValue)
     self.DoProp:Sql()
   Else
     Self.SetError(FileSystemErr)
-    Self.SetFileError(UnsafeSQLErr,'2. Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
+    Self.SetFileError(UnsafeSQLErr,'2. Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.GetFullPathName() & ']')
   End
   Return
 
@@ -5148,12 +5359,12 @@ DriverBaseClass.DoProp:Sql            PROCEDURE()
     do ExecuteSql
 
   of 2 ! post a STOP then continue with the command
-    Stop('Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
+    Stop('Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.GetFullPathName() & ']')
     do ExecuteSql
 
   Else
     Self.SetError(FileSystemErr)
-    Self.SetFileError(UnsafeSQLErr,'Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.fullpathname & ']')
+    Self.SetFileError(UnsafeSQLErr,'Unsafe use of the prop:Sql command. Driver[' & self.GetPROP:Driver() & '] table[' & self.GetFullPathName() & ']')
   End
   Return
 
@@ -5375,7 +5586,7 @@ f &File
 DriverFileClass.SetFileError        PROCEDURE(String pError, String pMessage)
   Code
   if pMessage
-    parent.SetFileError(pError, clip(pMessage) & '[' & self.FullPathName & ']')
+    parent.SetFileError(pError, clip(pMessage) & '[' & self.GetFullPathName() & ']')
   else
     parent.SetFileError(pError, '')
   End
@@ -5469,7 +5680,7 @@ iErrT      &iError,Auto
   self.Send(self.DriverStr)
   ! this next line is problematic if the full path name is a variable, and it's set before the first table is initialised.
   !     Recommend Calling SetProp:Label instead
-  !self.setProp:Label(0,self.FullPathName) ! UPPER of first 8 chars if no FullPathName set.
+  !self.setProp:Label(0,self.GetFullPathName()) ! UPPER of first 8 chars if no FullPathName set.
 
 ! file attributes
   self.SharedProperties.hasowner = choose(band(self.ClaFCB.fil_attr,FILOWN) > 0, true, false)
@@ -5580,7 +5791,7 @@ cs cString(size(pName)+1),auto
 !-----------------------------------------------------------------
 ! typically this is just the column name in the database, however sometimes it's a fully qualified name, ie self.FullPathName & '.' & ColumnName
 ! Adjusts for this and only compares to the Column Name part.
-! It's also possible that the name wll be already safe (as in TranslateReserved) so handle that too.
+! It's also possible that the name will be already safe (as in TranslateReserved) so handle that too.
 DriverFileClass._WithFieldNamed  Procedure(*cString pName)
 node  &FieldGroupType,Auto
 cstr  Cstring(size(pName)),Auto
@@ -5589,9 +5800,9 @@ l     Long,Auto
   code
   If size(pName) = 0 then return Driver:Notok.  ! Basically checking for a null ptr.
   cstr = upper(pName)
-  l = len(self.FullPathName)
-  If len(cstr) > l+1 and cstr[1 : l+1] = upper(self.FullPathName) & '.'
-    cstr = sub(cstr,l+2,255)
+  l = instring('.',pName,-1,len(pName))
+  If l
+    cstr = sub(cstr,l+1,255)
   End
   If len(cstr) = 0 then return Driver:Notok.
   case cstr[1]
@@ -5661,10 +5872,16 @@ DriverFileClass._FieldIsBlank      Procedure()
   End
   Case self.Fields.Type
   of ClaSTRING
-    Return self._memchk(self.ClaFCB.rec_buf + self.Fields.Offset,32,self.Fields.Length)
+    If self.Fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.Fields.SqlTimeStamp <= driver:GroupOverTimeStampTZ
+      Return self._memchk(self.ClaFCB.rec_buf + self.Fields.Offset,0,self.Fields.Length)  ! null date/time group must be binary zero
+    Else
+      Return self._memchk(self.ClaFCB.rec_buf + self.Fields.Offset,32,self.Fields.Length)
+    End
   of ClaCSTRING
   orof ClaPSTRING
     Return self._memchk(self.ClaFCB.rec_buf + self.Fields.Offset,0,1)
+  of ClaUSTRING
+    Return self._memchk(self.ClaFCB.rec_buf + self.Fields.Offset,0,2)
   End
   Return self._memchk(self.ClaFCB.rec_buf + self.Fields.Offset,0,self.Fields.Length)
 
@@ -5787,6 +6004,11 @@ addrF        long,auto
   Poke(addrF,AddrNew)
 
 !-----------------------------------------------------------------
+DriverFileClass._NotPrepared  Procedure()
+  code
+  self._propscache += 1  ! invalidates all the prepared statements
+
+!-----------------------------------------------------------------
 ! Parsing FCBLK Parameter Methods
 !-----------------------------------------------------------------
 DriverFileClass._parseBlobs    Procedure(Byte pIndex)
@@ -5887,11 +6109,12 @@ sizeKeyDesc  Long
       End
     end
     If dbname = ''
-      dbName = self.keys.Label
-      p = instring(':',dbName,1,1)
-      If p
-        dbName = sub(dbname,p+1,255)
-      End
+!      dbname = self._GetKeyName(self.tablename)
+!      dbName = self.keys.Label
+!      p = instring(':',dbName,1,1)
+!      If p
+!        dbName = sub(dbname,p+1,255)
+!      End
     End
     self.keys.dbName = dbName
     self.keys.dup = Choose(band(desc.key_attr,Cla_Dup)=Cla_Dup,true,false)
@@ -5928,19 +6151,24 @@ sizeKeyDesc  Long
 ! if the field is already in the order, then the index of the already field is returned.
 ! If the field is added to the order, then it returns 0.
 DriverFileClass._FillOrderFromLabel              Procedure(*CString pLabel, Byte pCase)
-column     cstring(255)
-LabelType  byte
+origcolumn     cstring(DRIVER:MAXCOLUMNNAME)
+column         cstring(DRIVER:MAXCOLUMNNAME)
+LabelType      byte
+overColumn     Long
   code
   column = clip(pLabel)
-  self._NoAlias = true
-  column = self.TranslateLabel(column,LabelType,'',0)
-  self._NoAlias = false
+  origcolumn = column
+  !self._NoAlias = true
+  column = self.TranslateLabel(column,LabelType,'',0,overColumn)
+
+  !self._NoAlias = false
   self.OrderQueue.IsString = false
   self.OrderQueue.Binary = false
   self.OrderQueue.FieldCase = pCase
+  If overColumn = 0 then origcolumn = column.
   case LabelType
   of driver:field
-    If self._WithFieldNamed(column) = driver:ok   ! Ordering by a table field
+    If self._WithFieldNamed(origcolumn) = driver:ok   ! Ordering by a table field
       self.OrderQueue.FieldIndex = self.Fields.index
       Get(self.OrderQueue,self.OrderQueue.FieldIndex)
       If Errorcode() = 0
@@ -5949,10 +6177,15 @@ LabelType  byte
       If not self._ProjectClauses &= null and self._ProjectClauses.InString(' AS ' & self.Fields.Column) > 0
         self.OrderQueue.Clause = self.Fields.Column
       Else
-        self.OrderQueue.Clause = self._GetAlias(driver:withdot) & self.Fields.Column
+        If overColumn
+          self.OrderQueue.Clause = column ! self.Fields.Column
+        Else
+          !self.OrderQueue.Clause = self._GetAlias(driver:withdot) & column ! self.Fields.Column
+          self.OrderQueue.Clause = column ! self.Fields.Column
+        End
       End
       Case self.Fields.type
-      of ClaCSTRING orof ClaPSTRING orof ClaSTRING
+      of ClaCSTRING orof ClaPSTRING orof ClaSTRING orof ClaUSTRING
         self.OrderQueue.IsString = true
         self.OrderQueue.Binary = self.Fields.Binary
         self.OrderQueue.FieldCase = self.Fields.FieldCase
@@ -5961,7 +6194,11 @@ LabelType  byte
       End
       self.OrderQueue.IsCalc     = false
       self.OrderQueue.FileIndex  = 1
-      self.OrderQueue.FieldIndex = self.Fields.index
+      !If overColumn
+      !  self.OrderQueue.FieldIndex = overColumn
+      !Else
+        self.OrderQueue.FieldIndex = self.Fields.index
+      !End
     End
   of driver:bindfield                                                       ! Ordering by a calculated field called BindQueue.Name
     self.OrderQueue.FieldIndex = -Pointer(self.BindQueue)
@@ -6156,7 +6393,7 @@ EarlierNode     &FieldGroupType
 FieldsCounter   Long
 InOveredGroup   Long
   code
-  !self.trace(' _parseFieldsWalker ' & pFields & ' index=' & pIndex & ' pLastRealOffSet=' & pLastRealOffSet & ' pLastRealLength=' & pLastRealLength)
+  !self.trace(' _parseFieldsWalker pFields=' & pFields & ' index=' & pIndex & ' pLastRealOffSet=' & pLastRealOffSet & ' pLastRealLength=' & pLastRealLength)
   Loop
     FieldsCounter += 1
     if FieldsCounter > pFields then break.
@@ -6199,6 +6436,8 @@ InOveredGroup   Long
       pAddr += 1
     of ClaSTRING orof ClaPSTRING orof ClaCSTRING
       pNode.Size = self._GetVariableLengthNumber(pAddr,HighBit)
+    of ClaUSTRING
+      pNode.Size = self._GetVariableLengthNumber(pAddr,HighBit)    ! this returns number of bytes, not number of chars
     of CLAReference
       pNode.ref = true
       !peek(pAddr,pNode.Type)
@@ -6325,6 +6564,7 @@ column    cstring(254)
   of ClaSTRING
   orof ClaPSTRING
   orof ClaCSTRING
+  orof ClaUSTRING
     If self._FieldInCaseKey(pNode.Index)
       pNode.InCaseKey = true ! driver:InCaseSensitiveKey
     End
@@ -6474,6 +6714,7 @@ str          StringTheory
           of ClaSTRING
           orof ClaPSTRING
           orof ClaCSTRING
+          orof ClaUSTRING
             pNode.NotEqual &= new String(5)
             pNode.NotEqual = '<<> '''''
           Else
@@ -6525,6 +6766,7 @@ str          StringTheory
         of ClaSTRING
         orof ClaPSTRING
         orof ClaCSTRING
+        orof ClaUSTRING
           str.setvalue(val)
           str.split(',')
           str.Join(',','''','''',true)
@@ -6551,6 +6793,7 @@ str          StringTheory
           of ClaSTRING
           orof ClaPSTRING
           orof ClaCSTRING
+          orof ClaUSTRING
             pNode.NotEqual &= new String(5)
             pNode.NotEqual = '<<> '''''
           Else
@@ -6670,6 +6913,28 @@ DriverFileClass._SourceSize  Procedure()
   End
 
 !-----------------------------------------------------------------
+! should only be used when getting ad-hoc values, like for rename etc.
+! splits into schema part and tablename part.
+DriverFileClass._SplitSchema   PROCEDURE(*cstring pTableName, *cstring pSchema)
+  code
+  self.tempstr.setValue(pTableName,st:clip)
+  self.tempstr.removechars('"')
+  If self.tempstr.instring('.')
+    pSchema = self.tempstr.before('.')
+    pTableName = self.tempstr.after('.')
+  Else
+    pTableName = self.tempstr.GetValue()
+    If self.TableSchema <> ''
+      pSchema = self.TableSchema
+    ElsIf self.PropSchema <> ''
+      pSchema = self.PropSchema
+    Else
+      pSchema = self._DefaultSchema
+    End
+  End
+  Return
+
+!-----------------------------------------------------------------
 DriverFileClass._FreeKeys         PROCEDURE()
 x  long
   code
@@ -6706,16 +6971,50 @@ DriverFileClass.FreeBuffer  PROCEDURE()
   Code
 
 !-----------------------------------------------------------------
+DriverFileClass.GetFullPathName  Procedure()
+  code
+  !self.trace('GetFullPathName : self.TableSchema=' & self.TableSchema & ' self.TableName=' & self.TableName)
+  If self.TableSchema
+    return self.TableSchema & '.' & self.TableName
+  End
+  If self.PropSchema
+    return self.PropSchema & '.' & self.TableName
+  End
+  If self._DefaultSchema
+    return self._DefaultSchema & '.' & self.TableName
+  End
+  Return self.TableName
+
+!-----------------------------------------------------------------
+DriverFileClass._SplitFullPathName  Procedure()
+SchemaName  cstring(DRIVER:MAXSCHEMANAME)
+fpn         stringTheory
+  code
+  If Instring('.',self.FullPathName,1,1) > 0
+    fpn.SetValue(self.FullPathName)
+    SchemaName = self._sanitize(fpn.before('.'),driver:SqlTable)
+    self.TableName = self._sanitize(fpn.after('.'),driver:SqlTable)
+  Else
+    self.TableName = self._sanitize(self.FullPathName,driver:SqlTable)
+    SchemaName = ''
+  End
+  SchemaName = self.TranslateReserved(SchemaName)
+  self.TableSchema = SchemaName
+  self.TableName = self.TranslateReserved(self.TableName)
+  Return
+
+!-----------------------------------------------------------------
 DriverFileClass._UpdateFileStrings  Procedure()
   code
   If self._locknames = false
     If self._FullPathNameSetFromPropName = false
       self.FullPathName = clip(self._GetString(self.ClaFCB.phyname))
+      self._SplitFullPathName()
     End
     If self._OwnerSetFromPropOwner = false
-      self.Owner        = clip(self._GetString(self.ClaFCB.oname))
+      self.Owner = clip(self._GetString(self.ClaFCB.oname))
     End
-    self.DriverStr    = clip(self._GetString(self.ClaFCB.drvstr))
+    self.DriverStr = clip(self._GetString(self.ClaFCB.drvstr))
   End
   Return
 
@@ -6823,12 +7122,10 @@ Column  cstring(len(pColumn)+1)
 
 !-----------------------------------------------------------------
 ! In the "FILE" context, labels are translated into the column name
-DriverFileClass.TranslateLabel       Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos)
+DriverFileClass.TranslateLabel       Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos,*Long rOverColumn)
 i         Long
-column    Cstring(128)
-node      &FieldGroupType
-v         Cstring(4096)
-e         Cstring(4096)
+column    Cstring(DRIVER:MAXCOLUMNNAME)
+ans       Cstring(4096), Auto
   code
   ! lookup variable name in table, and replace if necessary.
   ! If the variable is not in a table, then EVALUATE it and turn it into a fixed value.
@@ -6839,7 +7136,6 @@ e         Cstring(4096)
   ! c) a.address                            ! translate this to columnname (with the alias)
 
   ! first: known equates which can be used in filters
-
   If self.TranslateConstant(pValue,i) = Driver:Ok
     pReturnType = driver:constant
     Return i
@@ -6851,78 +7147,64 @@ e         Cstring(4096)
   If i
     ! Clarion Label.
     If self._WithFieldLabeled(pValue) = driver:ok
-      do ModColumn
+      ans = self._ModColumn(rOverColumn)
+      If ans then Return ans.
       Return self._GetAlias(driver:withdot) & self.fields.Column
     End
+    ! not found as a file field, so will drop through to BindQueue and Evaluate below
   Else
     i = instring('.',pValue,1,1)
     If i
       If self._WithFieldNamed(sub(pValue,i+1,len(pValue))) = driver:ok
-        do ModColumn
+        ans = self._ModColumn(rOverColumn)
+        If ans then Return ans.
         Return self._GetAlias(driver:withdot) & self.fields.Column
       End
     Else  ! no colon or period - it's just a word.
       If self._WithFieldNamed(sub(pValue,i+1,len(pValue))) = driver:ok
-        do ModColumn
+        ans = self._ModColumn(rOverColumn)
+        If ans then Return ans.
         Return self._GetAlias(driver:withdot) & self.fields.Column
       Else
         column = self.SharedProperties.prefix & ':' & pValue
         If self._WithFieldLabeled(column) = Driver:ok
-          do ModColumn
+          ans = self._ModColumn(rOverColumn)
+          If ans then Return ans.
           Return self._GetAlias(driver:withdot) & self.fields.Column
         End
       End
     End
   End
-  If not self.BindQueue &= null
-    self.BindQueue.Name = upper(clip(pValue))
-    Get(self.BindQueue,self.BindQueue.name)
-    If Errorcode() = 0
-      pReturnType = driver:BindField
-      Return self.BindQueue.Name
-    End
-  end
-
-  pReturnType = driver:bound
-  ! not a column name, try evaluating it
-  v = clip(Evaluate(pValue))
-  If Errorcode() = NoError
-    Case band(self._ParseContext, 01111111b)
-    Of driver:Order
-    Orof driver:SQLOrder
-    Orof driver:GroupBy
-      pReturnType = driver:constant
-      Return self._Sanitize(v,self._ParseContext)
-    Of driver:filter
-    orOf driver:searchfilter
-    OrOf driver:having
-    OrOf driver:expression
-      If Numeric(v)
-        pReturnType = driver:constant
-        self.CheckTokenType(v,pTokenString,pTokenPos)         !!!
-        Return v
-      Else
-        pReturnType = driver:parameter
-        self._ParameterCount += 1
-        self._SetParameterValue(self._ParameterCount,v,ClaString)
-        Return self._genparm(self._ParameterCount)
-      End
-    End
-    pReturnType = driver:constant
-    Return v
+  If self.IsInBindQueue(pValue,pReturnType,ans) = driver:ok
+    Return ans
+  End
+  If self.TranslateVariable(pValue,pReturnType,pTokenString,pTokenPos, ans) =driver:ok
+    Return ans
   End
   self.SetError(NoError)
   pReturnType = driver:unknown
   Return self._Sanitize(pValue,self._ParseContext)   ! assume the user knows what they're doing....but there are limits...
 
-ModColumn  routine
+! ---------------------------------------------------------------------------------------------------
+! Fields group is already loaded.
+DriverFileClass._ModColumn  Procedure(*Long rColumn)
+node      &FieldGroupType
+  code
   Case self.fields.type
   Of ClaDATE
     If self.fields.InOverGroup
       node &= self._WithFieldNode(self.fields.InOverGroup)
       node &= self._WithFieldNode(node.Over)
       If node.Type = ClaSTRING
-        Return self._TranslateLabelOverDateSQL(node)
+        Case self._ParseContext
+        Of driver:order
+          ! Special case. When ordering by Date part of DateTime group, then can simply order by DateTime group. No CAST required.
+          rColumn = node.index
+          Return self._GetAlias(driver:withdot) & node.Column
+        Else
+          rColumn = node.index
+          Return self._TranslateLabelOverDateSQL(node)
+        End
       End
     End
   Of ClaTIME
@@ -6930,10 +7212,13 @@ ModColumn  routine
       node &= self._WithFieldNode(self.fields.InOverGroup)
       node &= self._WithFieldNode(node.Over)
       If node.Type = ClaSTRING
+        rColumn = node.index
         Return self._TranslateLabelOverTimeSQL(node)
       End
     End
   End
+  rColumn = 0
+  Return ''
 
 !-----------------------------------------------------------------
 ! In MSSQL the operators in the MATCH command are not Case sensitive.
@@ -7804,6 +8089,7 @@ x  Long,Auto
   Loop x = 1 to Records(self.BindQueue)
     Get(self.BindQueue,x)
     If self.BindQueue.cst &= (pAddress) then return ClaCstring.
+    If self.BindQueue.ust &= (pAddress) then return ClaUstring.
     If self.BindQueue.st &= (pAddress) then return ClaString.
     If self.BindQueue.rl &= (pAddress) then return ClaReal.
     If self.BindQueue.lg &= (pAddress) then return ClaLong.
@@ -7890,6 +8176,24 @@ DriverBaseClass.BINDFIELD                     Procedure(String pName,*Cstring pC
   Return
 
 !-----------------------------------------------------------------
+DriverBaseClass.BINDFIELD                     Procedure(String pName,*Ustring pUstring)
+  Code
+  If self.BindQueue &= Null
+    self.BindQueue &= new BindQueueType
+  End
+  self.BindQueue.Name = upper(clip(pName))
+  Get(self.BindQueue,self.BindQueue.Name)
+  Clear(self.BindQueue)
+  self.BindQueue.Name = upper(clip(pName))
+  self.BindQueue.ust &= pUstring
+  If Errorcode()
+    Add(self.BindQueue,self.BindQueue.Name)
+  Else
+    Put(self.BindQueue)
+  End
+  Return
+
+!-----------------------------------------------------------------
 DriverBaseClass.BINDFIELD                     Procedure(String pName,*Time pTime)
   Code
   If self.BindQueue &= Null
@@ -7918,7 +8222,7 @@ DriverBaseClass.BINDFIELD                     Procedure(String pName,*Date pDate
   self.BindQueue.Name = upper(clip(pName))
   self.BindQueue.dt &= pDate
   If Errorcode()
-    Add(self.BindQueue,self.BindQueue.Name)
+    Add(self.BindQueue,self.BindQueue.Name)   !!!todo dispose
   Else
     Put(self.BindQueue)
   End
@@ -8152,6 +8456,7 @@ DriverFileClass.BUFFER           PROCEDURE(UNSIGNED pPageSize, UNSIGNED pBehind=
 !-----------------------------------------------------------------
 ! Build the OrderBy for the FILE case.
 DriverFileClass.BuildOrderBy  Procedure()
+unique  byte
   code
   parent.BuildOrderBy()                                                                             ! Clear the Queue
   If self._SearchOrderClause
@@ -8201,6 +8506,7 @@ x long
         case self.Fields.Type
         of ClaSTRING
         orof ClaCSTRING
+        orof ClaUSTRING
         orof ClaPSTRING
           self.OrderQueue.Binary    = self.fields.binary
           self.OrderQueue.Fieldcase = self.fields.Fieldcase
@@ -8221,9 +8527,9 @@ x long
 
 
 !-----------------------------------------------------------------
-! Buid a prop:order string based on the fields in the key.
+! Build a prop:order string based on the fields in the key.
 DriverFileClass.BuildPropOrderByKey          Procedure(Key pKey)
-x   long,auto
+x   Long,auto
 ans StringTheory
   code
   If self._WithKey(pKey) = Driver:ok
@@ -8234,17 +8540,18 @@ ans StringTheory
         Else
           ans.append('+',,',')
         End
-        case self.Fields.Type
-        of ClaSTRING
-        orof ClaCSTRING
-        orof ClaPSTRING
+        Case self.Fields.Type
+        Of ClaSTRING
+        Orof ClaCSTRING
+        Orof ClaUSTRING
+        Orof ClaPSTRING
           If self.keys.Keycase = driver:Nocase
-            ans.append('UPPER(' & self.FullPathName & '.' & self.Fields.Column & ')')
-          else
-            ans.append(self.FullPathName & '.' & self.Fields.Column)
-          end
-        else
-          ans.append(self.FullPathName & '.' & self.Fields.Column)
+            ans.append('UPPER(' & self.TableName & '.' & self.Fields.Column & ')')
+          Else
+            ans.append(self.TableName & '.' & self.Fields.Column)
+          End
+        Else
+          ans.append(self.TableName & '.' & self.Fields.Column)
         End
       End
     End
@@ -8260,7 +8567,7 @@ y       long
 x       long
 thiskey byte
   Code
-  Loop x = 1 to records(self.keys)
+  Loop x = 1 to Records(self.keys)
     Get(self.keys,x)
     If self.keys.dup then cycle.
     thiskey = true
@@ -8272,7 +8579,7 @@ thiskey byte
         break
       End
     End
-    If thiskey then return.
+    If thiskey then Return.
   End
   ! add the primary key fields if they're not already part of the order
   x = Records(self.OrderQueue)
@@ -8280,7 +8587,7 @@ thiskey byte
     key &= (self.keys.keyptr)
     self.BuildOrderByKey(key)
   End
-  if x < records(self.OrderQueue)
+  if x < Records(self.OrderQueue)
     self._SupplementalOrderFields = x + 1
   End
   Return
@@ -8444,6 +8751,7 @@ numchar   byte,auto
       of ClaSTRING
         MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,strchar, self.Fields.Size * self.Fields.DimProduct)
       of ClaCSTRING
+      orof ClaUSTRING
         MemSet(self.ClaFCB.rec_buf + self.Fields.Offset,cstrchar, self.Fields.Size * self.Fields.DimProduct)
       of ClaPSTRING
         addr = self.ClaFCB.rec_buf + self.Fields.Offset
@@ -8543,6 +8851,12 @@ DriverFileClass.CreateDB      PROCEDURE(String pDatabaseName, String pOptions)
   Return
 
 !-----------------------------------------------------------------
+DriverFileClass.CreateSchema   PROCEDURE(String pDatabaseName, String pOptions)
+  code
+  self.SetError(NoDriverSupport)
+  Return
+
+!-----------------------------------------------------------------
 DriverFileClass.CreateParentTables      PROCEDURE()
 x    Long,Auto
 obj  &DriverFileClass
@@ -8562,14 +8876,14 @@ obj  &DriverFileClass
 !-----------------------------------------------------------------
 DriverFileClass.CREATETABLE      PROCEDURE()
   Code
-  !self.trace('DriverFileClass.CREATETABLE ' & self.FullPathName)
+  !self.trace('DriverFileClass.CREATETABLE')
   If  self.SharedProperties &= NULL
     self.trace('DriverFileClass.CREATETABLE Shared Properties is NULL')
   End
 
   If self.SharedProperties.Create = false
     self.SetError(NoCreateErr)
-    return
+    Return
   End
   If self._CheckClosed() = false
     Return
@@ -8595,6 +8909,7 @@ col  Long
         of ClaSTRING
         orof ClaPSTRING
         orof ClaCSTRING
+        orof ClaUSTRING
           pStr.append('(' & self.Fields.column & ' <<> '''')') !  AND ' & self.Fields.column & ' IS NOT NULL)')
         of ClaDATE
           Case self.opt:ZeroDate
@@ -8617,6 +8932,7 @@ col  Long
   Return
 
 !-----------------------------------------------------------------
+!!!Derive
 DriverFileClass.CLONE            Procedure(String pNewTableName,Long pOptions)
   code
 
@@ -8655,9 +8971,9 @@ check  StringTheory
   End
   If Check.Length()
     If self.fields.NotNull
-      self.SqlCode.append(' NOT NULL CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK (' & check.getvalue() & ')' )
+      self.SqlCode.append(' NOT NULL CONSTRAINT check_' & self.TableName & '_' & self.Fields.Column & ' CHECK (' & check.getvalue() & ')' )
     Else
-      self.SqlCode.append(' CONSTRAINT check_' & self.FullPathName & '_' & self.Fields.Column & ' CHECK ((' & check.getvalue() & ') OR ' & self.Fields.column & ' IS NULL)')
+      self.SqlCode.append(' CONSTRAINT check_' & self.TableName & '_' & self.Fields.Column & ' CHECK ((' & check.getvalue() & ') OR ' & self.Fields.column & ' IS NULL)')
     End
   ElsIf self.fields.NotNull
     self.SqlCode.append(' NOT NULL')
@@ -8671,6 +8987,7 @@ DriverFileClass._CreateDefault   Procedure(Long pHasDefault, Long pType, String 
   If pHasDefault
     Case pType
     of ClaCSTRING
+    orof ClaUSTRING
     orof ClaSTRING
     orof ClaPSTRING
     orof ClaMEMO
@@ -8716,7 +9033,7 @@ parentlist    StringTheory
       End
     End
     !self.trace('creating FOREIGN KEY (' & childlist.GetValue() & ') REFERENCES ' & obj.FullPathName & '(' & parentlist.GetValue() & ') ' & self.relations.OnUpdate & ' ' & self.relations.OnDelete)
-    self.SqlCode.Append(',<13,10>FOREIGN KEY (' & childlist.GetValue() & ') REFERENCES ' & obj.FullPathName & '(' & parentlist.GetValue() & ')')
+    self.SqlCode.Append(',<13,10>FOREIGN KEY (' & childlist.GetValue() & ') REFERENCES ' & obj.GetFullPathName() & '(' & parentlist.GetValue() & ')')
     Case self.relations.OnUpdate
     Of driver:NoAction
       self.SqlCode.Append(' ON UPDATE NO ACTION')
@@ -9514,7 +9831,7 @@ x  long
     self.SetError(BadNameErr)
     Return
   End
-  If self._logClarion then self.Log('[CLAR]OPENing(' & self.FullPathName & ',' & pAccessMode & ')').
+  If self._logClarion then self.Log('[CLAR]OPENing(' & self.GetFullPathName() & ',' & pAccessMode & ')').
 
   ! first apply System-wide driver string for all files of this driver
   compile('!***',_C100_=1)
@@ -10055,6 +10372,7 @@ DriverFileClass.CLAIM            PROCEDURE(STRING pOrder, STRING pFilter)  ! App
   Return
 
 !-----------------------------------------------------------------
+! Parent is called first for DELETE.
 DriverFileClass.DELETE           PROCEDURE()
   Code
   self._ParameterOpcode = Opcode:DELETE
@@ -10553,6 +10871,9 @@ rTextLen   Long
   Elsif not self.bindqueue.cst &= null
     self.bindqueue.cst = ''
     self._Morph(self.bindqueue.Name,ClaCSTRING,address(self.bindqueue.cst),size(self.bindqueue.cst),CellType,CellAddr,CellLen,0,false,rTextLen)
+  Elsif not self.bindqueue.ust &= null
+    self.bindqueue.ust = ''
+    self._Morph(self.bindqueue.Name,ClaUSTRING,address(self.bindqueue.ust),size(self.bindqueue.ust),CellType,CellAddr,CellLen,0,false,rTextLen)
   End
   Return
 
@@ -10644,6 +10965,7 @@ DriverFileClass._SET             PROCEDURE(Byte pSetMethod, BigInt pPointer,Key 
   Return
 
 !-----------------------------------------------------------------
+! SET(FILE)
 DriverFileClass.SET              PROCEDURE()
   Code
   self._SearchExpression = ''                                       ! Do NOT move this into _Set.
@@ -10652,14 +10974,16 @@ DriverFileClass.SET              PROCEDURE()
   Return
 
 !-----------------------------------------------------------------
+! SET(FILE,KEY)
 DriverFileClass.SET              PROCEDURE(Byte pSpacer=0,KEY pKey)
   Code
   self._SearchExpression = ''
   If self._ClearSqlFilter then  self._ClearSqlFilter = false ; self.SetPROP:SQLFilter('').
-  self._Set(driver:SetFile,driver:SetBoundary,pKey,nullkey)
+  self._Set(driver:SetKeyKey,driver:SetBoundary,pKey,pKey)
   Return
 
 !-----------------------------------------------------------------
+! SET(FILE,pointer)
 DriverFileClass.SET              PROCEDURE(BIGINT pSetPointer)
   Code
   self._SearchExpression = ''
@@ -10668,6 +10992,7 @@ DriverFileClass.SET              PROCEDURE(BIGINT pSetPointer)
   Return
 
 !-----------------------------------------------------------------
+! SET(KEY)
 DriverFileClass.SET              PROCEDURE(KEY pKey)
   Code
   self._SearchExpression = ''
@@ -10676,6 +11001,7 @@ DriverFileClass.SET              PROCEDURE(KEY pKey)
   Return
 
 !-----------------------------------------------------------------
+! SET(KEY,KEY)
 DriverFileClass.SET              PROCEDURE(KEY pKey, KEY pStart)
   Code
   self._SearchExpression = ''
@@ -10684,6 +11010,7 @@ DriverFileClass.SET              PROCEDURE(KEY pKey, KEY pStart)
   Return
 
 !-----------------------------------------------------------------
+! SET(KEY,pointer)
 DriverFileClass.SET              PROCEDURE(KEY pKey, BIGINT pSetPointer)
   Code
   self._SearchExpression = ''
@@ -10692,6 +11019,7 @@ DriverFileClass.SET              PROCEDURE(KEY pKey, BIGINT pSetPointer)
   Return
 
 !-----------------------------------------------------------------
+! SET(KEY,KEY,Pointer)
 DriverFileClass.SET              PROCEDURE(KEY pKey, KEY pStart, BIGINT pSetPointer)
   Code
   self._SearchExpression = ''
@@ -10843,7 +11171,7 @@ obj   &DriverFileClass
   End
   Clear(self.SubsetQueue)
   self.SubsetQueue.Operation = pOperation
-  self.SubsetQueue.From = obj.FullPathName
+  self.SubsetQueue.From = obj.GetFullPathName()
   self.SubsetQueue.File &= pFile
   If not omitted(pFilter)
     self.SubsetQueue.Filter &= New String(size(pFilter))
@@ -11211,6 +11539,13 @@ x    long,Auto
     Else
       If self._nullstr[self.Fields.index] <> '.' then Return False.
     End
+    If self.fields.over
+      Return self.Null_(self.fields.over)
+    ElsIf self.fields.InOverGroup
+      If self._WithField(self.fields.InOverGroup) = Driver:ok
+        Return self.Null_(self.fields.over)
+      End
+    End
     ! so, at this point the field has been _set_ to null. But check and see if the value in the field is still blank.
     Return self._FieldIsBlank()
   End
@@ -11258,10 +11593,41 @@ DriverFileClass.SETNULL_         PROCEDURE(*Cstring pColumn)
 ! Assumes the correct entry in the Fields Queue is loaded
 ! Works on the Record Buffer, not the Shadow buffer
 DriverFileClass._SetFieldNull     PROCEDURE()
+i               long,auto
+g               long,auto
+x               long,auto
+groupfields     long,auto
+node            &FieldGroupType,Auto
   code
-  If self.Fields.index = 0 then return.
+  If self.Fields.index = 0 then Return.
   self._nullstr[self.Fields.index] = '.'
   self._ClearField()
+  i = self.fields.Index
+
+  ! if the field is a group, then all the contents of the group are also set to null
+  If self.fields.Type = ClaGROUP
+    GroupFields = self.fields.GroupFields
+    Loop g = i to i + GroupFields
+      self._nullstr[g] = '.'
+      If self._WithField(g) = driver:ok
+        self._ClearField()
+      End
+    End
+  End
+
+  ! If any fields are over this field, then they must also be set to null
+  Loop x = 1 to self.SharedProperties.FieldList.nodes
+    node &= self._withFieldNode(x)
+    If node.Over = i
+      self._nullstr[node.index] = '.'
+      ! the "overed" field is not cleared. the "parent" field is in the db.
+      If node.Type = ClaGROUP
+        Loop g = x+1 to x + node.GroupFields
+          self._nullstr[g] = '.'
+        End
+      End
+    End
+  End
 
 !-----------------------------------------------------------------
 ! clear the specific field. Works on Arrays as well.
@@ -11274,11 +11640,17 @@ DriverFileClass._ClearField     PROCEDURE()
   End
   Case self.Fields.Type
   of ClaSTRING
-    memset(self.ClaFCB.rec_buf + self.Fields.offset,32,self.Fields.Length)
+    If self.Fields.SqlTimeStamp >= driver:GroupOverTimeStamp and self.Fields.SqlTimeStamp <= driver:GroupOverTimeStampTZ
+      memset(self.ClaFCB.rec_buf + self.Fields.offset,0,self.Fields.Length)  ! null date/time group must be binary zero
+    Else
+      memset(self.ClaFCB.rec_buf + self.Fields.offset,32,self.Fields.Length)
+    End
   of ClaPSTRING
     memset(self.ClaFCB.rec_buf + self.Fields.offset,32,self.Fields.Length)
     memset(self.ClaFCB.rec_buf + self.Fields.offset,0,1)
   of ClaCSTRING
+    memset(self.ClaFCB.rec_buf + self.Fields.offset,0,self.Fields.Length)
+  of ClaUSTRING
     memset(self.ClaFCB.rec_buf + self.Fields.offset,0,self.Fields.Length)
   Else
     memset(self.ClaFCB.rec_buf + self.Fields.offset,0,self.Fields.Length)
@@ -11286,6 +11658,7 @@ DriverFileClass._ClearField     PROCEDURE()
   Return
 
 !-----------------------------------------------------------------
+! + means not null, . means null.
 DriverFileClass._SetAllNoNull     PROCEDURE()
   code
   self._nullstr = all('+',self.SharedProperties.FieldList.nodes)
@@ -11306,15 +11679,18 @@ DriverFileClass.SETNONNULL      PROCEDURE(Long pAddr, Long pSize)
   Return
 
 !-----------------------------------------------------------------
+! + means not null, . means null.
 DriverFileClass.GETNULLS         PROCEDURE()
 x  long
   Code
   Loop x = 1 to self.SharedProperties.FieldList.nodes
-    !self.trace('x=' & x & ' ns=' & size(self._nullstr) & ' fullpathname=' & self.FullPathName)
     self.Fields &= self._withFieldNode(x)
-    if self.Fields &= null then cycle.
-    If self._nullstr[x] = '.' and self._FieldIsBlank() = false
-      self._nullstr[x] = '+'
+    If self.Fields &= null then cycle.
+    If self._nullstr[x] = '.'
+      If self.fields.over or self.fields.InOverGroup  ! do not check for blank.
+      ElsIf self._FieldIsBlank() = false
+        self._nullstr[x] = '+'
+      End
     End
   End
   Return self._nullstr
@@ -11322,6 +11698,9 @@ x  long
 !-----------------------------------------------------------------
 DriverFileClass.SETNULLS        PROCEDURE(String pNulls)
   Code
+  If pNulls = ''
+    self._SetAllNoNull()
+  End
   self._nullstr = pNulls
   Return
 
@@ -11859,6 +12238,32 @@ DriverFileClass._GetCollation  Procedure(Long pIndex)
   Return ''
 
 !-----------------------------------------------------------------
+! keys record must be loaded before calling this
+DriverFileClass._GetKeyName  Procedure(Long pCase=0)
+keyname    cstring(255),auto
+tablename  cstring(255),auto
+x          long,auto
+  code
+  If self.keys.dbname <> ''
+    Return self.keys.dbName
+  End
+  keyname = self.keys.label
+  x = instring(':',keyname,1,1)
+  If x
+    keyname = sub(keyname,x+1,255)
+  End
+  !tablename = pTableName
+  tablename = self.UnwrapReserved(self.TableName)
+  case pCase
+  of driver:lower
+    Return lower(tablename & '_' & keyname)
+  of driver:upper
+    Return upper(tablename & '_' & keyname)
+  Else
+    Return tablename & '_' & keyname
+  End
+
+!-----------------------------------------------------------------
 DriverFileClass.GetProp:Collation             Procedure(Long pIndex)
   code
   If pIndex = 0
@@ -12127,16 +12532,18 @@ DriverFileClass.GetProp:Json               PROCEDURE(Long pIndex)!,STRING,VIRTUA
 !-----------------------------------------------------------------
 DriverFileClass.GetProp:Keys               PROCEDURE()!,Long,VIRTUAL  ! Get number of keys in file
   code
-  return records(self.keys)
+  Return records(self.keys)
+
 !-----------------------------------------------------------------
 DriverFileClass.GetProp:Key               PROCEDURE(Long pIndex)!,STRING,VIRTUAL  ! Get a pointer to a specific key
   code
   self.keys.index = pIndex
-  get(self.keys,self.keys.index)
-  if errorcode() = 0
+  Get(self.keys,self.keys.index)
+  If errorcode() = 0
     return self.keys.keyptr
-  end
-  return 0
+  End
+  Return 0
+
 !-----------------------------------------------------------------
 DriverFileClass.GetProp:Label              PROCEDURE(Long pIndex)!,STRING,VIRTUAL  ! Get file/key/memo/blob/field's label
   code
@@ -12278,6 +12685,7 @@ p  long
     self.FullPathName = clip(pName)
     If self.FullPathName
       self._FullPathNameSetFromPropName = true
+      self._SplitFullPathName()
     Else
       self._FullPathNameSetFromPropName = false
     End
@@ -12474,6 +12882,34 @@ DriverFileClass.GetProp:RelationsOff       PROCEDURE()
   Return Choose(self._relationsOff = true,'1','')
 
 !-----------------------------------------------------------------
+DriverFileClass.GetSchema              Procedure()
+  code
+  If self.TableSchema
+    Return self.TableSchema
+  End
+  If self.PropSchema
+    Return self.PropSchema
+  End
+  If self._DefaultSchema
+    Return self._DefaultSchema
+  End
+  Return ''
+
+!-----------------------------------------------------------------
+DriverFileClass.GetProp:Schema         Procedure()
+  code
+  Return self.PropSchema
+
+!-----------------------------------------------------------------
+DriverFileClass.SetProp:Schema         Procedure(String pValue)
+schema  cstring(DRIVER:MAXSCHEMANAME)
+  code
+  schema = self._Sanitize(pValue,driver:SqlTable)
+  schema = self.TranslateReserved(schema)
+  self.PropSchema = schema
+  Return
+
+!-----------------------------------------------------------------
 DriverFileClass.GetProp:Size               PROCEDURE(Long pIndex)
   code
   !self.trace('GetProp:Size ' & pIndex)
@@ -12633,6 +13069,14 @@ strdf   string(16),auto
     End
     pStr.SetSlice(self.Fields.size,self.Fields.size,'<0>')
     memcpy(Addr,pStr.GetAddress(),self.Fields.size)
+
+  of ClaUString
+    If pStr.Length() < self.Fields.size-1
+      pStr.Append(all('<0>',self.Fields.size - pStr.Length()))
+    End
+    pStr.SetSlice(self.Fields.size,self.Fields.size,'<0>')
+    memcpy(Addr,pStr.GetAddress(),self.Fields.size)
+
   of ClaPString
     If pStr.Length() > self.Fields.size-1 then pStr.SetLength(self.Fields.size-1).
     lg = pStr.Length()
@@ -12658,6 +13102,7 @@ DriverFileClass._GetFieldAsJson           Procedure(Long pIndex,string pLeft, St
       case self.Fields.Type
       of ClaSTRING
       orof ClaCSTRING
+      orof ClaUSTRING
       orof ClaPSTRING
         self.tempstr.SetValue(self._GetFieldAsText(pIndex,1,Driver:Format))
         self.tempstr.JsonEncode()
@@ -12731,6 +13176,7 @@ str         StringTheory
       case self.Fields.Type
       of ClaSTRING
       orof ClaCSTRING
+      orof ClaUSTRING
       orof ClaPSTRING
         str.SetValue(self._GetFieldAsText(pIndex,ArrayIndex,driver:Format))
         !If self.fields.SqlTimeStamp
@@ -12814,6 +13260,7 @@ str         StringTheory
       ArrayIndex = self._calcIndex()
       case self.Fields.Type
       of ClaSTRING
+      orof ClaUSTRING
       orof ClaCSTRING
       orof ClaPSTRING
         str.SetValue(self._GetFieldAsText(pIndex,ArrayIndex,driver:Format))
@@ -12859,6 +13306,7 @@ rl    &real
 srl   &sreal
 st    &string
 cst   &cstring
+ust   &ustring
 pst   &pstring
 dt    &date
 tm    &time
@@ -12896,17 +13344,20 @@ x     long
       cstr = self.FormatTimeStamp(st,self.fields.SqlTimeStamp)
       Return cstr
     End
-    If self.fields.Binary = false
-      x = Instring('<0>',st,1,1)
-      loop while x
-        st[x] = ' '
-        x = Instring('<0>',st,1,x+1)
-      end
-    End
+!    If self.fields.Binary = false
+!      x = Instring('<0>',st,1,1)
+!      loop while x
+!        st[x] = ' '                  ! this changes the field record. Not ok.
+!        x = Instring('<0>',st,1,x+1)
+!      end
+!    End
     Return clip(st)
   of ClaCSTRING
     cst &= (addr) & ':' &  self.Fields.Size
     return cst
+  of ClaUSTRING
+    ust &= (addr) & ':' &  self.Fields.Size / 2
+    return ust
   of ClaPSTRING
     pst &= (addr) & ':' &  self.Fields.Size
     return pst
@@ -12984,6 +13435,7 @@ srl   sreal,Auto
 st    &string
 cst   &cstring
 pst   &pstring
+ust   &ustring
 dt    date
 dts   string(4)
 dtl   long
@@ -13075,6 +13527,9 @@ offset  long,auto
   of ClaCSTRING
     cst &= (addr) & ':' &  self.Fields.Size
     cst = pText
+  of ClaUSTRING
+    ust &= (addr) & ':' &  self.Fields.Size / 2 ! ustring ptrs take code-points as length
+    ust = pText
   of ClaPSTRING
     pst &= (addr) & ':' &  self.Fields.Size
     pst = pText
@@ -13151,7 +13606,6 @@ DriverFileClass.GetProp:Value              PROCEDURE(Long pIndex)
 str  &string
   code
   If pIndex > 0 and self._WithField(pIndex) = driver:ok
-    !self.Trace('GetProp:Value ' & pIndex & ' ' & self.Fields.index & ' self.Fields.Offset=' & self.Fields.Offset & ' self.Fields.Length=' & self.Fields.Length)
     str &= self.ClaFCB.rec_buf & ':' & self.ClaFCB.rec_len
     Return str[self.Fields.Offset + 1 : self.Fields.Offset + self.Fields.Length]
   Elsif pIndex < 0 and self._WithBlob(pIndex) = driver:ok
@@ -13290,40 +13744,6 @@ DriverFileClass.GETKEYPROP:Type      PROCEDURE(KEY pKey)
     end
   end
   return ''
-!!-----------------------------------------------------------------
-!! move one field from the source into the file record.
-!! fieldsqueue is already loaded.
-!DriverFileClass._ToRecordField   Procedure(Byte pFieldType, Long pFieldAddress, Long pFieldSize, Long pSrcType, Long pSrcAddr, Long pSrcSize)
-!!b byte
-!  code
-!  If not self.Fields.Interface &= null
-!    self.Fields.interface.ToRecordField(pFieldType,pFieldAddress,pFieldSize,pSrcType,pSrcAddr,pSrcSize)
-!  Else
-!    If pFieldSize < pSrcSize then pSrcSize = pFieldSize.
-!    If pFieldType = ClaPSTRING                          ! SQL databases don't have pStrings, just strings, so we can do a generic conversion here
-!      If pSrcSize > pFieldSize - 1
-!        self.SetError(DataTruncatedError)
-!      else
-!        memset(pFieldAddress,pSrcSize,1)
-!        memcpy(pFieldAddress+1,pSrcAddr,pSrcSize)
-!      end
-!    Else
-!      memcpy(pFieldAddress,pSrcAddr,pSrcSize)
-!    End
-!    If pFieldSize > pSrcSize
-!      Case pFieldType
-!      Of ClaSTRING
-!        memset(pFieldAddress + pSrcSize,32, pFieldSize - pSrcSize)               ! pad with spaces
-!      Of ClaPSTRING
-!        If pFieldSize-1 > pSrcSize
-!          memset(pFieldAddress + pSrcSize + 1,32, pFieldSize - pSrcSize - 1)     ! pad with spaces
-!        End
-!      Else
-!        memset(pFieldAddress + pSrcSize,0, pFieldSize - pSrcSize)                ! pad with nulls
-!      End
-!    End
-!  End
-!  Return
 
 !-----------------------------------------------------------------
    !!!todo - update this for unicode ; see GetStringTypeW
@@ -13334,10 +13754,10 @@ DriverBaseClass._Sanitize      Procedure(String pStr, Long pContext)
   of driver:DosFile
     self.tempstr.CleanFileName( , ,st:allowpath)
   of driver:SqlTable
-    self.tempstr.KeepChars('._[$#@]"','_',st:AllAlphaNum)
+    self.tempstr.KeepChars('._[$#@]"`','_',st:AllAlphaNum)
   of driver:order
   orof driver:groupby
-    self.tempstr.KeepChars('_ ,()+-*/''|<<>=','_',st:AllAlphaNum)
+    self.tempstr.KeepChars('[]"`_ ,()+-*/''|<<>=','_',st:AllAlphaNum)
   of driver:filter
   orof driver:searchfilter
   orof driver:expression
@@ -13390,21 +13810,21 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
       do checkBoolean
       self.opt:AllowDetails = pValue
     End
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     Return self.opt:AllowDetails
   of '/LOGFILENAME'
     If pValue <> ''
       if self.opt:LogFileName &= null then self.opt:LogFileName &= new Cstring(255).
       self.opt:LogFileName = clip(pValue)
     End
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     If self.opt:LogFileName &= null then Return '' else return self.opt:LogFileName.
   of '/LOGMESSAGE'
     If pValue <> ''
       if self.opt:LogMessage &= null then self.opt:LogMessage &= new Cstring(255).
       self.opt:LogMessage = clip(pValue)
     End
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     Return ''
   of '/MASTER'
     case upper(pValue)
@@ -13419,14 +13839,19 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
     of 'STRICTDICT'
       self.opt:master = driver:strictdict
     end
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     Return self.opt:master
+  of '/SCHEMA'
+    If pValue <> ''
+      self.SetProp:Schema(pValue)
+    End
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & self.GetProp:Schema() & ']').
   of '/TURBOSQL'
     if pValue <> '' then
       do checkBoolean
       self.opt:TurboSQL = pValue
     End
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     Return self.opt:TurboSQL
   of '/ZERODATE'
     case upper(pValue)
@@ -13439,7 +13864,7 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
     else
       If pValue then self.opt:zerodate = pValue.
     End
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     Return self.opt:zerodate
   of '/PROPSQLMATCHBYNUMBER'
     case upper(pValue)
@@ -13451,7 +13876,7 @@ DriverFileSQLClass.SetDriverOption            Procedure(String pOption, String p
     orof 'FALSE'
       self.opt:PropSqlMatchByNumber = False
     End
-    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue & ']')).
+    If self._logOptions then self.Log('[OPTN]' & clip(pOption) & '=[' & clip(pValue) & ']').
     Return self.opt:PropSqlMatchByNumber
   End
   Return parent.SetDriverOption(pOption,pValue)
@@ -13503,6 +13928,23 @@ DriverFileSQLClass.CreateDB      PROCEDURE(String pDatabaseName, String pOptions
   code
   !self.trace('DriverFileSQLClass.CreateDB')
   If self._CheckClosed() = false then Return.
+  Return
+
+!-----------------------------------------------------------------
+!!!derive
+DriverFileSQLClass._ConstructKey               Procedure(Long pPrimary)
+  code
+
+!-----------------------------------------------------------------
+DriverFileSQLClass.CREATEKEY         PROCEDURE(KEY pKey)
+  Code
+  If self._WithKey(pKey) = Driver:ok
+    self._ConstructKey(false)
+    self.SqlCode.append(';<13,10>')
+    If self._ExecuteSqlNoParms() = Driver:notok
+      Return
+    End
+  End
   Return
 
 !-----------------------------------------------------------------
@@ -13631,11 +14073,67 @@ DriverFileSQLClass.CONNECT     PROCEDURE(Long pOptions=0)
   Return
 
 !-----------------------------------------------------------------
-! although mostly common SQL syntax, use of ON CONFLICT and RETURNING are database specific.
-!!! DERIVE
-DriverFileSQLClass._AddSQL       Procedure(Long pOpcode)
+! can take Opcode:Add, Opcode:Append, Opcode:Upsert as the parameter.
+! although mostly common SQL syntax, use of ON CONFLICT(list) and RETURNING are Postgres specific.
+DriverFileSQLClass._AddSql       Procedure(Long pOpcode)
+x              Long,Auto
+Returning      StringTheory
+Excluded       StringTheory
+FieldsList     StringTheory
+ValuesList     StringTheory
+ConflictList   StringTheory
+
   code
-  return driver:notok
+  !self.trace('DriverFilePostgres2Class._AddSql pOpcode=' & pOpcode)
+  self._ClearParameterQueue(pOpcode)
+  self.ParseProject()
+  Loop x = 1 to self.SharedProperties.FieldList.nodes
+    self.Fields &= self._WithFieldNode(x)
+    If self.Fields.Over or self.Fields.InOverGroup or self.Fields.Type = ClaGROUP then Cycle.
+    If self.Fields.ReadOnly or self.Fields.IsIdentity
+      returning.Append(self.Fields.Column,st:noclip,',')
+      Cycle
+    End
+    If self._ProjectField[x] = false
+      If self.Fields.HasDefault
+        returning.Append(self.Fields.Column,st:noclip,',')
+      End
+      Cycle                                ! importantly, 255, not 1, if included.
+    End
+    FieldsList.Append(self.Fields.Column,st:NoClip,',')
+    self._ParameterCount += 1
+    self._SetParameterNode(self._ParameterCount,self.fields,driver:FromBuffer,0)
+    ValuesList.Append(self._genparm(self._ParameterCount),st:NoClip,',')
+    If pOpcode = OpCode:Upsert
+      If self.Fields.Primary = false
+        excluded.append( self.Fields.Column & '= excluded.' & self.Fields.Column ,st:NoClip,',')
+      Else
+        conflictlist.append(self.Fields.Column,st:NoClip,',')
+      End
+    End
+  End
+  If self._NoMemo = false
+    Loop x = 1 to Records(self.blobs)
+      Get(self.blobs,x)
+      If self.blobs.ReadOnly then cycle.
+      If self._ProjectBlobField[x] = false then cycle.          ! importantly, 255, not 1, if included.
+      FieldsList.Append(self.blobs.Column,st:NoClip,',')
+      self._ParameterCount += 1
+      self._SetParameterBlob(self._ParameterCount,self.blobs.index)
+      ValuesList.Append(self._genparm(self._ParameterCount),st:NoClip,',')
+    End
+  End
+  self.SqlCode.SetValue('INSERT INTO ' & self.GetFullPathName() & ' (' & FieldsList.GetValue() & ') VALUES (' & ValuesList.GetValue() & ') ')
+  If pOpcode = OpCode:Upsert
+    self.SqlCode.Append(' ON CONFLICT (' & ConflictList.GetValue() & ') DO UPDATE SET ' & excluded.GetValue())
+  End
+  If self.GetProp:AllowReturning(Opcode:Add) = true
+    If returning.Length() and self._FastWrite = false
+      self.SqlCode.Append(' RETURNING ' & returning.GetValue())
+    End
+  End
+  self.SqlCode.Append(';')
+  return driver:ok
 
 !-----------------------------------------------------------------
 ! The SQL for a DELETE is pretty standard. However this method may need to be derived in a specific driver
@@ -13656,7 +14154,7 @@ Offset Long
         where.Append(self.Fields.Column & '= ' & self._genparm(self._ParameterCount) ,st:NoClip,' AND ')
       End
     End
-    self.SqlCode.SetValue('DELETE FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' WHERE ' & where.GetValue() & ';')
+    self.SqlCode.SetValue('DELETE FROM ' & self.GetFullPathName() & ' WHERE ' & where.GetValue() & ';')
     Return driver:ok
   End
   Return driver:notok
@@ -13676,7 +14174,7 @@ filter  StringTheory
   self._NoAlias = true
   filter.SetValue(self._ExpandExpression(self.TokenStr.GetValue()))
   self._NoAlias = false
-  self.SqlCode.SetValue('DELETE FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' WHERE ' & filter.GetValue() & ';')
+  self.SqlCode.SetValue('DELETE FROM ' & self.GetFullPathName() & ' WHERE ' & filter.GetValue() & ';')
   Return driver:ok
 
 !-----------------------------------------------------------------
@@ -13701,7 +14199,7 @@ select   StringTheory
         where.append(self.Fields.Column & '= ' & self._genparm(self._ParameterCount) ,st:NoClip, ' AND ')
       End
     End
-    self.SqlCode.SetValue('SELECT ' & select.GetValue() & ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' WHERE ' & where.GetValue() & ';')
+    self.SqlCode.SetValue('SELECT ' & select.GetValue() & ' FROM ' & self.GetFullPathName() & ' WHERE ' & where.GetValue() & ';')
     Return Driver:ok
   End
   Return driver:NotOk
@@ -13768,7 +14266,7 @@ OptWhere    StringTheory
       self.AppendOptKeyWhere(OptWhere,false,false,'OR')
       where.Append(' AND (' & OptWhere.GetValue() & ')')
     End
-    self.SqlCode.SetValue('SELECT ' & self.ProjectList.GetValue() & ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' ' & self._GetAlias(driver:nodot) & ' WHERE ' & where.GetValue() & ';')
+    self.SqlCode.SetValue('SELECT ' & self.ProjectList.GetValue() & ' FROM ' & self.GetFullPathName() & ' ' & self._GetAlias(driver:nodot) & ' WHERE ' & where.GetValue() & ';')
     Return driver:ok
   End
   Return Driver:NotOk
@@ -13787,7 +14285,7 @@ RecsOrderBy    Long,Auto
 orc            StringTheory
   code
   pWhere.SetValue('')
-  If self.SetMethod = driver:SetKeyKey or (self.Paging = true and self.Limit = 0)
+  If self.SetMethod = driver:SetKeyKey or (self.Paging = true and self.Limit = 0 and self.Distinct = false and self.NotDistinct = 0)
     RecsOrderBy = records(self.OrderQueue)
     Loop x = 1 to RecsOrderBy
       Get(self.OrderQueue,x)
@@ -13819,10 +14317,10 @@ orc            StringTheory
         case self._SearchRankType
         of ClaLong
           If self._GetSearchRankDirection() = driver:Ascending Then Clear(lg,-1) Else Clear(lg,1).
-          self._SetParameterValue(self._ParameterCount,lg,ClaLong)
+          self._SetParameterValue(self._ParameterCount,address(lg),ClaSearch,4)
         Else
           If self._GetSearchRankDirection() = driver:Ascending Then Clear(rl,-1) Else Clear(rl,1).
-          self._SetParameterValue(self._ParameterCount,rl,ClaReal)
+          self._SetParameterValue(self._ParameterCount,address(rl),ClaSearch,8)
         End
 
         If self.AllowParameterRepeats
@@ -13835,7 +14333,7 @@ orc            StringTheory
         If x = 1
           self._ParameterCount += 1
           self._SetParameterNode(self._ParameterCount,self.fields,driver:FromShadow,0)
-          pWhere.append('(' & self._GetAlias(driver:withdot) & self.Fields.Column & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
+          pWhere.append('(' & self.OrderQueue.Clause & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
         Else
           If self.AllowParameterRepeats
             pWhere.append(' OR (' & orc.getvalue())
@@ -13844,13 +14342,15 @@ orc            StringTheory
           End
           self._ParameterCount += 1
           self._SetParameterNode(self._ParameterCount,self.fields,driver:FromShadow,0)
-          pWhere.append(' AND ' &  self._GetAlias(driver:withdot) & self.Fields.Column & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
+          pWhere.append(' AND ' &  self.OrderQueue.Clause & ' ' & con & ' ' & self._genparm(self._ParameterCount) & ')')
         End
         If self.AllowParameterRepeats
-          orc.append(self._GetAlias(driver:withdot) & self.Fields.Column & ' = ' & self._genparm(self._ParameterCount) ,st:noclip,' AND ')
+          orc.append(self.OrderQueue.Clause & ' = ' & self._genparm(self._ParameterCount) ,st:noclip,' AND ')
         Else
-          orc.append(self._GetAlias(driver:withdot) & self.Fields.Column & ' = @<<{{' & self._ParameterCount & '}>@',st:noclip,' AND ')
+          orc.append(self.OrderQueue.Clause & ' = @<<{{' & self._ParameterCount & '}>@',st:noclip,' AND ')
         End
+      Else
+        self.trace('_AddOrderToWhere fieldindex not found = ' & self.OrderQueue.FieldIndex)
       End
     End
   End
@@ -13884,7 +14384,6 @@ opt                 StringTheory
 
   ! ORDER BY Clause
   self.BuildOrderBy()               ! Builds the self.OrderQueue. Sets the Prop:OrderBy based on the SetDirection
-
   ! WHERE
   self._AddOrderToWhere(where,pOpCode)      ! count is returned
 
@@ -13894,7 +14393,6 @@ opt                 StringTheory
   If Errorcode() then Return Driver:notok.
 
   self.BuildSubsetWhere(where,self._GetAlias(driver:withdot))
-
   ! next append any prop:filter or prop:sqlFilter
   self.BuildWhere()                                                              ! this populates *self.where* from self.filter and self.sqlfilter and self.searchfilter
   If Errorcode() then Return Driver:notok.
@@ -13906,13 +14404,11 @@ opt                 StringTheory
       where.SetValue(self.Where)                                                 ! or just move the filter into where
     End                                                                          ! which is then used below.
   End
-
   If self.Offset
     offset = self.Offset
   ElsIf self._SetOffset
     offset = self._SetOffset
   End
-
   self.SqlCode.SetValue(  Choose(self._explain  = true,' ' & self.ExplainStart(),'') &|
                         CHOOSE(cte.length() > 0 ,cte.GetValue(),'') &|
                         'SELECT ' &|
@@ -13921,7 +14417,7 @@ opt                 StringTheory
                         self.ProjectList.GetValue())
 
   self.SqlCode.Append( |
-                        ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' ' & self._GetAlias(driver:nodot) & |
+                        ' FROM ' & self.GetFullPathName() & ' ' & self._GetAlias(driver:nodot) & |
                         Choose(self._SearchJoin <> '', self._SearchJoin , '') & |
                         Choose(where.Length() > 0,' WHERE ' & where.GetValue(),'') & |
                         Choose(not self.GroupBy &= null and not self.GroupBy = '', ' GROUP BY ' & self.GroupBy, '') &|
@@ -13939,10 +14435,9 @@ opt                 StringTheory
     Else
       self.SqlCode.Append(self.TranslateLimitBelow(self.Limit,0))
     End
-
     ! If prop:limit is set then whole result set is loaded. No paging here.
     self._OffsetParmNumber = 0
-  ElsIf self.Paging = false or self.distinct = true !or self.notdistinct > 0
+  ElsIf self.Paging = false or self.distinct = true or self.notdistinct > 1  !or self.notdistinct > 0
     self._OffsetParmNumber = 0
   ElsIf self.fetchsize
     ! developer not setting boundaries, so using buffer page settings
@@ -14128,6 +14623,13 @@ decString  string(36)
         If pHighLow = driver:high
           memset(pAddr + self.Fields.Offset,255,self.Fields.Length-1)
           memset(pAddr + self.Fields.Offset + self.Fields.Length-1,0,1)
+        Else
+          memset(pAddr + self.Fields.Offset,0,self.Fields.Length)
+        End
+      of ClaUSTRING
+        If pHighLow = driver:high
+          memset(pAddr + self.Fields.Offset,255,self.Fields.Length-2)
+          memset(pAddr + self.Fields.Offset + self.Fields.Length-2,0,2)
         Else
           memset(pAddr + self.Fields.Offset,0,self.Fields.Length)
         End
@@ -14373,9 +14875,9 @@ obj   &DriverFileSQLClass
     self.ClearProps()
     Return
   End
-  If self.GetPROP:Driver() = obj.GetProp:Driver() and lower(self.GetProp:Server()) = lower(obj.GetProp:server())
+  If self.GetPROP:Driver() = obj.GetProp:Driver() and lower(self.GetProp:Server()) = lower(obj.GetProp:server()) and self.GetProp:Port() = obj.GetProp:Port()
     If obj.Exists('') = False
-      obj._CreateTable()   ! bypass the open checks
+      self.Clone(obj.GetFullPathName(),pOptions)
     End
     self.MergeFast(pDestination,pOptions)
   Else
@@ -14386,17 +14888,13 @@ obj   &DriverFileSQLClass
 
 !-----------------------------------------------------------------
 DriverFileSQLClass.MERGE             PROCEDURE(String pDestination, LONG pOptions)
-SavedFileName  like(self.FullPathName)
   Code
   If self._CheckOpen() = 0
     self.ClearProps()
     Return
   End
   If self.Exists(pDestination) = False
-    SavedFileName = self.FullPathName
-    self.FullPathName = clip(pDestination)
-    self._CreateTable()   ! bypass the open checks
-    self.FullPathName = SavedFileName
+    self.Clone(pDestination,pOptions)
   End
   self.MergeFast(pDestination,pOptions)
   self.ClearProps()
@@ -14446,7 +14944,7 @@ rows    Long,Auto
           self.ResultRow += 1
           self.ResultToRecord(self.ResultRow,self.ClaFCB.rec_buf, Choose(self._nomemoset=true,Driver:NoBlobs,Driver:Blobs))
           Break
-        Elsif rows And (self.Limit or self._limit or self.Paging = false)
+        Elsif rows And (self.Limit or self._limit or self.Paging = false or self.distinct = true or self.notdistinct > 0)
           ! limit is set, so whole result is here, so trigger an end-of-file
           Self.SetError(BadRecErr)
           Break
@@ -14461,7 +14959,7 @@ rows    Long,Auto
           self.ResultRow -= 1
           self.ResultToRecord(self.ResultRow,self.ClaFCB.rec_buf, Choose(self._nomemoset=true,Driver:NoBlobs,Driver:Blobs))
           Break
-        Elsif rows And self.Paging = false
+        Elsif rows And self.Paging = false and self.distinct = false and self.NotDistinct = 0
           ! whole result is here, so trigger an end-of-file
           Self.SetError(BadRecErr)
           Break
@@ -14542,6 +15040,7 @@ DriverFileSQLClass.POSITION                  PROCEDURE()
 !-----------------------------------------------------------------
 ! The SQL for a UPDATE is pretty standard. However this method may need to be derived in a specific driver
 ! if the SQL syntax is different. MSSql for example does not use RETURNING to return values, but OUTPUT
+! MariaDB ONLY supports the RETURNING clause from version 13.0.0 and later.
 DriverFileSQLClass._PutSql Procedure()
 x              Long
 stmt           Long
@@ -14607,12 +15106,16 @@ returning      StringTheory
       Else
         !self.SqlCode.SetValue('')
         ! Readonly fields are restored with a PUT. Since there's nothing to write, but the RETURNING fields have been altered, these need to be reset.
-        self.SqlCode.SetValue('SELECT ' & returning.GetValue() & ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' WHERE ' & where.GetValue() )
+        self.SqlCode.SetValue('SELECT ' & returning.GetValue() & ' FROM ' & self.GetFullPathName() & ' WHERE ' & where.GetValue() )
       End
     Else
-      self.SqlCode.SetValue('UPDATE ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' SET ' & FieldsList.GetValue() & ' WHERE ' & where.GetValue() )
+      self.SqlCode.SetValue('UPDATE ' & self.GetFullPathName() & ' SET ' & FieldsList.GetValue() & ' WHERE ' & where.GetValue() )
       If returning.length()
-        self.SqlCode.append(' RETURNING ' & returning.GetValue())
+        If self.GetProp:AllowReturning(Opcode:Put) = true
+          self.SqlCode.append(' RETURNING ' & returning.GetValue())
+        Else
+          !!!todo?
+        End
       End
     End
     If self.SqlCode.Length()
@@ -14674,7 +15177,7 @@ Order       StringTheory
     End
   End
 
-  self.SqlCode.SetValue('SELECT ' & self.ProjectList.GetValue() & ' FROM ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' ' & self._GetAlias(driver:nodot))
+  self.SqlCode.SetValue('SELECT ' & self.ProjectList.GetValue() & ' FROM ' & self.GetFullPathName() & ' ' & self._GetAlias(driver:nodot))
   If pFilter
     If self.ParseProperty(pFilter,driver:filter,self.TokenStr) = driver:notok
       self.SetError(BadFilterErr)
@@ -14707,7 +15210,7 @@ Ans      Cstring(255)
   self._ClearParameterQueue(self._ParameterOpcode)
   If self.CheckConnect() = Driver:notok then Return 0.      ! File can be OPEN. If closed a new connection may be established.
   Self.SetError(NoError)
-  self.SqlCode.setvalue('SELECT COUNT(1) FROM ' & self._sanitize(self.FullPathName,driver:sqlTable))
+  self.SqlCode.setvalue('SELECT COUNT(1) FROM ' & self.GetFullPathName())
   If pFilter
     self.SqlCode.Append(' ' & self._GetAlias(driver:nodot))
     If self.ParseProperty(pFilter,driver:filter,self.TokenStr) = driver:notok
@@ -14719,7 +15222,7 @@ Ans      Cstring(255)
   End
   self.SqlCode.Append(';')
   If self._ExecuteSqlToValue(Ans) = driver:ok
-    Return Ans !self.Result.GetCell(1,1)
+    Return Ans
   End
   Return 0
 
@@ -14792,7 +15295,7 @@ ans      Cstring(255)
     do AppendField
   End
 
-  self.SqlCode.setvalue('SELECT COUNT(1) FROM ' & self._sanitize(self.FullPathName,driver:sqlTable)  & ' ' & self._GetAlias(driver:nodot))
+  self.SqlCode.setvalue('SELECT COUNT(1) FROM ' & self.GetFullPathName()  & ' ' & self._GetAlias(driver:nodot))
   If Filter.length()
     self.SqlCode.Append(' WHERE ' & filter.GetValue())
   End
@@ -14840,7 +15343,7 @@ DriverFileSQLClass.REMOVE           PROCEDURE()
   If self._CheckClosed() = false then Return.                   ! FILE must be CLOSED to REMOVE
   If self.CheckConnect() = Driver:notok then Return.
   Self.SetError(NoError)
-  self.SqlCode.SetValue('DROP TABLE ' & self._sanitize(self.FullPathName,driver:sqlTable) & ';')
+  self.SqlCode.SetValue('DROP TABLE ' & self.GetFullPathName() & ';')
   If self._ExecuteSqlNoParms(self.result) = driver:ok
   End
   Return
@@ -14996,15 +15499,17 @@ result  Long,auto
 !-----------------------------------------------------------------
 ! parameterized SQL call, designed to be a safer prop:sql
 DriverFileSQLClass.SQL            PROCEDURE(String pSql,<*? pParm1>,<*? pParm2>,<*? pParm3>,<*? pParm4>,<*? pParm5>,<*? pParm6>,<*? pParm7>,<*? pParm8>,<*? pParm9>,<*? pParm10>,<*? pParm11>,<*? pParm12>,<*? pParm13>,<*? pParm14>,<*? pParm15>,<*? pParm16>,<*? pParm17>,<*? pParm18>,<*? pParm19>,<*? pParm20>)
+NUMBERPARMS   Equate(20)
 stmt  Long
   Code
   Self.SetError(NoError)
-  If self.CheckConnect() = driver:notok then return.
+  If self.CheckConnect() = driver:notok then Return.
   If pSql = ''
     Self.SetError(FileSystemErr)
     self.SetFileError(SQLErr,'Sql Statement Empty')
     Return
   End
+  self._ParameterOpcode = Opcode:NONE
   self.SqlCode.SetValue(clip(pSql))
   If self._executeSql(self.SqlCode,self.result,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20) = Driver:ok
   End
@@ -15060,7 +15565,7 @@ fldnum   long
 ptr      long
 offset   long
   Code
-  self.SqlCode.SetValue('UPDATE ' & self._sanitize(self.FullPathName,driver:sqlTable) & ' SET ')
+  self.SqlCode.SetValue('UPDATE ' & self.GetFullPathName() & ' SET ')
   do Fields
   If pFilter
     self.SqlCode.Append(' WHERE ' & pFilter)
@@ -15272,19 +15777,24 @@ DriverFileSQLClass.DOPROPERTY                Procedure(String pProperty,Long pIn
   Return
 
 !-----------------------------------------------------------------
-DriverFileSQLClass.GetProp:Database         Procedure()   ! get the server name out of the connection string
+DriverFileSQLClass.GetProp:Database         Procedure()   ! get the database name out of the connection string
   code
-  return self._connect[2]
+  return self._connect[CONNECT:DATABASE]
 
 !-----------------------------------------------------------------
 DriverFileSQLClass.GetProp:Server         Procedure()   ! get the server name out of the connection string
   code
-  return self._connect[1]
+  return self._connect[CONNECT:SERVER]
+
+!-----------------------------------------------------------------
+DriverFileSQLClass.GetProp:Port         Procedure()   ! get the server port out of the connection string
+  code
+  return self._connect[CONNECT:PORT]
 
 !-----------------------------------------------------------------
 DriverFileSQLClass.GetProp:User         Procedure()   ! get the user name out of the connection string
   code
-  return self._connect[3]
+  return self._connect[CONNECT:USER]
 
 !-----------------------------------------------------------------
 DriverFileSQLClass.GetProp:SQLDriver          PROCEDURE()!,STRING,VIRTUAL  ! '1' = Driver is SQL aware
@@ -15310,6 +15820,7 @@ DriverViewClass.Construct  Procedure()
 !-----------------------------------------------------------------
 DriverViewClass.Destruct  Procedure()
   Code
+  self._Destructing = true
   self.Close()
   self._FreeTree(self.Tree)
   Dispose(self.Tree)
@@ -15523,6 +16034,7 @@ cstr       &cstring
   addr = self.ClaVCB.ViewDescriptor + 1                  ! skip first byte
   FileIndex = self.ClaVCB.FileIndex                      ! pointer to an array of (FCB / File) pointers
   self._parseDescriptor(addr , FileIndex ,self.Tree,f)   ! f is null
+  self._ResolveOthersInView(self.tree)                    ! if the fields in a VIEW are OVER something, then that something needs to be in the view.
   self.ViewDriver = self.tree.File{prop:driver}
   cstr &= (self.ClaVCB.filter)
   self.SetProp:Filter(cstr)
@@ -15642,9 +16154,66 @@ SetRelation  routine
   pNode.Relation = driver:unknown
 
 !-----------------------------------------------------------------
+! pNode is a Queue
+DriverViewClass._ResolveOthersInView    Procedure(ViewTreeType pNode)  ! if the fields in a VIEW are OVER something, then that something needs to be in the view.
+x        Long,Auto
+y        Long,Auto
+n        Long,Auto
+ovr      Long,Auto
+obj      &DriverFileClass, Auto
+found    Byte !not auto
+  code
+  !self.trace('_ResolveOthersInView')
+  If pNode &= Null then Return.
+  If Records(pNode) = 0 then Return.
+  Loop n = 1 to Records(pNode)
+    Get(pNode,n)
+    obj &= pNode.File{prop:object}
+    If obj &= null then cycle.
+    x = 0
+    Loop !x = 1 to num
+      x += 1
+      If x > pNode.NumFields then break.
+      If pNode.Field[x] > 0   ! doesn't apply to memos and blobs
+        If obj._WithField(pNode.Field[x]) = driver:ok
+          If Obj.Fields.Type = ClaGroup
+            Loop y = obj.fields.Index to obj.fields.Index + obj.Fields.GroupFields
+              If self._IsProjected(pNode,y) then cycle.
+              pNode.NumFields += 1
+              pNode.Field[pNode.NumFields] = y
+            End
+            found += 1
+          End
+          If obj.Fields.Over
+            If self._IsProjected(pNode,obj.Fields.Over) then cycle.
+            pNode.NumFields += 1
+            pNode.Field[pNode.NumFields] = obj.Fields.Over
+            found += 1
+          Elsif obj.Fields.InOverGroup
+            If obj._WithField(obj.Fields.InOverGroup) = driver:ok  ! Get the GROUP, so we can see what it's over
+              If self._IsProjected(pNode,obj.Fields.Over) then cycle.
+              ovr = obj.Fields.Over
+              pNode.NumFields += 1
+              pNode.Field[pNode.NumFields] = ovr ! obj.Fields.Over
+              found += 1
+            End
+          End
+        End
+      End
+    End
+    If Found then Put(pNode).
+    If not pNode.children &= null
+      self._ResolveOthersInView(pNode.children)
+    End
+  End
+  !self.trace('_ResolveOthersInView done' )
+  Return
+
+!-----------------------------------------------------------------
 DriverViewClass.Walk   procedure()
   code
-  self._walk(self.Tree,1)
+  self.trace('DriverViewClass.Walk')
+  self._Walk(self.Tree,1)
   Return
 
 !-----------------------------------------------------------------
@@ -15764,8 +16333,10 @@ DriverViewClass.BUFFER                   PROCEDURE(UNSIGNED pPageSize, UNSIGNED 
 DriverViewClass.CLOSE                     Procedure()
   code
   Self.SetError(NoError)
-  parent.Close()                             ! will flush the buffers
-  self._BuildTree()                          ! returns the view tree to the compiled program state.
+  parent.Close()                                       ! will flush the buffers
+  If errorcode() Then Return.
+  If self._Destructing = True then Return.
+  self._BuildTree()                                    ! returns the view tree to the compiled program state.
   self._FreeParameterQueue()
   Return
 
@@ -15925,6 +16496,13 @@ obj      &DriverFileClass
       obj.LogBuffer()
     End
   End
+  Return
+
+!-----------------------------------------------------------------
+DriverViewClass.FLUSH           PROCEDURE()
+  code
+  parent.Flush()
+  self.NewResultSet(driver:DontFreeRam)    ! ABC calls flush after a delete, before a reset. So this flushes the deleted record from the result set.
   Return
 
 !-----------------------------------------------------------------
@@ -16358,6 +16936,7 @@ obj  &DriverFileClass
 DriverViewClass.Set                       Procedure(Long pIndex)
 obj  &DriverFileClass
   code
+  !self.trace('DriverViewClass.Set self._HasBeenSetFromFile=' & self._HasBeenSetFromFile & ' self._PropOrderCalled=' & self._PropOrderCalled)
   Self._HasBeenSet = true
   If self._HasBeenSetFromFile = false
     If self._PropOrderCalled  = false
@@ -16383,6 +16962,7 @@ obj  &DriverFileClass
   FileSETObject &= null  ! FileSetObject is a module level, threaded parameter. It notes the most recent object to do a SET. This is used by EXCEPT, UNION and INTERSECT
   ViewSETObject &= self  ! ViewSetObject is a module level, threaded parameter. It notes the most recent object to do a SET. This is used by EXCEPT, UNION and INTERSECT
   self._SearchOrderClause = ''
+  !self.trace('DriverViewClass.Set done')
   Return
 
 !-----------------------------------------------------------------
@@ -16559,7 +17139,7 @@ x  long
 !-----------------------------------------------------------------
 ! Given a fixed table name, find that table in the view tree
 DriverViewClass._withNodeTableName              Procedure(String pTableName)
-TableName   Cstring(128),Auto
+TableName   Cstring(DRIVER:MAXTABLENAME),Auto
   code
   TableName = lower(pTableName)
   self.node &= null
@@ -17086,6 +17666,9 @@ UpperLabel   String(Size(pLabel)),Auto
 x            Long,Auto
 i            Long,Auto
 already      Long
+context      Long,auto
+ModColumn    Cstring(DRIVER:MAXCOLUMNNAME),auto
+overColumn   Long
   code
   i = instring('.',pLabel,1,1)
   UpperLabel = Upper(pLabel)
@@ -17103,7 +17686,7 @@ already      Long
         do FillFields
         Break
       End
-    elsif i > 1 and UpperLabel[1:i-1] = upper(obj.FullPathName)
+    elsif i > 1 and UpperLabel[1:i-1] = upper(obj.TableName)
       If obj._WithFieldNamed(sub(pLabel,i+1,255)) = Driver:ok
         do FillFields
         Break
@@ -17121,10 +17704,17 @@ FillFields  routine
     already = pointer(self.OrderQueue)
     exit
   End
-
-  self.OrderQueue.Clause     = self.GetProp:Alias(x) & '.' & obj.Fields.Column
+  context = obj._ParseContext
+  obj._ParseContext = driver:order
+  modColumn = obj._ModColumn(overColumn)
+  obj._ParseContext = context
+  If ModColumn = ''
+    self.OrderQueue.Clause = self.GetProp:Alias(x) & '.' & obj.Fields.Column
+  Else
+    self.OrderQueue.Clause = ModColumn
+  End
   Case obj.Fields.type
-  of ClaCSTRING orof ClaPSTRING orof ClaSTRING
+  of ClaCSTRING orof ClaPSTRING orof ClaSTRING orof ClaUSTRING
     self.OrderQueue.binary = obj.fields.Binary
     self.OrderQueue.FieldCase = obj.fields.FieldCase
     self.OrderQueue.IsString = true
@@ -17185,6 +17775,14 @@ obj1      &DriverFileClass ! ,Auto
   Return obj1.GetPROP:Server()
 
 !-----------------------------------------------------------------
+DriverViewSQLClass.GetPROP:Port       Procedure()
+obj1      &DriverFileClass ! ,Auto
+  code
+  obj1 &= (self.FileObject[1])
+  If obj1 &= null then Return ''.
+  Return obj1.GetPROP:Port()
+
+!-----------------------------------------------------------------
 DriverViewSQLClass.GetPROP:User         Procedure()
 obj1      &DriverFileClass ! ,Auto
   code
@@ -17207,6 +17805,14 @@ obj1      &DriverFileClass ! ,Auto
   obj1 &= (self.FileObject[1])
   If obj1 &= null then Return ''.
   Return obj1.GETPROP:Driver()
+
+!-----------------------------------------------------------------
+DriverViewSQLClass.GetPROP:Schema     Procedure()
+obj1      &DriverFileClass ! ,Auto
+  code
+  obj1 &= (self.FileObject[1])
+  If obj1 &= null then Return ''.
+  Return obj1.GetPROP:Schema()
 
 !!-----------------------------------------------------------------
 DriverViewSQLClass.InTransaction         Procedure()
@@ -17274,7 +17880,7 @@ PutNode    byte
     End
     OneFileProjectList.SetValue('')
     If pNode.NumFields = 0
-      If Band(pNode.AutoProject,driver:ProjectFields) > 0
+      !If Band(pNode.AutoProject,driver:ProjectFields) > 0
         ! auto-project all the fields in the record
         If Band(pNode.AutoProject,driver:ProjectFields) > 0
           allFields = true
@@ -17292,7 +17898,7 @@ PutNode    byte
             End
           End
         End
-      End
+      !End
       If Band(pNode.AutoProject,driver:ProjectBlobs)
         pNode.Dynamic = 1
         Loop y = 1 to Records(obj.Blobs)
@@ -17316,7 +17922,6 @@ PutNode    byte
             Cycle
           End
         End
-
         If pNode.name[y]
           i = Instring('|',pNode.name[y],1,1)
           If i
@@ -17729,7 +18334,7 @@ Missing      Long,Auto      ! this field in the suggested unique key is missing.
         checkcase = false
         If obj._WithField(obj.keys.component[y]) = Driver:ok
           case obj.Fields.Type
-          of ClaString orof ClaCSTRING orof ClaPSTRING
+          of ClaString orof ClaCSTRING orof ClaPSTRING orof ClaUSTRING
             checkcase = true
           End
         End
@@ -17786,6 +18391,7 @@ addToOrderQueue  routine
     of ClaSTRING
     orof ClaCSTRING
     orof ClaPSTRING
+    orof ClaUSTRING
       self.OrderQueue.Binary     = obj.fields.binary
       self.OrderQueue.FieldCase  = obj.fields.FieldCase
       self.OrderQueue.IsString = true
@@ -17803,11 +18409,12 @@ addToOrderQueue  routine
 
 !-----------------------------------------------------------------
 !!!todo need to turn BINDed variables into parameters.
-DriverViewSQLClass.TranslateLabel       Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos)
+DriverViewSQLClass.TranslateLabel       Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos,*Long rOverColumn)
 i      long
-ans    long
+v      cstring(4096)
   code
-  ! lookup variable name in view tables, and replace. Note that it's not necessarily PROJECTed.
+  ! lookup variable name in view tables, and replace with correct form.
+  ! Note that if it's in a WHERE or ORDER BY, it's not necessarily PROJECTed.
   ! If the variable is not in a table, then EVALUATE it and turn it into a fixed value.
 
   ! the incoming value is of the form
@@ -17815,70 +18422,109 @@ ans    long
   ! b) SQL table.column (customer.address)  ! translate this to alias.columnname
   ! c) a.address                            ! leave this as is
 
+  ! Constant
   If self.TranslateConstant(pValue,i) = Driver:Ok
     pReturnType = driver:constant
     Return i
   End
+  ! Clarion File Field
   i = instring(':',pValue,1,1)
   If i
     ! Clarion Label.
-    Return self.TranslateFieldClarion(pValue)
-  else
+    If self.TranslateFieldClarion(pValue,pReturnType,pTokenString,pTokenPos,v) = driver:ok  ! could be a file field
+      Return v
+    End
+    !Return self.TranslateVariable(pValue,pReturnType,pTokenString,pTokenPos)
+  Else
     i = instring('.',pValue,1,1)
-    If i = 0  ! no colon or . - it's just a word, assume this is a bounded local variable?
-      case self._ParseContext
-      of driver:filter
-        Return self.TranslateVariable(pValue)
+    If i = 0  ! no colon or . - it's just a word, see if it matches a file field
+      If self.TranslateFieldClarion(pValue,pReturnType,pTokenString,pTokenPos,v) = Driver:ok
+        Return v
       End
-    ElsIf i <= 3 ! assume tablename.columnname
+      !Return self.TranslateVariable(pValue,pReturnType,pTokenString,pTokenPos)
+    ElsIf i > 2 ! assume tablename.columnname
       Return self.TranslateFieldSQL(pValue)
-    else
-      ! Assume it's already an alias and leave it alone.
+    Else
+      Return pValue ! Assume it's already an alias and leave it alone.
     End
   End
+  If self.IsInBindQueue(pValue,pReturnType,v) = driver:ok
+    Return v
+  End
+  ! next match to bindField queue
+
+  ! lastly process it as a variable
+  If self.TranslateVariable(pValue,pReturnType,pTokenString,pTokenPos,v) = Driver:ok
+    Return v
+  End
+
   Return pValue
 
 !-----------------------------------------------------------------
 ! this is expected to be a file field, however if it's not one of the files in the view
-! then it's passed onto TranslateVariableLocal
-DriverViewSQLClass.TranslateFieldClarion   Procedure(*cstring pValue)
-obj   &DriverFileClass
-x     Long
+! then it's passed onto TranslateVariable
+DriverViewSQLClass.TranslateFieldClarion   Procedure(*cstring pValue,*byte pReturnType,String pTokenString,Long pTokenPos,*Cstring rValue)
+obj      &DriverFileClass,Auto
+x        Long,Auto
+column   Cstring(DRIVER:MAXCOLUMNNAME)
+overColumn Long
   code
+  !self.trace('DriverViewSQLClass.TranslateFieldClarion ' & pValue)
   Loop x = 1 to self.Files
     obj &= (self.FileObject[x])
     If obj &= null then cycle.
     If obj._WithFieldLabeled(pValue) = Driver:ok
-      Return self.GetProp:Alias(x) & '.' & obj.Fields.Column
+      rValue = obj._ModColumn(overColumn)
+      If rValue then Return driver:ok.
+      rValue = self.GetProp:Alias(x) & '.' & obj.Fields.Column
+      Return driver:ok
+    ElsIf obj._WithFieldNamed(pValue) = Driver:ok
+      rValue = obj._ModColumn(overColumn)
+      If rValue then Return driver:ok.
+      rValue = self.GetProp:Alias(x) & '.' & obj.Fields.Column
+      Return driver:ok
+    End
+    column = obj.SharedProperties.prefix & ':' & pValue  ! naked word, but perhaps just missing prefix?
+    If obj._WithFieldLabeled(column) = Driver:ok
+      rValue = obj._ModColumn(overColumn)
+      If rValue then Return driver:ok.
+      rValue = self.GetProp:Alias(x) & '.' & obj.Fields.Column
+      Return driver:ok
     End
   End
-  Return self.TranslateVariable(pValue)
+  Return driver:notok
 
 !-----------------------------------------------------------------
 ! this may have the form table.column. It has to be translated to alias.column
 DriverViewSQLClass.TranslateFieldSQL       Procedure(*cstring pValue)
-obj   &DriverFileClass
-x     Long
-i     Long
-j     Long
-n     cstring(100)
-fpn   cstring(100)
+obj             &DriverFileClass
+x               Long,Auto
+i               Long,Auto
+TableName       cstring(DRIVER:MAXTABLENAME)
+ColumnName      cstring(DRIVER:MAXCOLUMNNAME)
+ColumnNameR     cstring(DRIVER:MAXCOLUMNNAME)
+overColumn      Long
+v               cstring(DRIVER:MAXCOLUMNNAME*2)
   code
   i = instring('.',pValue,1,1)
   If i < 2 then return false.
-  n = upper(sub(pValue,1,i-1))
+  TableName = sub(pValue,1,i-1)
+  ColumnName = sub(pValue,i+1,DRIVER:MAXCOLUMNNAME)
 
   Loop x = 1 to self.Files
     obj &= (self.FileObject[x])
     If obj &= null then cycle.
-    fpn = upper(obj.FullPathName)
-    Loop
-      j = instring('.',fpn,1,1)
-      if j = 0 then break.
-      fpn = sub(fpn,j+1,100)
-    End
-    If n = fpn
-      Return self.GetProp:Alias(x) & '.' & sub(pValue,i+1,255)
+    If upper(obj.TranslateReserved(TableName))  = upper(obj.TableName)
+      ColumnNameR = obj.TranslateReserved(ColumnName)
+      If obj._WithFieldNamed(ColumnNameR) = Driver:ok
+        v = obj._ModColumn(overColumn)
+        If v then Return v.
+      End
+      If obj._WithFieldNamed(ColumnNameR) = Driver:ok
+        Return self.GetProp:Alias(x) & '.' & ColumnNameR
+      ElsIf obj._WithFieldLabeled(ColumnName) = Driver:ok
+        Return self.GetProp:Alias(x) & '.' & ColumnNameR
+      End
     End
   End
   Return pValue
@@ -18018,7 +18664,7 @@ ShadowBufferPrimed  Byte
       self.ResultRow += 1
       self.ResultToRecords(self.ResultRow,driver:buffer)
       Break
-    Elsif rows and (self.Limit or self.Paging = false or self._Paging = false or self._OrderHasCalc = true)
+    Elsif rows and (self.Limit or self.Paging = false or self._Paging = false or self._OrderHasCalc = true or self.Distinct = true or self.NotDistinct > 1)
       ! limit is set, so whole result is here, so trigger a end-of-file
       self.ResultRow = 0
       Self.SetError(BadRecErr)
@@ -18289,6 +18935,7 @@ obj              &DriverFileClass,Auto
   self.SqlCode.SetValue(clip(pSql))
   obj &= (self.FileObject[1])
   If not obj &= null
+    obj._ParameterOpcode = Opcode:NONE
     If obj._executeSql(self.SqlCode,self.result,pParm1,pParm2,pParm3,pParm4,pParm5,pParm6,pParm7,pParm8,pParm9,pParm10,pParm11,pParm12,pParm13,pParm14,pParm15,pParm16,pParm17,pParm18,pParm19,pParm20) = Driver:ok
     End
   End
@@ -18410,7 +19057,6 @@ x      long,Auto
 obj    &DriverFileClass
 ans    StringTheory
 vff    long,Auto
-v      cString(255),Auto
   code
   If pIndex = 0 then return.
   vff = abs(pIndex)
@@ -18422,8 +19068,7 @@ v      cString(255),Auto
     If obj._withField(self.OrderQueue.FieldIndex) = Driver:ok
       self._ParameterCount += 1
       obj._ParameterOpcode = self._ParameterOpcode
-      v = clip(obj.GetProp:Value(obj.fields.index))
-      obj._SetParameterValue(self._ParameterCount,v,obj.fields.type)  ! fixing the parameter to a value as it is at the SET, not based on the shadow buffer.
+      obj._SetParameterValue(self._ParameterCount,obj.ClaFCB.rec_buf + obj.Fields.Offset ,obj.fields.type,obj.Fields.Length)  ! fixing the parameter to a value as it is at the SET, not based on the shadow buffer.
       If pIndex < 0
         ans.append(obj._GetAlias(driver:withdot)  & obj.Fields.Column & ' = ' & obj._genparm(self._ParameterCount),,' AND ')
         self.OrderQueue.Fixed = true
@@ -19077,7 +19722,35 @@ DriverConnectionPoolClass.SetConnection             Procedure(String pConnectStr
   Return
 
 !-----------------------------------------------------------------
-DriverConnectionPoolClass.SetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pDatabase, *CString pUser)
+DriverConnectionPoolClass.GetConnectionId                 Procedure(String pConnectString, Long pPool, Long pOptions)
+  code
+  PushErrors()
+  self.connections.Connection = lower(clip(pConnectString))
+  self.connections.Pool = pPool
+  self.connections.Options = pOptions
+  self.connections.ConnectionId = 0
+  Get(self.connections,self.connections.Connection,self.connections.Pool,self.connections.Options)
+  PopErrors()
+  Return self.connections.ConnectionId
+
+!-----------------------------------------------------------------
+DriverConnectionPoolClass.IncConnectionId                 Procedure(String pConnectString, Long pPool, Long pOptions)
+  code
+  PushErrors()
+  self.connections.Connection = lower(clip(pConnectString))
+  self.connections.Pool = pPool
+  self.connections.Options = pOptions
+  self.connections.ConnectionId = 0
+  Get(self.connections,self.connections.Connection,self.connections.Pool,self.connections.Options)
+  If Errorcode() = 0
+    self.connections.ConnectionId += 1
+    Put(self.connections)
+  End
+  PopErrors()
+  Return self.connections.ConnectionId
+
+!-----------------------------------------------------------------
+DriverConnectionPoolClass.SetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pPort, *CString pDatabase, *CString pUser)
   code
   If self.Connections &= null then Return.
   PushErrors()
@@ -19087,6 +19760,7 @@ DriverConnectionPoolClass.SetConnectionDetails            Procedure(String pConn
   Get(self.connections,self.connections.Connection,self.connections.Pool,self.connections.Options)
   If Errorcode() = NoError
     Self.Connections.Server = pServer
+    Self.Connections.Port = pPort
     Self.Connections.Database = pDatabase
     Self.Connections.User = pUser
     Put(Self.Connections)
@@ -19094,7 +19768,7 @@ DriverConnectionPoolClass.SetConnectionDetails            Procedure(String pConn
   PopErrors()
 
 !-----------------------------------------------------------------
-DriverConnectionPoolClass.GetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pDatabase, *CString pUser)
+DriverConnectionPoolClass.GetConnectionDetails            Procedure(String pConnectString, Long pPool, Long pOptions, *CString pServer, *CString pPort, *CString pDatabase, *CString pUser)
   code
   If self.Connections &= null then Return.
   PushErrors()
@@ -19104,6 +19778,7 @@ DriverConnectionPoolClass.GetConnectionDetails            Procedure(String pConn
   Get(self.connections,self.connections.Connection,self.connections.Pool,self.connections.Options)
   If Errorcode() = NoError
     pServer =  Self.Connections.Server
+    pPort = Self.Connections.Port
     pDatabase = Self.Connections.Database
     pUser = Self.Connections.User
   End
@@ -19239,7 +19914,6 @@ bt   byte,auto
   end
   Return count
 
-
 !-----------------------------------------------------------------
 DriverParmBufferClass.CONSTRUCT                 PROCEDURE()
   code
@@ -19253,9 +19927,10 @@ str    &string,Auto
   Code
   Loop x = 1 to Maximum(self.ParmBufferAddr,1)
     If self.ParmBufferAddr[x] = 0 then cycle.
-    If self.ParmBufferDispose[x] = false then cycle.
-    str &= (self.ParmBufferAddr[x])
-    Dispose(str)
+    If Band(self.ParmBufferOptions[x],driver:Dispose) > 0
+      str &= (self.ParmBufferAddr[x])
+      Dispose(str)
+    End
   End
   Return
 
@@ -19274,7 +19949,7 @@ dbg  StringTheory
   code
   self.trace(' Addr     | Size | Len | Type | Format | Dispose | Count=' & pCount)
   Loop x = 1 to pCount
-    self.trace(self.ParmBufferAddr[x] & ' | ' & self.ParmBufferSize[x]& ' | ' & self.ParmBufferLen[x] & ' | ' & self.ParmBufferSqlType[x] & ' | ' & self.ParmBufferFormat[x] & ' | ' & self.ParmBufferDispose[x] )
+    self.trace(self.ParmBufferAddr[x] & ' | ' & self.ParmBufferSize[x]& ' | ' & self.ParmBufferLen[x] & ' | ' & self.ParmBufferSqlType[x] & ' | ' & self.ParmBufferFormat[x] & ' | ' & self.ParmBufferOptions[x] )
   End
   Loop x = 1 to pCount
     If self.ParmBufferLen[x]
@@ -19289,6 +19964,12 @@ dbg  StringTheory
 !    driver:NoOption             Equate(0)   ! you can use the memory and length as is, no need for a copy
 !    driver:Dispose              Equate(1)   ! make a copy of the field, and dispose it later
 !    driver:AnsiToUtf8           Equate(2)   ! the incoming address points to a nullterminated text (not binary) string. Convert to utf-8 and store.
+!    driver:TypeOnly             Equate(4)   ! Only setting the ParmBufferType for this one
+!    driver:Unsigned             Equate(8)   ! value in buffer is unsigned. Stored in options and passed through to various BINDs later
+!    driver:Null                 Equate(16)  ! value is a null
+!    driver:NoCopy               Equate(32)
+!    driver:Utf16ToUtf8          Equate(64)  ! incoming value is a USTRING. pLEN is number of *bytes*, ideally including trailing 0,0
+
 DriverParmBufferClass._SetParmBuffer     Procedure(Long pCount,Long pAddress, Long pLen, Long pSqlType, Long pFormat, Long pOptions, Long pCodePage)
 str3       &string
 str4       &string
@@ -19299,27 +19980,25 @@ bt         Byte
   If pCount = 1 then self.ParmBufferCount = 1.   ! reseting parm 1, resets the counter
   If pCount > self.ParmBufferCount then self.ParmBufferCount = pCount.
 
-  If Band(pOptions,driver:TypeOnly)
+  If Band(pOptions,driver:TypeOnly) = driver:TypeOnly
     self.ParmBufferSqlType[pCount] = pSqlType
     self.ParmBufferFormat[pCount] = pFormat
     Return
   End
-
   ! null address
   If pAddress = 0
-    If self.ParmBufferAddr[pCount] and self.ParmBufferDispose[pCount]                ! maybe dispose the old one
+    If self.ParmBufferAddr[pCount] and self.ParmBufferSize[pCount] and Band(self.ParmBufferOptions[pCount],driver:Dispose) = driver:Dispose ! maybe dispose the old one
       str3 &= (self.ParmBufferAddr[pCount]) & ':' & self.ParmBufferSize[pCount]
       Dispose(str3)
     End
     self.ParmBufferAddr[pCount] = 0
     self.ParmBufferSize[pCount] = 0
     self.ParmBufferLen[pCount] = 0
-    self.ParmBufferDispose[pCount] = 0
-
-  ! ANSI conversion. This always needs to be copied and disposed. Incoming values MUST already be null terminated
-  ElsIf Band(pOptions,driver:AnsiToUtf8)
-    !self.trace('Writing ANSI - converting to utf-8 first')
-    If self.ParmBufferAddr[pCount] and self.ParmBufferDispose[pCount]                ! maybe dispose the old one
+    self.ParmBufferOptions[pCount] = driver:null
+  ElsIf Band(pOptions,driver:Utf16ToUtf8) = driver:Utf16ToUtf8
+  ! utf-16 to utf-8 conversion. This always needs to be copied and disposed. Incoming values MUST already be null terminated
+    !self.trace('converting utf16 to utf8')
+    If self.ParmBufferAddr[pCount] and self.ParmBufferSize[pCount] and Band(self.ParmBufferOptions[pCount],driver:Dispose) = driver:Dispose ! maybe dispose the old one
       str3 &= (self.ParmBufferAddr[pCount]) & ':' & self.ParmBufferSize[pCount]
       Dispose(str3)
     End
@@ -19327,7 +20006,39 @@ bt         Byte
       self.ParmBufferAddr[pCount] = pAddress   ! even though the len=0, want the address to be something. Passing a null address is different to passing a address with 0 length.
       self.ParmBufferSize[pCount] = 0
       self.ParmBufferLen[pCount] = 0
-      self.ParmBufferDispose[pCount] = false   ! using a pass-through address, so don't dispose it.
+      If Band(pOptions,driver:Dispose)
+        self.ParmBufferOptions[pCount] = pOptions - driver:Dispose   ! using a pass-through address, so don't dispose it.
+      Else
+        self.ParmBufferOptions[pCount] = pOptions
+      End
+    Else
+      str3 &= pAddress & ':' & pLen
+      strUtf &= self.TempStr.Utf16to8(str3,strUtfLen,-1)   ! -1 means it's expecting a null,null terminated string.
+      self.ParmBufferAddr[pCount] = address(strUtf)
+      self.ParmBufferSize[pCount] = strUtfLen
+      self.ParmBufferLen[pCount] = strUtfLen - 1                                     ! postgres wants the -1 to strip off trailing 0
+      If Band(pOptions,driver:Dispose) = driver:Dispose
+        self.ParmBufferOptions[pCount] = pOptions
+      Else
+        self.ParmBufferOptions[pCount] = pOptions + driver:Dispose
+      End
+    End
+  ! ANSI conversion. This always needs to be copied and disposed. Incoming values MUST already be null terminated
+  ElsIf Band(pOptions,driver:AnsiToUtf8) = driver:AnsiToUtf8
+    !self.trace('Writing ANSI - converting to utf-8 first')
+    If self.ParmBufferAddr[pCount] and self.ParmBufferSize[pCount] and Band(self.ParmBufferOptions[pCount],driver:Dispose) = driver:Dispose ! maybe dispose the old one
+      str3 &= (self.ParmBufferAddr[pCount]) & ':' & self.ParmBufferSize[pCount]
+      Dispose(str3)
+    End
+    If pLen = 0
+      self.ParmBufferAddr[pCount] = pAddress   ! even though the len=0, want the address to be something. Passing a null address is different to passing a address with 0 length.
+      self.ParmBufferSize[pCount] = 0
+      self.ParmBufferLen[pCount] = 0
+      If Band(pOptions,driver:Dispose)
+        self.ParmBufferOptions[pCount] = pOptions - driver:Dispose   ! using a pass-through address, so don't dispose it.
+      Else
+        self.ParmBufferOptions[pCount] = pOptions
+      End
     Else
       str3 &= pAddress & ':' & pLen
       If str3[1] = '<0>'
@@ -19340,12 +20051,26 @@ bt         Byte
       self.ParmBufferAddr[pCount] = address(strUtf)
       self.ParmBufferSize[pCount] = strUtfLen
       self.ParmBufferLen[pCount] = strUtfLen !- 1
-      self.ParmBufferDispose[pCount] = 1
+      If Band(pOptions,driver:Dispose) = driver:Dispose
+        self.ParmBufferOptions[pCount] = pOptions
+      Else
+        self.ParmBufferOptions[pCount] = pOptions + driver:Dispose
+      End
     End
+  ! being passed as an address. So not newing or disposing
+  Elsif Band(pOptions,driver:NoCopy) = driver:NoCopy
+    If self.ParmBufferAddr[pCount] and self.ParmBufferSize[pCount] and Band(self.ParmBufferOptions[pCount],driver:Dispose) = driver:Dispose  ! maybe dispose the old one
+      str3 &= (self.ParmBufferAddr[pCount]) & ':' & self.ParmBufferSize[pCount]
+      Dispose(str3)
+    End
+    self.ParmBufferAddr[pCount] = pAddress
+    self.ParmBufferSize[pCount] = pLen
+    self.ParmBufferLen[pCount] = pLen
+    self.ParmBufferOptions[pCount] = pOptions
 
   ! just raw data, current cell not large enough
   Elsif self.ParmBufferSize[pCount] < pLen + 1
-    If self.ParmBufferAddr[pCount] and self.ParmBufferDispose[pCount]                ! maybe dispose the old one
+    If self.ParmBufferAddr[pCount] and self.ParmBufferSize[pCount] and Band(self.ParmBufferOptions[pCount],driver:Dispose) = driver:Dispose  ! maybe dispose the old one
       str3 &= (self.ParmBufferAddr[pCount]) & ':' & self.ParmBufferSize[pCount]
       Dispose(str3)
     End
@@ -19353,29 +20078,32 @@ bt         Byte
       self.ParmBufferAddr[pCount] = pAddress   ! even though the len=0, want the address to be something. Passing a null address is different to passing a address with 0 length.
       self.ParmBufferSize[pCount] = 0
       self.ParmBufferLen[pCount] = 0
-      self.ParmBufferDispose[pCount] = false   ! using a pass-through address, so don't dispose it.
-    else
+      If Band(pOptions,driver:Dispose)
+        self.ParmBufferOptions[pCount] = pOptions - driver:Dispose   ! using a pass-through address, so don't dispose it.
+      Else
+        self.ParmBufferOptions[pCount] = pOptions
+      End
+    Else
       str3 &= new STRING(pLen+1)
       self.ParmBufferAddr[pCount] = address(str3)
       self.ParmBufferSize[pCount] = pLen + 1
       self.ParmBufferLen[pCount] = pLen
-      self.ParmBufferDispose[pCount] = Choose(Band(pOptions, driver:Dispose)= driver:Dispose,1,0)
+      self.ParmBufferOptions[pCount] = pOptions
       memcpy(self.ParmBufferAddr[pCount], pAddress,pLen)  ! copy the value into it.
       memset(self.ParmBufferAddr[pCount]+pLen,0,1)
     End
-
   Else ! raw data, current cell is fine
     If pLen = 0
       self.ParmBufferLen[pCount] = pLen
     Else
       self.ParmBufferLen[pCount] = pLen
-      self.ParmBufferDispose[pCount] = Choose(Band(pOptions, driver:Dispose)= driver:Dispose,1,0)
+      self.ParmBufferOptions[pCount] = pOptions
       memcpy(self.ParmBufferAddr[pCount], pAddress,pLen)
       memset(self.ParmBufferAddr[pCount]+pLen,0,1)
     End
   End
   self.ParmBufferSqlType[pCount] = pSqlType
   self.ParmBufferFormat[pCount] = pFormat
-  !self.trace('Parm set(' & pCount & '): addr=' & self.ParmBufferAddr[pCount] & ' len=' & self.ParmBufferLen[pCount] & ' size=' & self.ParmBufferSize[pCount] & ' dispose=' & self.ParmBufferDispose[pCount] & ' type=' & self.ParmBufferSqlType[pCount] & ' format=' & self.ParmBufferFormat[pCount])
+  !self.trace('Parm set(' & pCount & '): addr=' & self.ParmBufferAddr[pCount] & ' len=' & self.ParmBufferLen[pCount] & ' size=' & self.ParmBufferSize[pCount] & ' options=' & self.ParmBufferOptions[pCount] & ' type=' & self.ParmBufferSqlType[pCount] & ' format=' & self.ParmBufferFormat[pCount])
   Return
 

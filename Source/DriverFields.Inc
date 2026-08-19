@@ -39,6 +39,9 @@ DriverUUIDPostgresClass        Class(DriverGUIDClass),Implements(iDriverField), 
 DriverUniqueIdentifierMSClass  Class(DriverGUIDClass),Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',DRVLM), DLL(DRVDM)
                                End
 
+! derived class for Postgres UUID type
+DriverUUIDMariaDBClass         Class(DriverGUIDClass),Implements(iDriverField), Type, MODULE('DriverFields.Clw'),LINK('DriverFields.Clw',DRVLM), DLL(DRVDM)
+                               End
 
 ! Because none of these classes contain properties, they're just stand-alone methods, it's possible to declare "singletons"
 ! here which can then be used for the various fields. There's no need to re-declare these in your app.
@@ -48,6 +51,7 @@ DriverIP6Object                 DriverIp6Class                    !EXPORT
 DriverGuidObject                DriverGuidClass                   !EXPORT
 DriverGuidSQLiteObject          DriverGuidSQLiteClass             !EXPORT
 DriverUuidPostgresObject        DriverUUIDPostgresClass           !EXPORT
+DriverUuidMariaDbObject         DriverUUIDMariaDBClass            !EXPORT
 DriverUniqueIdentifierMSObject  DriverUniqueIdentifierMSClass     !EXPORT
   !***
   Compile('***',DRVLM=0)
@@ -56,5 +60,6 @@ DriverIP6Object                 DriverIp6Class,EXTERNAL  , DLL(DRVDM)
 DriverGuidObject                DriverGuidClass,EXTERNAL , DLL(DRVDM)
 DriverGuidSQLiteObject          DriverGuidSQLiteClass,EXTERNAL  , DLL(DRVDM)
 DriverUuidPostgresObject        DriverUUIDPostgresClass,EXTERNAL , DLL(DRVDM)
+DriverUuidMariaDBObject         DriverUUIDMariaDBClass,EXTERNAL , DLL(DRVDM)
 DriverUniqueIdentifierMSObject  DriverUniqueIdentifierMSClass,EXTERNAL , DLL(DRVDM)
   !***

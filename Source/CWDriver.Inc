@@ -10,11 +10,22 @@
 ! For new Opcodes and FieldTypes see Driver.Inc                                                 !
 !------------------------------------------------------------------------------------------------
 
-Driver:Version  Equate('1.40')
+Driver:Version  Equate('1.42')
 
 !Region ----------  Equates ----------
 ! BIGINT: use this for now as a 52 bit integer. In later clarion versions could become a int64
 BIGINT                  Equate(REAL)
+
+!--------
+! A cunning way to support Clarion 11.1 and earlier that don't have a USTRING. By just equating it to Decimal
+! all the code compiles. It's all inside places for ClaUSTRING (which is defined, but not meaningful in
+! Clarion 11.1 and earlier.)
+! Doing it this way means there's only a single conditional compile - which keeps the code a bit neater.
+  omit('***',_USTRING_=1)
+USTRING                 Equate(DECIMAL)
+  !***
+!--------
+
 Driver:BufferWholeFile  Equate(-1)
 Driver:FreeBuffer       Equate(-2)
 
@@ -66,6 +77,8 @@ driver:View                 Equate(11)   ! V
 
 Driver:In                   Equate(1)
 Driver:Out                  Equate(2)
+Driver:InOut                Equate(4)
+Driver:Variadic             Equate(8)
 
 driver:NoAction             Equate(0)
 driver:Cascade              Equate(1)
@@ -82,6 +95,10 @@ driver:NoOption             Equate(0)
 driver:Dispose              Equate(1)   ! options for SetParmBuffer
 driver:AnsiToUtf8           Equate(2)
 driver:TypeOnly             Equate(4)   ! Only setting the ParmBufferType for this one
+driver:Unsigned             Equate(8)
+driver:Null                 Equate(16)
+driver:NoCopy               Equate(32)
+driver:Utf16ToUtf8          Equate(64)
 
 driver:TEXTFORMAT           Equate(0)
 driver:BINARYFORMAT         Equate(1)
@@ -104,6 +121,7 @@ BindField   Procedure(FILE pFile,String pName, *Long pLong),name('BINDlong'),Dll
 BindField   Procedure(FILE pFile,String pName, *Real pReal),name('BINDreal'),Dll(dll_mode)
 BindField   Procedure(FILE pFile,String pName, *String pString),name('BINDstring'),Dll(dll_mode)
 BindField   Procedure(FILE pFile,String pName, *Cstring pCstring),name('BINDcstring'),Dll(dll_mode)
+BindField   Procedure(FILE pFile,String pName, *Ustring pUstring),name('BINDustring'),Dll(dll_mode)
 BindField   Procedure(FILE pFile,String pName, *Date pDate),name('BINDdate'),Dll(dll_mode)
 BindField   Procedure(FILE pFile,String pName, *Time pTime),name('BINDtime'),Dll(dll_mode)
 
@@ -119,9 +137,10 @@ Claim       Procedure(FILE pFile, STRING pOrder, STRING pFilter),name('CLAIM2b')
 ClearProps  Procedure(FILE pFile),name('CLEARPROPSfile'),Dll(dll_mode)
 ClearProps  Procedure(VIEW pView),name('CLEARPROPSview'),Dll(dll_mode)
 ClearRelations  Procedure(FILE pFile),name('CLEARRELATIONS'),Dll(dll_mode)
+Clone       Procedure(FILE pFile, String pNewTableName, Long pOptions),name('CLONEfile'),Dll(dll_mode)
 Commit      Procedure(FILE pFile),name('COMMITconn'),Dll(dll_mode)
 Connect     Procedure(FILE pFile,Long pOptions=0),name('CONNECT'),Dll(dll_mode)
-Copy        Procedure(FILE pFile, String pFileName, Long pOptions),name('COPYoptions'),Dll(dll_mode)
+Copy        Procedure(FILE pFile,String pFileName, Long pOptions),name('COPYoptions'),Dll(dll_mode)
 CreateDB    Procedure(FILE pFile,String pDatabaseName,<String pOptions>),name('CREATEDBname'),Dll(dll_mode)
 CreateDB    Procedure(FILE pFile),name('CREATEDB'),Dll(dll_mode)
 !CreateField Procedure(FILE pFile,*? pField1),name('CREATEfield'),Dll(dll_mode)
@@ -129,6 +148,8 @@ CreateDB    Procedure(FILE pFile),name('CREATEDB'),Dll(dll_mode)
 CreateKey   Procedure(KEY pKey),name('CREATEkey'),Dll(dll_mode)
 CreateKey   Procedure(File pFile,String pName, Long pOptions, *? pField1, *? pField2, <*? pField3>, <*? pField4>, <*? pField5>, <*? pField6>, <*? pField7>, <*? pField8>, <*? pField9>, <*? pField10>),name('CREATEnewkey'),Dll(dll_mode)
 CreateRelations   Procedure(File pFile),name('CREATErelations'),Dll(dll_mode)
+CreateSchema      Procedure(FILE pFile,String pDatabaseName,<String pOptions>),name('CREATEschemaname'),Dll(dll_mode)
+CreateSchema      Procedure(FILE pFile),name('CREATEschema'),Dll(dll_mode)
 Declaration Procedure(FILE pFile,Long pOptions=0),STRING,name('DECLARATION'),Dll(dll_mode)
 Declaration Procedure(KEY pKey,Long pOptions=0),STRING,name('DECLARATIONkey'),Dll(dll_mode)
 Delete      Procedure(FILE pFile,String pFilter),Name('DeleteFilter'),Dll(dll_mode)
@@ -311,6 +332,9 @@ Prop:DatePicture        Equate(744Dh) ! used in EXPORT and IMPORT commands
 Prop:TimePicture        Equate(744Eh) ! used in EXPORT and IMPORT commands
 PROP:InStream           Equate(744Fh)
 PROP:SPReturn           Equate(7450h)
+PROP:Port               Equate(7451h)
+PROP:AllowReturning     Equate(7452h)
+PROP:Schema             Equate(7453h)
 
 !EndRegion: Properties
 !Region ----------  Errors ----------
@@ -348,5 +372,8 @@ MissingDatabaseErr      Equate(145)   !  "The Database does not exist on the ser
 BadLoginErr             Equate(146)   !  "The User or Password is incorrect"
 ConnectionFailureErr    Equate(147)   !  "Connection Failure"
 TooManyHooksErr         Equate(148)   !  "Too many hooks"
+SQLParametersErr        Equate(149)   !  Number of SQL() parameters does not match
+SQLParametersReuseErr   Equate(150)   !  "A SQL parameter is reused with a database that does not support it."
+SQLParametersGapErr     Equate(151)   !  "The SQL has numbered parameters, but there are gaps in the numbers."
 !EndRegion: Errors
 !------------------------------------------------------------------------------------------------
